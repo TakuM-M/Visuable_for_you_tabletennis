@@ -1,0 +1,25 @@
+# 動画処理
+opencv-python==4.10.0.84
+opencv-contrib-python==4.10.0.84
+
+# 姿勢・動作検出
+mediapipe==0.10.14
+
+# 数値計算・データ処理
+numpy==1.26.4
+scipy==1.13.0
+
+# 機械学習（オプション：精度向上用）
+scikit-learn==1.5.0
+
+# データ可視化・デバッグ用
+matplotlib==3.9.0
+pillow==10.3.0
+
+# ユーティリティ
+tqdm==4.66.4
+python-dotenv==1.0.1
+
+# テスト
+pytest==8.2.1
+pytest-cov==5.0.0
