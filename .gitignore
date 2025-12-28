@@ -56,6 +56,9 @@ data/processed/*.mov
 output/*.mp4
 output/*.avi
 output/*.mov
+ougput/*.png
+output/*.jpg
+output/*.jpeg
 
 # Environment variables
 .env
