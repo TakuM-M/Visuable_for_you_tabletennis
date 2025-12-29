@@ -68,6 +68,11 @@ class VideoLoader:
             'duration': self.frame_count / self.fps if self.fps > 0 else 0
         }
 
+    def reset(self):
+        """動画を先頭に戻す"""
+        if self.cap is not None:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
     def close(self):
         """動画ファイルを閉じる"""
         if self.cap is not None:
