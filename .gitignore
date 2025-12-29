@@ -59,6 +59,8 @@ output/*.mov
 ougput/*.png
 output/*.jpg
 output/*.jpeg
+output/*.csv
+output/*.txt
 
 # Environment variables
 .env

@@ -24,7 +24,8 @@ def test_yolo_tracking(
     sample_rate: int = 1,
     output_video: bool = False,
     conf_threshold: float = 0.5,
-    device: str = "cpu"
+    device: str = "cpu",
+    table_detection_interval: int = 30
 ):
     """
     YOLOトラッキングシステムのテスト実行
@@ -32,10 +33,11 @@ def test_yolo_tracking(
     Args:
         video_path: 入力動画ファイルのパス
         output_dir: 出力ディレクトリ
-        sample_rate: フレームのサンプリングレート
+        sample_rate: フレームのサンプリングレート（プレイヤー検出用）
         output_video: トラッキング結果の動画を出力するか
         conf_threshold: YOLO検出信頼度の閾値
         device: 使用デバイス（"cpu" or "cuda"）
+        table_detection_interval: 卓球台再検出の間隔（フレーム数）。0の場合は初回のみ検出
     """
     print(f"=== YOLOトラッキングシステム ===")
     print(f"動画を読み込んでいます: {video_path}\n")
@@ -57,9 +59,12 @@ def test_yolo_tracking(
     print(f"  フレーム数: {info['frame_count']}")
     print(f"  長さ: {info['duration']:.2f}秒\n")
 
-    # ===== Phase 1: 卓球台検出 =====
-    print(f"Phase 1: 卓球台検出中...")
-    table_detector = TableDetector()
+    # ===== Phase 1: 卓球台検出器の初期化 =====
+    print(f"Phase 1: 卓球台検出器を初期化中（YOLO使用）...")
+    table_detector = TableDetector(detection_method="yolo")
+
+    # 初回の卓球台検出
+    print(f"初回卓球台検出中（複数フレームから安定化）...")
     table_region = table_detector.get_stable_table_region(
         video,
         num_frames=30,
@@ -86,7 +91,12 @@ def test_yolo_tracking(
     else:
         print(f"卓球台を検出しました:")
         print(f"  中心座標: ({table_region.center[0]:.1f}, {table_region.center[1]:.1f})")
-        print(f"  サイズ: {table_region.width:.1f} x {table_region.height:.1f}\n")
+        print(f"  サイズ: {table_region.width:.1f} x {table_region.height:.1f}")
+
+    if table_detection_interval > 0:
+        print(f"  再検出間隔: {table_detection_interval}フレーム毎\n")
+    else:
+        print(f"  再検出: なし（初回のみ）\n")
 
     # ===== Phase 2: YOLOトラッカーの初期化 =====
     print(f"Phase 2: YOLOトラッカーを初期化中...")
@@ -117,11 +127,13 @@ def test_yolo_tracking(
 
     # ===== Phase 4: トラッキング実行 =====
     print(f"Phase 4: トラッキング実行中...")
-    print(f"  サンプリングレート: {sample_rate}")
+    print(f"  プレイヤー検出サンプリングレート: {sample_rate}")
+    print(f"  卓球台検出間隔: {table_detection_interval if table_detection_interval > 0 else '初回のみ'}")
     print(f"  卓球台Y閾値: {table_region.get_y_threshold():.1f}\n")
 
     frame_count = 0
     processed_count = 0
+    table_detection_count = 0
 
     # 動画を先頭に戻す
     video.reset()
@@ -133,11 +145,20 @@ def test_yolo_tracking(
             if not ret:
                 break
 
-            # サンプリング
+            # 卓球台の再検出（定期的）
+            if table_detection_interval > 0 and frame_count > 0 and frame_count % table_detection_interval == 0:
+                new_table_region = table_detector.detect_table(frame)
+                if new_table_region is not None:
+                    table_region = new_table_region
+                    # PlayerFilterの卓球台領域も更新
+                    player_filter.table_region = table_region
+                    table_detection_count += 1
+
+            # プレイヤー検出のサンプリング
             if frame_count % sample_rate == 0:
                 timestamp = frame_count / info['fps']
 
-                # YOLOトラッキング
+                # YOLOトラッキング（高FPS）
                 persons = tracker.track_frame(frame)
 
                 # 選手分類
@@ -184,7 +205,11 @@ def test_yolo_tracking(
         video_writer.release()
         print(f"\nトラッキング動画を保存しました: {output_video_path}")
 
-    print(f"\n処理完了: {processed_count}フレームを分析しました\n")
+    print(f"\n処理完了:")
+    print(f"  プレイヤー検出: {processed_count}フレーム")
+    if table_detection_interval > 0:
+        print(f"  卓球台再検出: {table_detection_count}回")
+    print()
 
     # ===== Phase 5: 選手役割の決定 =====
     print(f"Phase 5: 選手役割を決定中...")
@@ -276,6 +301,12 @@ def main():
         choices=['cpu', 'cuda'],
         help='使用デバイス（デフォルト: cpu）'
     )
+    parser.add_argument(
+        '--table-interval',
+        type=int,
+        default=30,
+        help='卓球台再検出の間隔（フレーム数）。0で初回のみ検出（デフォルト: 30）'
+    )
 
     args = parser.parse_args()
 
@@ -292,7 +323,8 @@ def main():
         sample_rate=args.sample_rate,
         output_video=args.output_video,
         conf_threshold=args.conf,
-        device=args.device
+        device=args.device,
+        table_detection_interval=args.table_interval
     )
 
 

@@ -7,6 +7,12 @@ import numpy as np
 from typing import Optional, List, Tuple
 from dataclasses import dataclass
 
+try:
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except ImportError:
+    YOLO_AVAILABLE = False
+
 
 @dataclass
 class TableRegion:
@@ -34,6 +40,8 @@ class TableDetector:
 
     def __init__(
         self,
+        detection_method: str = "yolo",  # "yolo" or "color"
+        yolo_model_path: str = "yolo11n.pt",
         color_lower_green: Tuple[int, int, int] = (35, 40, 40),
         color_upper_green: Tuple[int, int, int] = (85, 255, 255),
         color_lower_blue: Tuple[int, int, int] = (90, 40, 40),
@@ -45,6 +53,8 @@ class TableDetector:
         卓球台検出器の初期化
 
         Args:
+            detection_method: 検出方法（"yolo" または "color"）
+            yolo_model_path: YOLOモデルのパス
             color_lower_green: 緑色検出の下限（HSV）
             color_upper_green: 緑色検出の上限（HSV）
             color_lower_blue: 青色検出の下限（HSV）
@@ -52,6 +62,7 @@ class TableDetector:
             min_area_ratio: 画面に対する最小面積比
             max_area_ratio: 画面に対する最大面積比
         """
+        self.detection_method = detection_method
         self.color_lower_green = np.array(color_lower_green)
         self.color_upper_green = np.array(color_upper_green)
         self.color_lower_blue = np.array(color_lower_blue)
@@ -59,9 +70,143 @@ class TableDetector:
         self.min_area_ratio = min_area_ratio
         self.max_area_ratio = max_area_ratio
 
+        # YOLOモデルの初期化
+        self.yolo_model = None
+        if detection_method == "yolo":
+            if not YOLO_AVAILABLE:
+                print("警告: ultralytics がインストールされていません。色ベース検出にフォールバックします。")
+                self.detection_method = "color"
+            else:
+                try:
+                    from ultralytics import YOLO
+                    self.yolo_model = YOLO(yolo_model_path)
+                    print(f"YOLOモデルをロードしました: {yolo_model_path}")
+                except Exception as e:
+                    print(f"警告: YOLOモデルのロードに失敗しました: {e}")
+                    print("色ベース検出にフォールバックします。")
+                    self.detection_method = "color"
+
     def detect_table(self, frame: np.ndarray) -> Optional[TableRegion]:
         """
         単一フレームから卓球台を検出
+
+        Args:
+            frame: 入力フレーム（BGR形式）
+
+        Returns:
+            卓球台領域情報、検出できない場合はNone
+        """
+        if self.detection_method == "yolo" and self.yolo_model is not None:
+            return self._detect_table_yolo(frame)
+        else:
+            return self._detect_table_color(frame)
+
+    def _detect_table_yolo(self, frame: np.ndarray) -> Optional[TableRegion]:
+        """
+        YOLOを使って卓球台を検出
+
+        戦略:
+        1. YOLO物体検出で全オブジェクトを取得
+        2. 画面中央上部に位置する大きな横長オブジェクトを卓球台候補とする
+        3. 複数候補がある場合は、最も横長で中央にあるものを選択
+
+        Args:
+            frame: 入力フレーム（BGR形式）
+
+        Returns:
+            卓球台領域情報、検出できない場合はNone
+        """
+        height, width = frame.shape[:2]
+        frame_area = height * width
+
+        # YOLO推論
+        results = self.yolo_model(frame, verbose=False)
+
+        if len(results) == 0 or results[0].boxes is None:
+            return None
+
+        result = results[0]
+        boxes = result.boxes
+
+        # 卓球台候補をフィルタリング
+        table_candidates = []
+
+        for box in boxes:
+            bbox = box.xyxy[0].cpu().numpy()
+            x1, y1, x2, y2 = bbox
+            box_width = x2 - x1
+            box_height = y2 - y1
+            box_area = box_width * box_height
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+
+            # フィルタリング条件
+            area_ratio = box_area / frame_area
+
+            # 1. 面積チェック（画面の10%～60%）
+            if area_ratio < self.min_area_ratio or area_ratio > self.max_area_ratio:
+                continue
+
+            # 2. アスペクト比チェック（横長: 1.5:1 ～ 4:1）
+            if box_width == 0 or box_height == 0:
+                continue
+            aspect_ratio = box_width / box_height
+            if aspect_ratio < 1.5 or aspect_ratio > 4.0:
+                continue
+
+            # 3. 位置チェック（画面の上部～中央付近）
+            vertical_ratio = center_y / height
+            if vertical_ratio < 0.2 or vertical_ratio > 0.7:
+                continue
+
+            # 4. 水平位置チェック（画面中央付近）
+            horizontal_ratio = abs(center_x - width / 2) / width
+            if horizontal_ratio > 0.3:  # 中央から30%以上離れていない
+                continue
+
+            # スコアリング（中央に近く、横長ほど高スコア）
+            center_score = 1.0 - horizontal_ratio
+            aspect_score = min(aspect_ratio / 4.0, 1.0)
+            area_score = area_ratio / self.max_area_ratio
+            total_score = center_score * 0.4 + aspect_score * 0.4 + area_score * 0.2
+
+            table_candidates.append({
+                'bbox': bbox,
+                'score': total_score
+            })
+
+        if not table_candidates:
+            return None
+
+        # 最もスコアの高い候補を選択
+        best_candidate = max(table_candidates, key=lambda x: x['score'])
+        bbox = best_candidate['bbox']
+
+        # 4隅の座標を作成
+        x1, y1, x2, y2 = bbox
+        corners = np.array([
+            [x1, y1],  # top_left
+            [x2, y1],  # top_right
+            [x2, y2],  # bottom_right
+            [x1, y2]   # bottom_left
+        ], dtype=np.int32)
+
+        # 中心座標と幅・高さを計算
+        center_x = float((x1 + x2) / 2)
+        center_y = float((y1 + y2) / 2)
+        table_width = float(x2 - x1)
+        table_height = float(y2 - y1)
+
+        return TableRegion(
+            corners=corners,
+            center=(center_x, center_y),
+            width=table_width,
+            height=table_height
+        )
+
+    def _detect_table_color(self, frame: np.ndarray) -> Optional[TableRegion]:
+        """
+        色ベースで卓球台を検出（既存の実装）
 
         Args:
             frame: 入力フレーム（BGR形式）
