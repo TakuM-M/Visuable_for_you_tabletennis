@@ -13,21 +13,55 @@ from dataclasses import dataclass
 class PersonRegion:
     """検出された人物の領域情報"""
     bbox: Tuple[int, int, int, int]  # (x1, y1, x2, y2)
-    center_y: float  # 画面上のY座標（画面下側ほど手前）
+    center_x: float  # 画面上のX座標（水平位置）
+    center_y: float  # 画面上のY座標（垂直位置）
     area: float  # 領域の面積
     confidence: float  # 検出信頼度
 
 
 class MultiPersonDetector:
-    """複数人物を検出し、対象選手を特定するクラス"""
+    """複数人物を検出し、対象選手を特定するクラス（卓球特化版）"""
 
-    def __init__(self, roi_bottom_ratio: float = 0.7):
+    def __init__(
+        self,
+        player_left_ratio: float = 0.0,
+        player_right_ratio: float = 0.4,
+        table_left_ratio: float = 0.35,
+        table_right_ratio: float = 0.65,
+        player_vertical_top: float = 0.3,
+        player_vertical_bottom: float = 0.85
+    ):
         """
+        卓球の画面レイアウトを前提とした初期化（水平方向ベース）
+
+        画面構成（横方向）：
+        ┌────────┬────────┬────────┐
+        │ 手前   │ 卓球台 │ 相手   │
+        │プレイヤー│（中央）│選手    │
+        │ (左)   │        │ (右)   │
+        │ ★検出  │        │        │
+        └────────┴────────┴────────┘
+         0-40%    35-65%   60-100%
+         ↑手前選手の検出領域
+
+        縦方向（上下）：
+        - player_vertical_top (30%): 手前選手検出の上端
+        - player_vertical_bottom (85%): 手前選手検出の下端
+
         Args:
-            roi_bottom_ratio: 画面下部の注目領域の割合（0.0-1.0）
-                             0.7なら画面下部70%の領域を対象とする
+            player_left_ratio: 手前選手領域の左端（画面左端からの割合）
+            player_right_ratio: 手前選手領域の右端（画面左端からの割合）
+            table_left_ratio: 卓球台領域の左端
+            table_right_ratio: 卓球台領域の右端
+            player_vertical_top: 手前選手検出の上端（縦方向）
+            player_vertical_bottom: 手前選手検出の下端（縦方向）
         """
-        self.roi_bottom_ratio = roi_bottom_ratio
+        self.player_left_ratio = player_left_ratio
+        self.player_right_ratio = player_right_ratio
+        self.table_left_ratio = table_left_ratio
+        self.table_right_ratio = table_right_ratio
+        self.player_vertical_top = player_vertical_top
+        self.player_vertical_bottom = player_vertical_bottom
         self.target_person_history = []  # 過去のターゲット位置を記録
         self.max_history = 10
 
@@ -76,11 +110,13 @@ class MultiPersonDetector:
             if aspect_ratio < 0.5 or aspect_ratio > 4:
                 continue
 
+            center_x = x + w / 2
             center_y = y + h / 2
             confidence = min(area / max_area, 1.0)
 
             person_regions.append(PersonRegion(
                 bbox=(x, y, x + w, y + h),
+                center_x=center_x,
                 center_y=center_y,
                 area=area,
                 confidence=confidence
@@ -96,10 +132,10 @@ class MultiPersonDetector:
         """
         対象選手（手前のプレイヤー）を選択
 
-        優先順位:
-        1. 画面下部に位置する（手前のプレイヤー）
-        2. 画面中央に近い
-        3. 面積が大きい（カメラに近い）
+        卓球の画面レイアウトを考慮（水平方向ベース）：
+        1. 手前選手エリア（画面左側 0-40%）の領域のみ対象
+        2. 縦方向でも範囲を絞る（30-85%）
+        3. 卓球台エリアは除外
 
         Args:
             frame: 入力フレーム
@@ -116,34 +152,44 @@ class MultiPersonDetector:
         if not person_regions:
             return None
 
-        # ROI（関心領域）を設定：画面下部
-        roi_top = int(height * (1 - self.roi_bottom_ratio))
+        # ROI（関心領域）を設定：手前選手エリア（画面左側）
+        player_left = int(width * self.player_left_ratio)
+        player_right = int(width * self.player_right_ratio)
+        player_top = int(height * self.player_vertical_top)
+        player_bottom = int(height * self.player_vertical_bottom)
 
         # スコアリング
         scored_regions = []
         for region in person_regions:
             score = 0.0
-
-            # 1. 画面下部スコア（最重要）
+            center_x = region.center_x
             center_y = region.center_y
-            if center_y > roi_top:
-                # ROI内の場合、下にあるほど高スコア
-                y_score = (center_y - roi_top) / (height - roi_top)
-                score += y_score * 3.0  # 重み3倍
 
-            # 2. 画面中央スコア
-            x1, y1, x2, y2 = region.bbox
-            center_x = (x1 + x2) / 2
-            x_distance = abs(center_x - width / 2) / (width / 2)
-            x_score = 1.0 - x_distance
-            score += x_score * 1.0
+            # 1. 手前選手エリア（画面左側）にいるかチェック（最重要）
+            in_horizontal_range = player_left <= center_x <= player_right
+            in_vertical_range = player_top <= center_y <= player_bottom
 
-            # 3. 面積スコア（大きいほど手前）
-            area_score = region.area / (height * width)
-            score += area_score * 2.0  # 重み2倍
+            if in_horizontal_range and in_vertical_range:
+                # 手前選手エリア内の場合、高スコア
+                # 水平方向：左寄りほど高スコア
+                x_score = 1.0 - ((center_x - player_left) / (player_right - player_left))
+                score += x_score * 5.0  # 重み5倍
 
-            # 4. 信頼度
-            score += region.confidence * 0.5
+                # 垂直方向：中央に近いほど高スコア
+                vertical_center = (player_top + player_bottom) / 2
+                y_distance = abs(center_y - vertical_center) / ((player_bottom - player_top) / 2)
+                y_score = 1.0 - y_distance
+                score += y_score * 3.0
+
+                # 3. 面積スコア（大きいほど手前）
+                area_score = region.area / (height * width)
+                score += area_score * 2.0
+
+                # 4. 信頼度
+                score += region.confidence * 0.5
+            else:
+                # 手前選手エリア外は大幅減点
+                score = -10.0
 
             scored_regions.append((region, score))
 
@@ -151,18 +197,20 @@ class MultiPersonDetector:
         if scored_regions:
             best_region, best_score = max(scored_regions, key=lambda x: x[1])
 
-            # 履歴に追加
-            self.target_person_history.append(best_region.bbox)
-            if len(self.target_person_history) > self.max_history:
-                self.target_person_history.pop(0)
+            # スコアが正の場合のみ有効な検出とみなす
+            if best_score > 0:
+                # 履歴に追加
+                self.target_person_history.append(best_region.bbox)
+                if len(self.target_person_history) > self.max_history:
+                    self.target_person_history.pop(0)
 
-            return best_region.bbox
+                return best_region.bbox
 
         return None
 
     def create_roi_mask(self, frame: np.ndarray, bbox: Optional[Tuple[int, int, int, int]] = None) -> np.ndarray:
         """
-        対象選手のROIマスクを作成
+        対象選手のROIマスクを作成（卓球レイアウト対応・水平方向ベース）
 
         Args:
             frame: 入力フレーム
@@ -175,9 +223,12 @@ class MultiPersonDetector:
         mask = np.zeros((height, width), dtype=np.uint8)
 
         if bbox is None:
-            # バウンディングボックスが指定されていない場合、画面下部全体
-            roi_top = int(height * (1 - self.roi_bottom_ratio))
-            mask[roi_top:, :] = 255
+            # バウンディングボックスが指定されていない場合、手前選手エリア全体
+            player_left = int(width * self.player_left_ratio)
+            player_right = int(width * self.player_right_ratio)
+            player_top = int(height * self.player_vertical_top)
+            player_bottom = int(height * self.player_vertical_bottom)
+            mask[player_top:player_bottom, player_left:player_right] = 255
         else:
             x1, y1, x2, y2 = bbox
             # 余裕を持たせて拡張（20%）
@@ -215,7 +266,7 @@ class MultiPersonDetector:
         person_regions: Optional[List[PersonRegion]] = None
     ) -> np.ndarray:
         """
-        フレームにROIとターゲット選手を描画
+        フレームにROIとターゲット選手を描画（卓球レイアウト対応・水平方向ベース）
 
         Args:
             frame: 入力フレーム
@@ -228,11 +279,25 @@ class MultiPersonDetector:
         output = frame.copy()
         height, width = frame.shape[:2]
 
-        # ROI領域を描画（画面下部）
-        roi_top = int(height * (1 - self.roi_bottom_ratio))
-        cv2.line(output, (0, roi_top), (width, roi_top), (0, 255, 255), 2)
-        cv2.putText(output, "ROI (Target Area)", (10, roi_top - 10),
+        # 手前選手エリアの境界を描画
+        player_left = int(width * self.player_left_ratio)
+        player_right = int(width * self.player_right_ratio)
+        player_top = int(height * self.player_vertical_top)
+        player_bottom = int(height * self.player_vertical_bottom)
+
+        # 卓球台エリアの境界を描画
+        table_left = int(width * self.table_left_ratio)
+        table_right = int(width * self.table_right_ratio)
+
+        # 手前選手エリア（ROI）を矩形で描画（黄色）
+        cv2.rectangle(output, (player_left, player_top), (player_right, player_bottom), (0, 255, 255), 3)
+        cv2.putText(output, "Player Area (ROI)", (player_left + 10, player_top + 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        # 卓球台エリアを矩形で描画（青）
+        cv2.rectangle(output, (table_left, 0), (table_right, height), (255, 0, 0), 2)
+        cv2.putText(output, "Table Area", (table_left + 10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
         # すべての検出領域を描画（灰色）
         if person_regions:
@@ -244,7 +309,7 @@ class MultiPersonDetector:
         if bbox:
             x1, y1, x2, y2 = bbox
             cv2.rectangle(output, (x1, y1), (x2, y2), (0, 255, 0), 3)
-            cv2.putText(output, "TARGET", (x1, y1 - 10),
+            cv2.putText(output, "TARGET PLAYER", (x1, y1 - 10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
         return output

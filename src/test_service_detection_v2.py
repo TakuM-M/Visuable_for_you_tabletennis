@@ -24,16 +24,26 @@ def test_service_detection(
     video_path: str,
     sample_rate: int = 3,
     output_video: bool = False,
-    roi_bottom_ratio: float = 0.6
+    player_left_ratio: float = 0.0,
+    player_right_ratio: float = 0.4,
+    table_left_ratio: float = 0.35,
+    table_right_ratio: float = 0.65,
+    player_vertical_top: float = 0.3,
+    player_vertical_bottom: float = 0.85
 ):
     """
-    サービス検出のテストを実行（複数人物対応版）
+    サービス検出のテストを実行（卓球レイアウト対応版・水平方向ベース）
 
     Args:
         video_path: 動画ファイルのパス
         sample_rate: フレームのサンプリングレート
         output_video: 姿勢を描画した動画を出力するか
-        roi_bottom_ratio: 画面下部の注目領域の割合（0.0-1.0）
+        player_left_ratio: 手前選手領域の左端（画面左端からの割合）
+        player_right_ratio: 手前選手領域の右端（画面左端からの割合）
+        table_left_ratio: 卓球台領域の左端
+        table_right_ratio: 卓球台領域の右端
+        player_vertical_top: 手前選手検出の上端（縦方向）
+        player_vertical_bottom: 手前選手検出の下端（縦方向）
     """
     print(f"動画を読み込んでいます: {video_path}")
 
@@ -53,7 +63,14 @@ def test_service_detection(
     # 検出器の初期化
     pose_detector = PoseDetector(min_detection_confidence=0.5, min_tracking_confidence=0.5)
     service_detector = ServiceDetector()
-    person_detector = MultiPersonDetector(roi_bottom_ratio=roi_bottom_ratio)
+    person_detector = MultiPersonDetector(
+        player_left_ratio=player_left_ratio,
+        player_right_ratio=player_right_ratio,
+        table_left_ratio=table_left_ratio,
+        table_right_ratio=table_right_ratio,
+        player_vertical_top=player_vertical_top,
+        player_vertical_bottom=player_vertical_bottom
+    )
 
     # 結果を格納するリスト
     service_data = []
@@ -77,7 +94,9 @@ def test_service_detection(
 
     print(f"\nサービス検出を実行中...")
     print(f"  サンプリングレート: {sample_rate}")
-    print(f"  ROI（注目領域）: 画面下部{roi_bottom_ratio*100:.0f}%")
+    print(f"  手前選手エリア（横方向）: 画面左端{player_left_ratio*100:.0f}% 〜 {player_right_ratio*100:.0f}%")
+    print(f"  手前選手エリア（縦方向）: 画面上部{player_vertical_top*100:.0f}% 〜 {player_vertical_bottom*100:.0f}%")
+    print(f"  卓球台エリア: 画面左端{table_left_ratio*100:.0f}% 〜 {table_right_ratio*100:.0f}%")
 
     frame_count = 0
     processed_count = 0
@@ -241,7 +260,7 @@ def plot_service_graph(timestamps, service_data, confidence_data, pose_types, se
 def main():
     """メイン処理"""
     parser = argparse.ArgumentParser(
-        description='サービス検出テスト（複数人物対応版）'
+        description='サービス検出テスト（複数人物対応版・水平方向ベース）'
     )
     parser.add_argument(
         'input',
@@ -260,10 +279,40 @@ def main():
         help='姿勢を描画した動画を出力する'
     )
     parser.add_argument(
-        '-r', '--roi-ratio',
+        '--player-left',
         type=float,
-        default=0.6,
-        help='ROI（画面下部の注目領域）の割合 0.0-1.0（デフォルト: 0.6）'
+        default=0.0,
+        help='手前選手領域の左端（画面左端からの割合、デフォルト: 0.0）'
+    )
+    parser.add_argument(
+        '--player-right',
+        type=float,
+        default=0.4,
+        help='手前選手領域の右端（画面左端からの割合、デフォルト: 0.4）'
+    )
+    parser.add_argument(
+        '--table-left',
+        type=float,
+        default=0.35,
+        help='卓球台領域の左端（画面左端からの割合、デフォルト: 0.35）'
+    )
+    parser.add_argument(
+        '--table-right',
+        type=float,
+        default=0.65,
+        help='卓球台領域の右端（画面左端からの割合、デフォルト: 0.65）'
+    )
+    parser.add_argument(
+        '--player-top',
+        type=float,
+        default=0.3,
+        help='手前選手検出の上端（画面上端からの割合、デフォルト: 0.3）'
+    )
+    parser.add_argument(
+        '--player-bottom',
+        type=float,
+        default=0.85,
+        help='手前選手検出の下端（画面上端からの割合、デフォルト: 0.85）'
     )
 
     args = parser.parse_args()
@@ -279,7 +328,12 @@ def main():
         str(input_path),
         sample_rate=args.sample_rate,
         output_video=args.output_video,
-        roi_bottom_ratio=args.roi_ratio
+        player_left_ratio=args.player_left,
+        player_right_ratio=args.player_right,
+        table_left_ratio=args.table_left,
+        table_right_ratio=args.table_right,
+        player_vertical_top=args.player_top,
+        player_vertical_bottom=args.player_bottom
     )
 
 
