@@ -42,6 +42,10 @@ Visuable_for_you_tabletennis/
 │   │   ├── player_filter.py        # 選手フィルタリング
 │   │   ├── tracking_exporter.py    # CSV出力
 │   │   └── legacy_mediapipe/       # 旧MediaPipe実装（参考用）
+│   ├── training/                    # モデル学習用スクリプト
+│   │   ├── extract_frames.py       # 動画からフレーム抽出
+│   │   ├── prepare_dataset.py      # データセット準備
+│   │   └── train_table_detector.py # モデル学習
 │   ├── extraction/                  # 動画抽出モジュール
 │   ├── utils/                       # ユーティリティ
 │   │   └── video_loader.py         # 動画読み込み
@@ -49,12 +53,23 @@ Visuable_for_you_tabletennis/
 │   └── main.py                     # メインスクリプト（旧版）
 ├── data/                            # データディレクトリ
 │   ├── raw/                        # 元動画
-│   └── processed/                  # 処理済み動画
+│   ├── processed/                  # 処理済み動画
+│   ├── annotations/                # アノテーションデータ
+│   │   ├── images/                # 抽出フレーム
+│   │   └── labels/                # YOLOラベル
+│   ├── table_dataset/              # 学習用データセット
+│   │   ├── train/                 # 学習データ
+│   │   └── val/                   # 検証データ
+│   └── table_dataset.yaml          # データセット設定
+├── models/                          # 学習済みモデル
+│   └── table_detector/             # 卓球台検出モデル
 ├── output/                          # 出力ディレクトリ
+├── scripts/                         # 便利スクリプト
+│   └── quick_start_training.sh     # 学習クイックスタート
 ├── docs/                            # ドキュメント
-│   └── architecture_yolo_tracking.md  # YOLOシステム設計書
+│   ├── architecture_yolo_tracking.md  # YOLOシステム設計書
+│   └── annotation_guide.md         # アノテーションガイド
 ├── tests/                           # テストコード
-│   └── legacy/                     # 旧テスト
 ├── notes/                           # 開発メモ
 ├── requirements.txt                 # 依存ライブラリ
 └── README.md                       # このファイル
@@ -109,10 +124,11 @@ python src/test_yolo_tracking.py data/raw/your_video.mp4 \
 #### オプション一覧
 
 - `-o, --output DIR`: 出力ディレクトリ（デフォルト: output）
-- `-s, --sample-rate N`: フレームサンプリングレート（デフォルト: 1）
+- `-s, --sample-rate N`: プレイヤー検出のフレームサンプリングレート（デフォルト: 1）
 - `-v, --output-video`: トラッキング結果の動画を出力
 - `--conf FLOAT`: YOLO検出信頼度の閾値（デフォルト: 0.5）
 - `--device {cpu,cuda}`: 使用デバイス（デフォルト: cpu）
+- `--table-interval N`: 卓球台再検出の間隔（フレーム数）。0で初回のみ検出（デフォルト: 30）
 
 ### 出力ファイル
 
@@ -140,6 +156,104 @@ output/
 - その他16個のキーポイント（計17点: COCO形式）
 
 詳細な設計ドキュメントは[docs/architecture_yolo_tracking.md](docs/architecture_yolo_tracking.md)を参照してください。
+
+### パフォーマンス最適化
+
+**卓球台とプレイヤーの検出FPS分離（2025-12-30実装）**
+
+卓球台は静止物のため低FPS検出、プレイヤーは動的なため高FPS検出を行うことでパフォーマンスを最適化しています。
+
+```bash
+# 卓球台: 初回のみ検出（最速・推奨）
+python src/test_yolo_tracking.py data/raw/your_video.mp4 --table-interval 0 -v
+
+# 卓球台: 30フレームごとに再検出（カメラが動く場合）
+python src/test_yolo_tracking.py data/raw/your_video.mp4 --table-interval 30 -v
+
+# プレイヤー検出も2フレームに1回にして高速化
+python src/test_yolo_tracking.py data/raw/your_video.mp4 --table-interval 0 -s 2 -v
+```
+
+## カスタムモデル学習
+
+卓球台検出の精度を向上させるため、カスタムYOLOモデルを学習できます。
+
+### クイックスタート
+
+```bash
+# 全自動スクリプト（アノテーション以外）
+bash scripts/quick_start_training.sh
+```
+
+### 手動実行
+
+#### 1. フレーム抽出
+
+```bash
+# 複数動画から一括抽出（推奨）
+python src/training/extract_frames.py data/raw -o data/annotations/images -i 30 -m 50
+
+# 単一動画から抽出
+python src/training/extract_frames.py data/raw/sample_video.MOV -o data/annotations/images
+```
+
+#### 2. アノテーション
+
+**Label Studio を使用（推奨）:**
+
+```bash
+# インストール
+pip install label-studio
+
+# 起動
+label-studio
+```
+
+ブラウザで http://localhost:8080 を開き、以下の手順でアノテーション:
+1. プロジェクト作成（Object Detection with Bounding Boxes）
+2. `data/annotations/images` をアップロード
+3. ラベル名を `table_tennis_table` に設定
+4. 各画像で卓球台をバウンディングボックスで囲む
+5. YOLO形式でエクスポート
+6. ラベルファイル(.txt)を `data/annotations/labels` にコピー
+
+詳細は [docs/annotation_guide.md](docs/annotation_guide.md) を参照。
+
+#### 3. データセット準備
+
+```bash
+# ラベル検証
+python src/training/prepare_dataset.py --validate-only
+
+# train/val分割
+python src/training/prepare_dataset.py -i data/annotations/images -l data/annotations/labels
+```
+
+#### 4. モデル学習
+
+```bash
+# CPU
+python src/training/train_table_detector.py --epochs 100 --batch 16 --device cpu
+
+# GPU (CUDA)
+python src/training/train_table_detector.py --epochs 100 --batch 32 --device cuda
+
+# Apple Silicon (MPS)
+python src/training/train_table_detector.py --epochs 100 --batch 16 --device mps
+```
+
+#### 5. 学習済みモデルの使用
+
+学習完了後、[src/detection/table_detector.py:44](src/detection/table_detector.py#L44) を編集してカスタムモデルを使用:
+
+```python
+table_detector = TableDetector(
+    detection_method="yolo",
+    yolo_model_path="models/table_detector/train/weights/best.pt"  # カスタムモデル
+)
+```
+
+詳細な学習ガイドは [docs/annotation_guide.md](docs/annotation_guide.md) を参照してください。
 
 ## 開発状況
 

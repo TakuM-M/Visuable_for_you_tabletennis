@@ -1,0 +1,20 @@
+# YOLOv11 卓球台検出用データセット設定
+# このファイルは学習時に使用されます
+
+# データセットのパス（このYAMLファイルからの相対パスまたは絶対パス）
+path: ./table_dataset  # データセットのルートディレクトリ
+train: train/images  # 学習用画像ディレクトリ
+val: val/images  # 検証用画像ディレクトリ
+
+# クラス定義
+nc: 1  # クラス数
+names:
+  0: table_tennis_table  # クラス名
+
+# データセット情報（オプション）
+# 学習結果の追跡用
+dataset_info:
+  description: "卓球台検出用カスタムデータセット"
+  version: "1.0"
+  created: "2025-12-30"
+  author: "Visuable_for_you_tabletennis"
