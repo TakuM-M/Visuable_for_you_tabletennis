@@ -45,6 +45,7 @@ env/
 htmlcov/
 
 # Data files
+data/
 data/raw/*.mp4
 data/raw/*.avi
 data/raw/*.mov

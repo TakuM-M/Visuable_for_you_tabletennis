@@ -407,3 +407,4 @@ class TableDetector:
                    0.7, color, 2)
 
         return output
+
