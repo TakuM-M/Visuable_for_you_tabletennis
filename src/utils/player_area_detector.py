@@ -13,11 +13,15 @@ from typing import Tuple, List, Dict, Optional
 class PlayerAreaDetector:
     """卓球台の座標からプレイヤー領域を検出するクラス"""
 
+    # 卓球台の実寸法（cm）
+    TABLE_WIDTH_CM = 152.5   # 短辺（幅）
+    TABLE_DEPTH_CM = 274.0   # 長辺（奥行き）
+
     def __init__(
         self,
         table_corners: List[Tuple[float, float]],
-        margin_factor: float = 0.8,
-        side_extension_factor: float = 0.3
+        player_area_depth_cm: float = 200.0,
+        player_area_side_margin_cm: float = 100.0
     ):
         """
         プレイヤー領域検出器を初期化
@@ -27,45 +31,54 @@ class PlayerAreaDetector:
         table_corners : List[Tuple[float, float]]
             卓球台の四隅の座標 [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
             順番: 左上、右上、右下、左下（反時計回り）
-        margin_factor : float, optional
-            卓球台の短辺の長さに対する前後マージンの倍率
-            デフォルトは0.8（卓球台の短辺の80%の距離）
-        side_extension_factor : float, optional
-            卓球台の長辺の長さに対する左右マージンの倍率
-            デフォルトは0.3（卓球台の長辺の30%の距離）
+        player_area_depth_cm : float, optional
+            卓球台の辺からプレイヤー領域の奥行き（実寸法cm）
+            デフォルトは200cm（2m）
+        player_area_side_margin_cm : float, optional
+            卓球台の左右に追加する領域の幅（実寸法cm）
+            デフォルトは100cm（各辺50cm）
         """
         if len(table_corners) != 4:
             raise ValueError("table_corners must contain exactly 4 points")
 
         self.table_corners = np.array(table_corners, dtype=np.float32)
-        self.margin_factor = margin_factor
-        self.side_extension_factor = side_extension_factor
+        self.player_area_depth_cm = player_area_depth_cm
+        self.player_area_side_margin_cm = player_area_side_margin_cm
 
-        # 卓球台の各辺の長さを計算
-        self._calculate_table_dimensions()
+        # 卓球台の各辺の長さとスケールを計算
+        self._calculate_table_dimensions_and_scale()
 
-    def _calculate_table_dimensions(self):
-        """卓球台のサイズを計算"""
-        # 上辺の長さ（左上→右上）
-        top_length = np.linalg.norm(
+    def _calculate_table_dimensions_and_scale(self):
+        """卓球台のサイズとピクセル/cm比率を計算"""
+        # 上辺の長さ（左上→右上）ピクセル
+        top_length_px = np.linalg.norm(
             self.table_corners[1] - self.table_corners[0]
         )
-        # 下辺の長さ（左下→右下）
-        bottom_length = np.linalg.norm(
+        # 下辺の長さ（左下→右下）ピクセル
+        bottom_length_px = np.linalg.norm(
             self.table_corners[2] - self.table_corners[3]
         )
-        # 左辺の長さ（左上→左下）
-        left_length = np.linalg.norm(
+        # 左辺の長さ（左上→左下）ピクセル
+        left_length_px = np.linalg.norm(
             self.table_corners[3] - self.table_corners[0]
         )
-        # 右辺の長さ（右上→右下）
-        right_length = np.linalg.norm(
+        # 右辺の長さ（右上→右下）ピクセル
+        right_length_px = np.linalg.norm(
             self.table_corners[2] - self.table_corners[1]
         )
 
-        # 長辺と短辺の平均を取得
-        self.table_width = (top_length + bottom_length) / 2  # 長辺（横幅）
-        self.table_depth = (left_length + right_length) / 2  # 短辺（奥行き）
+        # 長辺と短辺の平均をピクセルで取得
+        self.table_width_px = (top_length_px + bottom_length_px) / 2  # 横幅（短辺）
+        self.table_depth_px = (left_length_px + right_length_px) / 2  # 奥行き（長辺）
+
+        # ピクセル/cm の比率を計算
+        # 短辺（幅）方向のスケール
+        self.scale_width = self.table_width_px / self.TABLE_WIDTH_CM  # px/cm
+        # 長辺（奥行き）方向のスケール
+        self.scale_depth = self.table_depth_px / self.TABLE_DEPTH_CM  # px/cm
+
+        # 平均スケール（より正確な計算のため）
+        self.scale_avg = (self.scale_width + self.scale_depth) / 2  # px/cm
 
     def get_player_area_bbox(
         self,
@@ -105,14 +118,41 @@ class PlayerAreaDetector:
 
         return bbox
 
-    def _calculate_near_player_bbox(self) -> Tuple[float, float, float, float]:
+    def get_player_area_polygon(
+        self,
+        player_side: str = "near"
+    ) -> np.ndarray:
         """
-        手前側のプレイヤー領域を計算
+        プレイヤー領域の四隅の座標を取得（卓球台の辺に沿った形状）
+
+        Parameters
+        ----------
+        player_side : str, optional
+            "near" (手前側) または "far" (奥側)
 
         Returns
         -------
-        Tuple[float, float, float, float]
-            (x1, y1, x2, y2) 形式のバウンディングボックス
+        np.ndarray
+            四隅の座標 [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+            反時計回りの順番
+        """
+        if player_side == "near":
+            corners = self._calculate_near_player_corners()
+        elif player_side == "far":
+            corners = self._calculate_far_player_corners()
+        else:
+            raise ValueError("player_side must be 'near' or 'far'")
+
+        return corners
+
+    def _calculate_near_player_corners(self) -> np.ndarray:
+        """
+        手前側のプレイヤー領域の四隅の座標を計算（実寸法ベース）
+
+        Returns
+        -------
+        np.ndarray
+            四隅の座標 [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
         """
         # 左下と右下の座標
         bottom_left = self.table_corners[3]
@@ -131,16 +171,13 @@ class PlayerAreaDetector:
             bottom_vector_normalized[0]
         ])
 
-        # プレイヤー領域の奥行き（卓球台の短辺に基づく）
-        player_depth = self.table_depth * self.margin_factor
+        # 実寸法からピクセル値に変換
+        player_depth_px = self.player_area_depth_cm * self.scale_depth  # 奥行き
+        side_margin_px = self.player_area_side_margin_cm * self.scale_width  # 左右マージン
+        player_width_px = self.table_width_px + side_margin_px
 
-        # プレイヤー領域の幅（卓球台の幅 + 左右マージン）
-        side_margin = self.table_width * self.side_extension_factor
-        player_width = self.table_width + 2 * side_margin
-
-        # バウンディングボックスの4つの角を計算
-        # 卓球台の下辺から外側に向かってプレイヤー領域を拡張
-        half_width = player_width / 2
+        # 四隅を計算
+        half_width = player_width_px / 2
         width_vector = bottom_vector_normalized * half_width
 
         # 下辺の延長線上の左右端点
@@ -148,16 +185,29 @@ class PlayerAreaDetector:
         right_table_edge = bottom_center + width_vector
 
         # プレイヤー領域の外側の端点（卓球台から離れた位置）
-        left_player_edge = left_table_edge + perpendicular_vector * player_depth
-        right_player_edge = right_table_edge + perpendicular_vector * player_depth
+        left_player_edge = left_table_edge + perpendicular_vector * player_depth_px
+        right_player_edge = right_table_edge + perpendicular_vector * player_depth_px
 
-        # 4つの角の座標
+        # 4つの角の座標（反時計回り）
         corners = np.array([
-            bottom_left,
-            bottom_right,
-            right_player_edge,
-            left_player_edge
+            left_table_edge,    # 左上（卓球台寄り）
+            right_table_edge,   # 右上（卓球台寄り）
+            right_player_edge,  # 右下（卓球台から遠い）
+            left_player_edge    # 左下（卓球台から遠い）
         ])
+
+        return corners
+
+    def _calculate_near_player_bbox(self) -> Tuple[float, float, float, float]:
+        """
+        手前側のプレイヤー領域を計算
+
+        Returns
+        -------
+        Tuple[float, float, float, float]
+            (x1, y1, x2, y2) 形式のバウンディングボックス
+        """
+        corners = self._calculate_near_player_corners()
 
         # バウンディングボックスの計算（最小・最大値）
         x_min = np.min(corners[:, 0])
@@ -167,14 +217,14 @@ class PlayerAreaDetector:
 
         return (x_min, y_min, x_max, y_max)
 
-    def _calculate_far_player_bbox(self) -> Tuple[float, float, float, float]:
+    def _calculate_far_player_corners(self) -> np.ndarray:
         """
-        奥側のプレイヤー領域を計算
+        奥側のプレイヤー領域の四隅の座標を計算（実寸法ベース）
 
         Returns
         -------
-        Tuple[float, float, float, float]
-            (x1, y1, x2, y2) 形式のバウンディングボックス
+        np.ndarray
+            四隅の座標 [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
         """
         # 左上と右上の座標
         top_left = self.table_corners[0]
@@ -187,38 +237,49 @@ class PlayerAreaDetector:
         top_vector = top_right - top_left
         top_vector_normalized = top_vector / np.linalg.norm(top_vector)
 
-        # 上辺に垂直な方向（プレイヤーが立つ方向、下向き）
+        # 上辺に垂直な方向（プレイヤーが立つ方向、上向き）
         perpendicular_vector = np.array([
             top_vector_normalized[1],
             -top_vector_normalized[0]
         ])
 
-        # プレイヤー領域の奥行き
-        player_depth = self.table_depth * self.margin_factor
+        # 実寸法からピクセル値に変換
+        player_depth_px = self.player_area_depth_cm * self.scale_depth  # 奥行き
+        side_margin_px = self.player_area_side_margin_cm * self.scale_width  # 左右マージン
+        player_width_px = self.table_width_px + side_margin_px
 
-        # プレイヤー領域の幅
-        side_margin = self.table_width * self.side_extension_factor
-        player_width = self.table_width + 2 * side_margin
-
-        # バウンディングボックスの4つの角を計算
-        half_width = player_width / 2
+        # 四隅を計算
+        half_width = player_width_px / 2
         width_vector = top_vector_normalized * half_width
 
         # 上辺の延長線上の左右端点
         left_table_edge = top_center - width_vector
         right_table_edge = top_center + width_vector
 
-        # プレイヤー領域の外側の端点
-        left_player_edge = left_table_edge + perpendicular_vector * player_depth
-        right_player_edge = right_table_edge + perpendicular_vector * player_depth
+        # プレイヤー領域の外側の端点（卓球台から離れた位置）
+        left_player_edge = left_table_edge + perpendicular_vector * player_depth_px
+        right_player_edge = right_table_edge + perpendicular_vector * player_depth_px
 
-        # 4つの角の座標
+        # 4つの角の座標（反時計回り）
         corners = np.array([
-            top_left,
-            top_right,
-            right_player_edge,
-            left_player_edge
+            left_player_edge,   # 左上（卓球台から遠い）
+            right_player_edge,  # 右上（卓球台から遠い）
+            right_table_edge,   # 右下（卓球台寄り）
+            left_table_edge     # 左下（卓球台寄り）
         ])
+
+        return corners
+
+    def _calculate_far_player_bbox(self) -> Tuple[float, float, float, float]:
+        """
+        奥側のプレイヤー領域を計算
+
+        Returns
+        -------
+        Tuple[float, float, float, float]
+            (x1, y1, x2, y2) 形式のバウンディングボックス
+        """
+        corners = self._calculate_far_player_corners()
 
         # バウンディングボックスの計算
         x_min = np.min(corners[:, 0])
@@ -256,7 +317,8 @@ class PlayerAreaDetector:
         show_both: bool = True,
         near_color: Tuple[int, int, int] = (0, 255, 0),
         far_color: Tuple[int, int, int] = (255, 0, 0),
-        alpha: float = 0.3
+        alpha: float = 0.3,
+        use_polygon: bool = True
     ) -> np.ndarray:
         """
         プレイヤー領域を画像上に可視化
@@ -273,6 +335,9 @@ class PlayerAreaDetector:
             奥側の領域の色 (BGR)
         alpha : float, optional
             領域の透明度 (0.0 - 1.0)
+        use_polygon : bool, optional
+            True: 卓球台の辺に沿った四角形を描画
+            False: 軸に平行なバウンディングボックスを描画
 
         Returns
         -------
@@ -286,30 +351,44 @@ class PlayerAreaDetector:
         table_pts = self.table_corners.astype(np.int32)
         cv2.polylines(output, [table_pts], True, (0, 128, 0), 3)
 
-        # プレイヤー領域を描画
-        areas = self.get_both_player_areas("xyxy")
-
         if show_both:
             sides = [("near", near_color), ("far", far_color)]
         else:
             sides = [("near", near_color)]
 
         for side, color in sides:
-            x1, y1, x2, y2 = areas[side]
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            if use_polygon:
+                # 卓球台の辺に沿った四角形を描画
+                corners = self.get_player_area_polygon(side)
+                pts = corners.astype(np.int32)
 
-            # 領域を半透明で塗りつぶし
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
-            # 枠線を描画
-            cv2.rectangle(output, (x1, y1), (x2, y2), color, 3)
+                # 領域を半透明で塗りつぶし
+                cv2.fillPoly(overlay, [pts], color)
+                # 枠線を描画
+                cv2.polylines(output, [pts], True, color, 3)
+
+                # ラベル位置を計算（領域の中心付近）
+                center = np.mean(corners, axis=0)
+                label_pos = (int(center[0]) - 80, int(center[1]))
+            else:
+                # 軸に平行なバウンディングボックスを描画
+                areas = self.get_both_player_areas("xyxy")
+                x1, y1, x2, y2 = areas[side]
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+
+                # 領域を半透明で塗りつぶし
+                cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+                # 枠線を描画
+                cv2.rectangle(output, (x1, y1), (x2, y2), color, 3)
+
+                label_pos = (x1 + 10, y1 - 10 if side == "far" else y2 + 30)
 
             # ラベルを追加
             label = f"Player Area ({side})"
-            label_y = y1 - 10 if side == "far" else y2 + 30
             cv2.putText(
                 output,
                 label,
-                (x1 + 10, label_y),
+                label_pos,
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
                 color,

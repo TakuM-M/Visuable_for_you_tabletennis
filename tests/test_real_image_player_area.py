@@ -45,11 +45,13 @@ def main():
     # アノテーションデータから卓球台の四隅の座標を取得
     # 座標は640x360の画像に対するもの
     # keypointsの順番: id 0=左手前, 1=右手前, 2=右奥, 3=左奥
+    # PlayerAreaDetectorが期待する順番: 左上、右上、右下、左下（反時計回り）
+    # カメラから見て: 左上=左奥、右上=右奥、右下=右手前、左下=左手前
     table_corners_640x360 = [
-        (288.4325, 148.5270),  # id 3: 左奥 (左上)
-        (395.8707, 148.3543),  # id 2: 右奥 (右上)
-        (331.4037, 164.8601),  # id 1: 右手前 (右下)
-        (184.8551, 163.5938),  # id 0: 左手前 (左下)
+        (288.4325, 148.5270),  # id 3: 左奥 → 左上
+        (395.8707, 148.3543),  # id 2: 右奥 → 右上
+        (331.4037, 164.8601),  # id 1: 右手前 → 右下
+        (184.8551, 163.5938),  # id 0: 左手前 → 左下
     ]
 
     # 画像サイズに合わせてスケーリング
@@ -65,13 +67,15 @@ def main():
     for i, (corner, label) in enumerate(zip(table_corners, labels)):
         print(f"   {label}: ({corner[0]:.1f}, {corner[1]:.1f})")
 
-    # プレイヤー領域検出器を初期化
+    # プレイヤー領域検出器を初期化（実寸法ベース）
     print("\n3. プレイヤー領域検出器を初期化中...")
+    print(f"   卓球台の実寸法: 幅{PlayerAreaDetector.TABLE_WIDTH_CM}cm x 奥行き{PlayerAreaDetector.TABLE_DEPTH_CM}cm")
     player_detector = PlayerAreaDetector(
         table_corners=table_corners,
-        margin_factor=0.8,           # 卓球台の奥行きの80%の距離
-        side_extension_factor=0.3    # 卓球台の幅の30%を左右に拡張
+        player_area_depth_cm=200.0,         # プレイヤー領域の奥行き: 200cm (2m)
+        player_area_side_margin_cm=100.0    # 左右のマージン: 100cm (1m)
     )
+    print(f"   プレイヤー領域設定: 奥行き200cm、左右マージン100cm")
 
     # プレイヤー領域を取得
     print("\n4. プレイヤー領域を計算中...")
@@ -87,14 +91,25 @@ def main():
     print(f"      座標: ({x1:.1f}, {y1:.1f}) - ({x2:.1f}, {y2:.1f})")
     print(f"      サイズ: {x2-x1:.1f} x {y2-y1:.1f} px")
 
-    # プレイヤー領域を可視化
+    # プレイヤー領域を可視化（卓球台の辺に沿った形状）
     print("\n5. プレイヤー領域を可視化中...")
     img_with_areas = player_detector.visualize_player_areas(
         img,
         show_both=True,
         near_color=(0, 255, 0),   # 手前側: 緑
         far_color=(255, 0, 0),     # 奥側: 青
-        alpha=0.3
+        alpha=0.3,
+        use_polygon=True  # 卓球台の辺に沿った四角形を描画
+    )
+
+    # 比較用：軸に平行なバウンディングボックス版も作成
+    img_with_bbox = player_detector.visualize_player_areas(
+        img,
+        show_both=True,
+        near_color=(0, 255, 0),
+        far_color=(255, 0, 0),
+        alpha=0.3,
+        use_polygon=False  # 軸に平行なバウンディングボックス
     )
 
     # 卓球台の四隅をマーク
@@ -150,17 +165,20 @@ def main():
     output_dir = os.path.join(os.path.dirname(__file__), '..', 'output')
     os.makedirs(output_dir, exist_ok=True)
 
-    real_player_areas_path = os.path.join(output_dir, 'real_image_player_areas_visualization.jpg')
-    real_marked_path = os.path.join(output_dir, 'real_image_with_bboxes.jpg')
+    real_player_areas_path = os.path.join(output_dir, 'real_image_player_areas_polygon.jpg')
+    real_bbox_path = os.path.join(output_dir, 'real_image_player_areas_bbox.jpg')
+    real_marked_path = os.path.join(output_dir, 'real_image_with_corners.jpg')
     real_warped_path = os.path.join(output_dir, 'real_image_warped.jpg')
 
     cv2.imwrite(real_player_areas_path, img_with_areas)
+    cv2.imwrite(real_bbox_path, img_with_bbox)
     cv2.imwrite(real_marked_path, img_marked)
     cv2.imwrite(real_warped_path, warped)
 
     print(f"\n7. 結果を保存しました:")
-    print(f"   プレイヤー領域可視化: {real_player_areas_path}")
-    print(f"   バウンディングボックス表示: {real_marked_path}")
+    print(f"   プレイヤー領域（ポリゴン）: {real_player_areas_path}")
+    print(f"   プレイヤー領域（バウンディングボックス）: {real_bbox_path}")
+    print(f"   卓球台コーナー表示: {real_marked_path}")
     print(f"   鳥瞰図: {real_warped_path}")
 
     # 画像を表示
@@ -170,6 +188,13 @@ def main():
     display_scale = 1.5  # 640x360の画像を拡大表示
     img_areas_display = cv2.resize(
         img_with_areas,
+        None,
+        fx=display_scale,
+        fy=display_scale,
+        interpolation=cv2.INTER_LINEAR
+    )
+    img_bbox_display = cv2.resize(
+        img_with_bbox,
         None,
         fx=display_scale,
         fy=display_scale,
@@ -192,8 +217,9 @@ def main():
         interpolation=cv2.INTER_AREA
     )
 
-    cv2.imshow('Real Image - Player Areas Detection', img_areas_display)
-    cv2.imshow('Real Image - Bounding Boxes', img_marked_display)
+    cv2.imshow('Player Areas (Polygon - Aligned with Table)', img_areas_display)
+    cv2.imshow('Player Areas (Bounding Box - Axis Aligned)', img_bbox_display)
+    cv2.imshow('Table Corners Marked', img_marked_display)
     cv2.imshow('Bird\'s Eye View', warped_display)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
