@@ -4,6 +4,17 @@
 前提条件:
 - 卓球台の位置は画面の中央に位置すると仮定する
 - 選手は卓球台の前に立つと仮定する
+
+実行コード
+data/raw/sample_video_01_short_version.MOV
+```bash
+python ./src/data_collection/player_detector.py \
+    -i data/raw/sample_video_01_short_version.MOV \
+    -o output \
+    --csv output/pose_data.csv \
+    --conf 0.3 \
+    --center-ratio 0.45
+```
 """
 import cv2
 import numpy as np
