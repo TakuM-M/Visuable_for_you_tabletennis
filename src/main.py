@@ -7,7 +7,6 @@ from pathlib import Path
 import sys
 
 from utils.video_loader import VideoLoader
-from detection.motion_detector import MotionDetector
 
 
 def main():

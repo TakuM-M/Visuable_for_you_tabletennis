@@ -8,15 +8,7 @@ from typing import List, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    from ultralytics import YOLO
-except ImportError:
-    raise ImportError(
-        "ultralytics がインストールされていません。\n"
-        "以下のコマンドでインストールしてください:\n"
-        "pip install ultralytics"
-    )
-
+from ultralytics import YOLO
 
 # COCO 17キーポイント定義
 KEYPOINT_NAMES = [
