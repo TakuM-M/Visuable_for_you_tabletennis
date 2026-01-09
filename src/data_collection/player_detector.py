@@ -10,10 +10,10 @@ data/raw/sample_video_01_short_version.MOV
 ```bash
 python ./src/data_collection/player_detector.py \
     -i data/raw/sample_video_01_short_version.MOV \
-    -o output \
+    -o output/result_video.mp4 \
     --csv output/pose_data.csv \
     --conf 0.3 \
-    --center-ratio 0.45
+    --center-ratio 0.60
 ```
 """
 import cv2
@@ -49,7 +49,7 @@ class CenterRegion:
 
 
 class CenterPlayerDetector:
-    """画面中央のプレイヤー検出・トラッキングクラス"""
+    """画面中央のプレイヤー検出・トラッキングクラス（中央領域内の全員を検出）"""
 
     def __init__(
         self,
@@ -73,11 +73,10 @@ class CenterPlayerDetector:
             device=device
         )
         self.center_ratio = center_ratio
-        self.target_track_ids: list[int] = []  # 最大2名のトラッキングID
+        self.target_track_ids: list[int] = []  # トラッキングID
         self.center_region: Optional[CenterRegion] = None
         self.frame_width: Optional[int] = None
         self.frame_height: Optional[int] = None
-        self.max_players: int = 2  # 検出する最大人数
 
     def set_frame_size(self, width: int, height: int):
         """フレームサイズを設定し、中央領域を計算"""
@@ -102,13 +101,13 @@ class CenterPlayerDetector:
 
     def detect_center_player(self, frame: np.ndarray) -> list[PersonTrack]:
         """
-        画面中央のプレイヤーを検出（毎フレーム実行、最大2名）
+        画面中央のプレイヤーを検出（毎フレーム実行、全員）
 
         Args:
             frame: 入力フレーム
 
         Returns:
-            検出されたプレイヤーのリスト（最大2名）
+            検出されたプレイヤーのリスト（中央領域内の全員）
         """
         if self.center_region is None:
             self.set_frame_size(frame.shape[1], frame.shape[0])
@@ -122,9 +121,9 @@ class CenterPlayerDetector:
         if not center_persons:
             return []
 
-        # 信頼度が高い順にソートして最大2名を選択
+        # 信頼度が高い順にソート（制限なし）
         center_persons.sort(key=lambda p: p.confidence, reverse=True)
-        target_persons = center_persons[:self.max_players]
+        target_persons = center_persons  # 全員を対象
 
         # トラッキングIDを更新
         new_track_ids = [p.track_id for p in target_persons]
@@ -146,13 +145,13 @@ class CenterPlayerDetector:
 
     def track_player(self, frame: np.ndarray) -> list[PersonTrack]:
         """
-        ターゲットプレイヤーをトラッキング（画面全体、最大2名）
+        ターゲットプレイヤーをトラッキング（画面全体）
 
         Args:
             frame: 入力フレーム
 
         Returns:
-            トラッキングされたプレイヤーのリスト
+            トラッキングされたプレイヤーのリスト（全員）
         """
         if not self.target_track_ids:
             return []
@@ -343,7 +342,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='画面中央のプレイヤーを検出し、継続的にトラッキングする'
+        description='画面中央のプレイヤーを全員検出し、継続的にトラッキングする'
     )
     parser.add_argument(
         '-i', '--input',
@@ -443,7 +442,7 @@ def main():
 
             frame_count += 1
 
-            # 常に画面中央からプレイヤーを検出（最大2名）
+            # 常に画面中央からプレイヤーを検出（全員）
             target_persons = detector.detect_center_player(frame)
 
             # 姿勢データを記録（各プレイヤーごと）
