@@ -34,6 +34,19 @@
     - ノイズデータの除去（Visibilityの活用）
     - Savitzky-Golay（サビツキー・ゴーレイ）フィルタ
 
+# 正規化データを出力（デフォルト）
+python ./src/data_collection/player_detector.py \
+    -i data/raw/sample_video_01_short_version.MOV \
+    --csv output/pose_normalized.csv \
+    --conf 0.3 \
+    --center-ratio 0.60
+
+# 可視化
+python src/preprocessing/visualize_normalized_pose.py \
+    -i output/pose_normalized.csv \
+    -n 6 \
+    --track-id 4
+
 2. プレイ中/プレイ外のラベル付け
 - ウィンドウスイライドングで時系列データを分割
 

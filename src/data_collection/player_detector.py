@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from detection.yolo_tracker import YOLOPoseTracker, PersonTrack, KEYPOINT_NAMES
 from utils.video_loader import VideoLoader
+from preprocessing.pose_normalizer import PoseNormalizer
 
 
 @dataclass
@@ -251,8 +252,16 @@ class CenterPlayerDetector:
 class PoseDataExporter:
     """姿勢データをCSVに出力するクラス"""
 
-    def __init__(self):
+    def __init__(self, use_normalization: bool = True):
+        """
+        初期化
+
+        Args:
+            use_normalization: 正規化された座標を使用するか（デフォルト: True）
+        """
         self.pose_data = []
+        self.use_normalization = use_normalization
+        self.normalizer = PoseNormalizer() if use_normalization else None
 
     def add_frame_data(self, frame_num: int, timestamp: float, person: PersonTrack):
         """
@@ -263,24 +272,29 @@ class PoseDataExporter:
             timestamp: タイムスタンプ（秒）
             person: トラッキングされた人物
         """
-        # 各キーポイントのデータを追加
-        frame_data = {
-            'frame': frame_num,
-            'timestamp': timestamp,
-            'track_id': person.track_id,
-            'bbox_x1': person.bbox[0],
-            'bbox_y1': person.bbox[1],
-            'bbox_x2': person.bbox[2],
-            'bbox_y2': person.bbox[3],
-            'confidence': person.confidence
-        }
+        if self.use_normalization and self.normalizer:
+            # 正規化されたデータを使用
+            normalized = self.normalizer.normalize(person, frame_num, timestamp)
+            frame_data = normalized.to_dict()
+        else:
+            # 元の絶対座標を使用（従来の方式）
+            frame_data = {
+                'frame': frame_num,
+                'timestamp': timestamp,
+                'track_id': person.track_id,
+                'bbox_x1': person.bbox[0],
+                'bbox_y1': person.bbox[1],
+                'bbox_x2': person.bbox[2],
+                'bbox_y2': person.bbox[3],
+                'confidence': person.confidence
+            }
 
-        # キーポイントデータを追加
-        for i, keypoint_name in enumerate(KEYPOINT_NAMES):
-            kp = person.keypoints[i]
-            frame_data[f'{keypoint_name}_x'] = kp[0]
-            frame_data[f'{keypoint_name}_y'] = kp[1]
-            frame_data[f'{keypoint_name}_conf'] = kp[2]
+            # キーポイントデータを追加
+            for i, keypoint_name in enumerate(KEYPOINT_NAMES):
+                kp = person.keypoints[i]
+                frame_data[f'{keypoint_name}_x'] = kp[0]
+                frame_data[f'{keypoint_name}_y'] = kp[1]
+                frame_data[f'{keypoint_name}_conf'] = kp[2]
 
         self.pose_data.append(frame_data)
 
@@ -296,13 +310,18 @@ class PoseDataExporter:
             return
 
         # CSVのヘッダーを作成
-        fieldnames = ['frame', 'timestamp', 'track_id', 'bbox_x1', 'bbox_y1', 'bbox_x2', 'bbox_y2', 'confidence']
-        for keypoint_name in KEYPOINT_NAMES:
-            fieldnames.extend([
-                f'{keypoint_name}_x',
-                f'{keypoint_name}_y',
-                f'{keypoint_name}_conf'
-            ])
+        if self.use_normalization:
+            # 正規化データのフィールド名
+            fieldnames = PoseNormalizer.get_csv_fieldnames()
+        else:
+            # 従来のフィールド名
+            fieldnames = ['frame', 'timestamp', 'track_id', 'bbox_x1', 'bbox_y1', 'bbox_x2', 'bbox_y2', 'confidence']
+            for keypoint_name in KEYPOINT_NAMES:
+                fieldnames.extend([
+                    f'{keypoint_name}_x',
+                    f'{keypoint_name}_y',
+                    f'{keypoint_name}_conf'
+                ])
 
         # CSVに書き込み
         with open(output_path, 'w', newline='') as csvfile:
@@ -310,8 +329,13 @@ class PoseDataExporter:
             writer.writeheader()
             writer.writerows(self.pose_data)
 
-        print(f"姿勢データをCSVに保存しました: {output_path}")
+        data_type = "正規化された姿勢データ" if self.use_normalization else "姿勢データ"
+        print(f"{data_type}をCSVに保存しました: {output_path}")
         print(f"  総フレーム数: {len(self.pose_data)}")
+
+        if self.use_normalization:
+            valid_count = sum(1 for d in self.pose_data if d.get('is_valid', False))
+            print(f"  正規化成功: {valid_count}/{len(self.pose_data)} フレーム ({valid_count/len(self.pose_data)*100:.1f}%)")
 
     def get_statistics(self):
         """統計情報を取得"""
@@ -381,6 +405,11 @@ def main():
         choices=['cpu', 'cuda'],
         help='使用デバイス（デフォルト: cpu）'
     )
+    parser.add_argument(
+        '--no-normalize',
+        action='store_true',
+        help='正規化を無効にする（絶対座標を使用）'
+    )
 
     args = parser.parse_args()
 
@@ -423,8 +452,11 @@ def main():
     # 姿勢データエクスポータを初期化
     pose_exporter = None
     if args.csv:
-        pose_exporter = PoseDataExporter()
-        print(f"姿勢データCSV: {args.csv}\n")
+        use_normalization = not args.no_normalize
+        pose_exporter = PoseDataExporter(use_normalization=use_normalization)
+        norm_status = "有効" if use_normalization else "無効"
+        print(f"姿勢データCSV: {args.csv}")
+        print(f"  正規化: {norm_status}\n")
 
     # フレームカウント
     frame_count = 0
