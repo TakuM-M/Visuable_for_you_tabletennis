@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from utils.video_loader import VideoLoader
+from src.utils.video_loader import VideoLoader
 
 
 def main():
