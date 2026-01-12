@@ -68,12 +68,30 @@ def visualize_normalized_poses(csv_path: str, num_samples: int = 5, track_id: in
     sample_indices = np.linspace(0, len(df_valid) - 1, min(num_samples, len(df_valid)), dtype=int)
     samples = df_valid.iloc[sample_indices]
 
-    # プロット
-    fig, axes = plt.subplots(1, len(samples), figsize=(4 * len(samples), 4))
-    if len(samples) == 1:
-        axes = [axes]
+    # プロット（11フレーム以上の場合は2行で表示）
+    n_samples = len(samples)
+    if n_samples <= 10:
+        # 1行で表示
+        nrows, ncols = 1, n_samples
+    else:
+        # 2行で表示
+        nrows = 2
+        ncols = int(np.ceil(n_samples / 2))
 
-    for idx, (ax, (_, row)) in enumerate(zip(axes, samples.iterrows())):
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows))
+
+    # axesを1次元リストに変換
+    if n_samples == 1:
+        axes = [axes]
+    else:
+        # nrows=1の場合も nrows>1の場合も flatten() で1次元化
+        axes = np.array(axes).flatten()
+
+    # 使用しないサブプロットを非表示にする
+    for i in range(n_samples, nrows * ncols):
+        axes[i].axis('off')
+
+    for idx, (ax, (_, row)) in enumerate(zip(axes[:n_samples], samples.iterrows())):
         # キーポイントを抽出
         keypoints = []
         for kp_name in KEYPOINT_NAMES:
@@ -165,7 +183,7 @@ def main():
     parser.add_argument(
         '-n', '--num-samples',
         type=int,
-        default=5,
+        default=10,
         help='表示するサンプル数（デフォルト: 5）'
     )
     parser.add_argument(

@@ -41,6 +41,7 @@ python ./src/data_collection/player_detector.py \
     --conf 0.3 \
     --center-ratio 0.60
 
+
 # 可視化
 python src/preprocessing/visualize_normalized_pose.py \
     -i output/pose_normalized.csv \
