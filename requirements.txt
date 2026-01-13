@@ -12,6 +12,12 @@ scipy==1.13.0
 # 機械学習（オプション：精度向上用）
 scikit-learn==1.5.0
 
+# 深層学習（プレー検知モデル用）
+torch>=2.0.0
+torchvision>=0.15.0
+tensorboard>=2.13.0
+pandas>=2.0.0
+
 # データ可視化・デバッグ用
 matplotlib==3.9.0
 pillow==10.3.0
