@@ -9,9 +9,9 @@
 data/raw/sample_video_01_short_version.MOV
 ```bash
 python -m src.data.collectors.player_detector \
-    -i data/raw/sample_video_01_short.MOV \
-    -o output/sample_video_01/player.mp4 \
-    --csv output/sample_video_01/pose_data.csv \
+    -i data/raw/sample_video_01_03.MOV \
+    -o data/detect/player.mp4 \
+    --csv data/detect/pose_data.csv \
     --conf 0.3 \
     --center-ratio 0.80
 ```

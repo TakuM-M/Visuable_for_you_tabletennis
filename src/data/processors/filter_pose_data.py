@@ -92,7 +92,7 @@ python src/data/processors/filter_pose_data.py -i output/pose_data.csv --stats
 python src/data/processors/filter_pose_data.py -i output/pose_data.csv -o output/player3.csv --ids 3
 
 # track_id=3と5のデータを抽出(カンマ区切り)
-python src/data/processors/filter_pose_data.py -i output/pose_data.csv -o output/players.csv --ids 3,5
+python src/data/processors/filter_pose_data.py -i data/detect/sample_video_01_03/01_all_playser_pose_data.csv -o data/detect/sample_video_01_03/players.csv --ids 1,3
         """
     )
 

@@ -45,6 +45,7 @@ env/
 htmlcov/
 
 # Data files
+data/
 data/raw/*.mp4
 data/raw/*.avi
 data/raw/*.mov
@@ -53,6 +54,7 @@ data/processed/*.avi
 data/processed/*.mov
 
 # Output files
+
 output/*.mp4
 output/*.avi
 output/*.mov

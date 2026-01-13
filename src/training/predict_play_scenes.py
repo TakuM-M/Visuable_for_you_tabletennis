@@ -91,7 +91,7 @@ class PlayScenePredictor:
             )
 
         # 重み読み込み
-        checkpoint = torch.load(self.model_path, map_location=self.device)
+        checkpoint = torch.load(self.model_path, map_location=self.device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         model.to(self.device)
         model.eval()
@@ -302,7 +302,9 @@ class PlayScenePredictor:
         # 出力動画設定
         if output_video_path is None:
             output_video_path = Path('output') / f"{Path(video_path).stem}_predicted.mp4"
-        output_video_path.parent.mkdir(exist_ok=True)
+        else:
+            output_video_path = Path(output_video_path)
+        output_video_path.parent.mkdir(parents=True, exist_ok=True)
 
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
@@ -406,3 +408,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+# python src/training/predict_play_scenes.py \
+# --model output/training/test_run/20260113_235108/final_model.pth \
+# --csv data/detect/sample_video_01_short/02_players_pose_data.csv \
+# --video data/raw/sample_video_01_short.MOV \
+# --output-video output/predictions/sample_video_01_predicted.mp4 \
+# --threshold 0.5 \
+# --device cpu
