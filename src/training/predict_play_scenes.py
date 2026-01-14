@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.models.play_classifier import PlayClassifierLSTM, PlayClassifierCNNLSTM
-from src.data.dataset import PoseSequenceDataset
+from src.dataset.dataset import PoseSequenceDataset
 
 
 class PlayScenePredictor:
