@@ -408,11 +408,12 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-# python src/training/predict_play_scenes.py \
-# --model output/training/test_run/20260113_235108/final_model.pth \
-# --csv data/detect/sample_video_01_short/02_players_pose_data.csv \
-# --video data/raw/sample_video_01_short.MOV \
-# --output-video output/predictions/sample_video_01_predicted.mp4 \
-# --threshold 0.5 \
-# --device cpu
+"""
+python src/training/predict_play_scenes.py \
+--model output/training/sample_01_01_experiment/20260115_005004/final_model.pth \
+--csv data/detect/sample_video_01_02/filtered_pose_data.csv \
+--video data/raw/sample_video_01_02.MOV \
+--output-video output/predictions/sample_video_01_02_predicted.mp4 \
+--threshold 0.5 \
+--device cpu
+"""

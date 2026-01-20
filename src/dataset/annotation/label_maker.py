@@ -1,7 +1,17 @@
-"""
-ラベル作成ツール
+"""ラベル作成ツール，動画を再生しながらプレー中/プレー外のラベルを手動で付けるGUIツール
 
-動画を再生しながらプレー中/プレー外のラベルを手動で付けるGUIツール
+    Args:
+        video_path: 動画ファイルのパス
+        output_path: 出力CSVパス（デフォルトは動画名_labels.csv）
+        fps_divisor: 表示フレームレートの分割数（2なら半分速度）
+        
+    Returns:
+        動画に対するラベルをフレーム単位およびシーン単位で保存
+Usage:
+python -m src.dataset.annotation.label_maker \
+    data/detect/sample_video_01_02/detect_pose.mp4 \
+    -o data/detect/sample_video_01_02/play_labels.csv \
+    --fps-divisor 1
 """
 import cv2
 import pandas as pd
@@ -16,12 +26,12 @@ class LabelMaker:
     ラベル作成用のインタラクティブツール
 
     使い方:
-    - スペースキー: 再生/一時停止
+    - 'k': 再生/一時停止
     - 's': 現在のフレームをプレー開始として記録
     - 'e': 現在のフレームをプレー終了として記録
     - 'd': 最後に追加したラベルを削除
-    - '→': 次のフレーム（一時停止中）
-    - '←': 前のフレーム（一時停止中）
+    - 'l': 次のフレーム（一時停止中）
+    - 'j': 前のフレーム（一時停止中）
     - 'q': 保存して終了
     """
 
@@ -73,12 +83,12 @@ class LabelMaker:
         print(f"FPS: {self.fps}")
         print(f"既存ラベル: {len(self.play_scenes)} シーン")
         print(f"\n操作方法:")
-        print(f"  スペース: 再生/一時停止")
+        print(f"  k/スペース: 再生/一時停止")
         print(f"  's': プレー開始フレームを記録")
         print(f"  'e': プレー終了フレームを記録")
         print(f"  'd': 最後のシーンを削除")
-        print(f"  '→': 次のフレーム（一時停止中）")
-        print(f"  '←': 前のフレーム（一時停止中）")
+        print(f"  'l': 次のフレーム（一時停止中）")
+        print(f"  'j': 前のフレーム（一時停止中）")
         print(f"  'q': 保存して終了")
         print(f"{'='*60}\n")
 
@@ -238,7 +248,7 @@ class LabelMaker:
                 print("\n終了します...")
                 break
 
-            elif key == ord(' '):  # 再生/一時停止
+            elif key == ord(' ') or key == ord('k'):  # 再生/一時停止
                 self.is_playing = not self.is_playing
                 status = "再生" if self.is_playing else "一時停止"
                 print(f"{status}しました（フレーム: {self.current_frame}）")
@@ -257,23 +267,23 @@ class LabelMaker:
             elif key == ord('d'):  # 削除
                 self._delete_last_scene()
 
-            elif key == 83:  # 右矢印
+            elif key == ord('l'):  # 次のフレーム
                 if not self.is_playing:
                     self.current_frame = min(self.current_frame + 1, self.total_frames - 1)
 
-            elif key == 81:  # 左矢印
+            elif key == ord('j'):  # 前のフレーム
                 if not self.is_playing:
                     self.current_frame = max(self.current_frame - 1, 0)
 
             elif key == ord('h'):  # ヘルプ
                 print(f"\n{'='*60}")
                 print("操作方法:")
-                print("  スペース: 再生/一時停止")
+                print("  k/スペース: 再生/一時停止")
                 print("  's': プレー開始フレームを記録")
                 print("  'e': プレー終了フレームを記録")
                 print("  'd': 最後のシーンを削除")
-                print("  '→': 次のフレーム（一時停止中）")
-                print("  '←': 前のフレーム（一時停止中）")
+                print("  'l': 次のフレーム（一時停止中）")
+                print("  'j': 前のフレーム（一時停止中）")
                 print("  'q': 保存して終了")
                 print(f"{'='*60}\n")
 

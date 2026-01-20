@@ -54,7 +54,7 @@ data/processed/*.avi
 data/processed/*.mov
 
 # Output files
-
+output/
 output/*.mp4
 output/*.avi
 output/*.mov

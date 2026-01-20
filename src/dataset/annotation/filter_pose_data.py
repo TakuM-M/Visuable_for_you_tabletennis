@@ -1,38 +1,35 @@
-"""複数のtrack_idが含まれるpose_data.csvから特定のtrack_idのデータのみを抽出するスクリプト
+"""複数のtrack_idが含まれるpose_data.csvから特定のtrack_idのデータのみを抽出し、
+プレイヤーA/Bに集約するスクリプト
 
     Args:
         input_csv: 入力CSVファイルパス(既に検知し正規化していることとする．)
         output_csv: 出力CSVファイルパス
-        track_ids: 抽出したいtrack_idのリスト
-    
+        player_a_ids: プレイヤーAのtrack_idリスト (ID 1に集約)
+        player_b_ids: プレイヤーBのtrack_idリスト (ID 2に集約)
+
     Returns:
-        抽出されたtrack_idのデータを含むCSVファイル
+        抽出・集約されたデータを含むCSVファイル
+
+Usage:
+python -m src.dataset.annotation.filter_pose_data \
+    -i data/detect/sample_video_01_02/all_players_pose_data.csv \
+    -o data/detect/sample_video_01_02/merged_pose_data.csv \
+    --player-a 1,18,21,27,50,56,64,91,112,124,137 \
+    --player-b 6,33,43,97,111,115,121,130,143,148
+
 """
 import pandas as pd
 import argparse
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.dataset.annotation.processors.filter_by_track_id import filter_by_track_id, show_statistics
+from src.dataset.annotation.processors import merge_player_ids
 
 def main():
     """メイン処理"""
     parser = argparse.ArgumentParser(
-        description='pose_data.csvから特定のtrack_idのデータを抽出',
+        description='pose_data.csvから特定のtrack_idのデータを抽出し、プレイヤーA/Bに集約',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用例:
---------
-# 統計情報を表示
-python src/data/processors/filter_pose_data.py -i output/pose_data.csv --stats
-
-# track_id=3のデータのみを抽出
-python src/data/processors/filter_pose_data.py -i output/pose_data.csv -o output/player3.csv --ids 3
-
-# track_id=3と5のデータを抽出(カンマ区切り)
-python src/data/processors/filter_pose_data.py -i data/detect/sample_video_01_03/01_all_playser_pose_data.csv -o data/detect/sample_video_01_03/players.csv --ids 1,3
-        """
     )
 
     parser.add_argument(
@@ -44,18 +41,20 @@ python src/data/processors/filter_pose_data.py -i data/detect/sample_video_01_03
     parser.add_argument(
         '-o', '--output',
         type=str,
-        help='出力CSVファイルパス（--idsと一緒に指定）'
+        required=True,
+        help='出力CSVファイルパス'
     )
     parser.add_argument(
-        '--ids',
+        '--player-a',
         type=str,
-        nargs='+',
-        help='抽出するtrack_idのリスト（スペース区切りまたはカンマ区切り）例: 3 5 または "3,5"'
+        required=True,
+        help='プレイヤーAのtrack_idリスト（カンマ区切り）例: "1,18,21"'
     )
     parser.add_argument(
-        '--stats',
-        action='store_true',
-        help='統計情報のみを表示（フィルタリングは行わない）'
+        '--player-b',
+        type=str,
+        required=True,
+        help='プレイヤーBのtrack_idリスト（カンマ区切り）例: "6,33,43"'
     )
 
     args = parser.parse_args()
@@ -66,34 +65,19 @@ python src/data/processors/filter_pose_data.py -i data/detect/sample_video_01_03
         print(f"エラー: 入力ファイルが見つかりません: {input_path}")
         sys.exit(1)
 
-    # 統計情報のみを表示
-    if args.stats:
-        show_statistics(args.input)
-        return
-
-    # フィルタリング処理
-    if not args.ids or not args.output:
-        print("エラー: --ids と -o の両方を指定してください")
-        print("または --stats で統計情報を表示できます")
-        parser.print_help()
-        sys.exit(1)
-
     # track_idリストをパース
-    track_ids = []
-    for id_str in args.ids:
-        if ',' in id_str:
-            # カンマ区切りの場合
-            track_ids.extend([int(x.strip()) for x in id_str.split(',')])
-        else:
-            # スペース区切りの場合
-            track_ids.append(int(id_str.strip()))
+    player_a_ids = [int(x.strip()) for x in args.player_a.split(',') if x.strip()]
+    player_b_ids = [int(x.strip()) for x in args.player_b.split(',') if x.strip()]
+
+    print(f"プレイヤーA IDリスト: {player_a_ids}")
+    print(f"プレイヤーB IDリスト: {player_b_ids}")
 
     # 出力ディレクトリを作成
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # フィルタリング実行
-    filter_by_track_id(args.input, args.output, track_ids)
+    # ID集約実行
+    merge_player_ids(args.input, args.output, player_a_ids, player_b_ids)
 
 
 if __name__ == "__main__":

@@ -2,13 +2,28 @@
 
     Args:
         映像データ(mp4)
-        
+
     Attention:
         検出対応が見切れる可能性について考慮しない
         プレー選手のみのIDを手動で指定する必要がある
 
     Returns:
         プレイヤー骨格データ(検出ID,骨格座標群,信頼度)
+
+Usage:
+# 入力ファイルのみ指定すると、data/detect/<ファイル名>/ に自動的に出力されます
+python src/dataset/annotation/player_detector.py \
+        -i data/raw/sample_video_01_01.MOV \
+        --conf 0.5 \
+        --center-ratio 0.9
+
+# カスタム出力先を指定することも可能
+python src/dataset/annotation/player_detector.py \
+        -i data/raw/sample_video_01_02.MOV \
+        -o data/detect/sample_video_01_02/detect_pose.mp4 \
+        --csv data/detect/sample_video_01_02/all_players_pose_data.csv \
+        --conf 0.5 \
+        --center-ratio 0.9
 """
 import cv2
 import numpy as np
@@ -18,7 +33,7 @@ from typing import Optional
 from dataclasses import dataclass
 import csv
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from src.utils.video_loader import VideoLoader
 from src.dataset.annotation.collectors.center_playser_detector import CenterPlayerDetector
 from src.dataset.annotation.exporters.pose_data_ecporter import PoseDataExporter
@@ -38,16 +53,16 @@ def main():
         help='入力動画ファイルパス'
     )
     parser.add_argument(
-        '-o', '--output',       
+        '-o', '--output',
         type=str,
         default=None,
-        help='出力ビデオファイルパス（指定しない場合は保存しない）'
+        help='出力ビデオファイルパス（指定しない場合は自動生成: data/detect/<ファイル名>/detect_pose.mp4）'
     )
     parser.add_argument(
         '--csv',
         type=str,
         default=None,
-        help='姿勢データのCSV出力パス（指定しない場合は保存しない）'
+        help='姿勢データのCSV出力パス（指定しない場合は自動生成: data/detect/<ファイル名>/all_players_pose_data.csv）'
     )
     parser.add_argument(
         '--conf',
@@ -69,35 +84,50 @@ def main():
         help='使用デバイス（デフォルト: cpu）'
     )
     parser.add_argument(
-        '--no-normalize',
+        '--normalize',
         action='store_true',
+        default=True,
         help='正規化を無効にする（絶対座標を使用）'
     )
 
     args = parser.parse_args()
 
-    # 動画ファイルを開く
-    print(f"動画ファイルを開いています: {args.input}...")
+    # 入力ファイルパスから出力先を自動生成
+    input_path = Path(args.input)
+    video_name = input_path.stem  # 拡張子なしのファイル名
+    output_dir = Path('data') / 'detect' / video_name
 
-    # VideoLoaderを使用
+    # 出力パスが指定されていない場合は自動生成
+    if args.output is None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        args.output = str(output_dir / 'detect_pose.mp4')
+    else:
+        # 出力パスが指定されている場合もディレクトリを作成
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+
+    if args.csv is None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        args.csv = str(output_dir / 'all_players_pose_data.csv')
+    else:
+        # CSVパスが指定されている場合もディレクトリを作成
+        Path(args.csv).parent.mkdir(parents=True, exist_ok=True)
+
+    print(f"動画ファイルを開いています: {args.input}...")
     video_loader = VideoLoader(args.input)
     if not video_loader.open():
         print("エラー: 入力ソースを開けませんでした")
         return
 
-    # フレーム情報を取得
     video_info = video_loader.get_info()
     width = video_info['width']
     height = video_info['height']
     fps = video_info['fps']
-
     print(f"入力情報:")
     print(f"  解像度: {width}x{height}")
     print(f"  FPS: {fps:.2f}")
     print(f"  フレーム数: {video_info['frame_count']}")
     print(f"  長さ: {video_info['duration']:.2f}秒\n")
 
-    # 検出器を初期化
     detector = CenterPlayerDetector(
         conf_threshold=args.conf,
         center_ratio=args.center_ratio,
@@ -105,29 +135,24 @@ def main():
     )
     detector.set_frame_size(width, height)
 
-    # 出力ビデオの準備
     video_writer = None
     if args.output:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(args.output, fourcc, fps, (width, height))
         print(f"出力ビデオ: {args.output}\n")
-
-    # 姿勢データエクスポータを初期化
     pose_exporter = None
+    
     if args.csv:
-        use_normalization = not args.no_normalize
-        pose_exporter = PoseDataExporter(use_normalization=use_normalization)
-        norm_status = "有効" if use_normalization else "無効"
+        pose_exporter = PoseDataExporter(use_normalization=args.normalize)
+        norm_status = "有効" if args.normalize else "無効"
         print(f"姿勢データCSV: {args.csv}")
         print(f"  正規化: {norm_status}\n")
 
-    # フレームカウント
     frame_count = 0
-
     print("処理開始...")
     print("  [q] キー: 終了")
     print("  [r] キー: トラッキングをリセット\n")
-
+    
     try:
         while True:
             ret, frame = video_loader.read_frame()
