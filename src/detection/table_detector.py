@@ -24,26 +24,41 @@ class TableDetector:
 
     YOLOモデルを使用して動画フレームから卓球台のバウンディングボックスを検出します。
     検出された複数の候補の中から、画面中央に最も近いものを卓球台として選択します。
+
+    デフォルトでは、訓練済みの卓球台検出専用モデルを使用します。
+    このモデルは以下のクラスを検出できます：
+    - Ping Pong Table (卓球台)
+    - Paddle (ラケット)
+    - Ping Pong Ball (ボール)
     """
+
+    # クラス名の定数
+    TABLE_CLASS_NAME = "Ping Pong Table"
 
     def __init__(
         self,
-        yolo_model_path: str = "yolo11n.pt",
+        yolo_model_path: str = "models/proto_type02_table_detection_models/best.pt",
     ):
         """
         卓球台検出器の初期化
 
         Args:
-            yolo_model_path: YOLOモデルのパス（デフォルト: yolo11n.pt）
+            yolo_model_path: YOLOモデルのパス
+                           （デフォルト: models/proto_type02_table_detection_models/best.pt）
         """
         # YOLOモデルの初期化
         self.yolo_model = None
+        self.class_names = {}
+
         if yolo_model_path is None:
             print("警告: YOLOモデルパスが指定されていません")
         else:
             try:
                 self.yolo_model = YOLO(yolo_model_path)
+                # クラス名を取得
+                self.class_names = self.yolo_model.names
                 print(f"YOLOモデルをロードしました: {yolo_model_path}")
+                print(f"検出可能なクラス: {list(self.class_names.values())}")
             except Exception as e:
                 print(f"警告: YOLOモデルのロードに失敗しました: {e}")
 
@@ -88,10 +103,9 @@ class TableDetector:
         results = self.yolo_model(frame, verbose=False)
 
         if len(results) == 0 or len(results[0].boxes) == 0:
-            print("警告: 卓球台が検出されませんでした")
             return None
 
-        # 全検出結果から画面中央に最も近いものを選択
+        # 全検出結果から"Ping Pong Table"クラスのみをフィルタリング
         boxes = results[0].boxes
         frame_height, frame_width = frame.shape[:2]
         frame_center = (frame_width / 2, frame_height / 2)
@@ -100,6 +114,14 @@ class TableDetector:
         min_distance = float('inf')
 
         for box in boxes:
+            # クラスIDとクラス名を取得
+            class_id = int(box.cls[0].cpu().numpy())
+            class_name = self.class_names.get(class_id, "Unknown")
+
+            # "Ping Pong Table"クラスのみを処理
+            if class_name != self.TABLE_CLASS_NAME:
+                continue
+
             # バウンディングボックス座標を取得
             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
             confidence = float(box.conf[0].cpu().numpy())

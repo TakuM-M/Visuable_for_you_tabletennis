@@ -177,8 +177,8 @@ def main():
     parser.add_argument(
         '--model',
         type=str,
-        default='yolo11n.pt',
-        help='YOLOモデルのパス（デフォルト: yolo11n.pt）'
+        default='models/proto_type02_table_detection_models/best.pt',
+        help='YOLOモデルのパス（デフォルト: models/proto_type02_table_detection_models/best.pt）'
     )
 
     args = parser.parse_args()
