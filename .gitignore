@@ -38,6 +38,11 @@ env/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+src/scripts/
+
+# config_api
+config/
+config/api.config
 
 # pytest
 .pytest_cache/
