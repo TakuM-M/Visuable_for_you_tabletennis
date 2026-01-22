@@ -167,10 +167,10 @@ class PlayerCandidate:
 
 ## その他
 - ソースコード: src/detection/player_detector.py
-- データクラス: src/detection/models.py (PlayerCandidate)
+- データクラス: src/detection/data_classes.py (PlayerCandidate)
 - 依存:
   - YOLOv11-pose (ultralytics)
   - src/analysis/player_table_analyzer.py
-  - src/detection/models.py (TableInfo)
+  - src/detection/data_classes.py (TableInfo)
 - proto_type_01のLSTM判定モデル (src/models/play_classifier.py) と連携して使用することを想定
 - 1fpsでのサンプリングを前提とした設計（dense処理は別ステップ）

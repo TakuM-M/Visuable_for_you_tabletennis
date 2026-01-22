@@ -32,7 +32,7 @@ class TableInfo:
 
     @property
     def center(self) -> Tuple[float, float]:
-        """卓球台の中心座標"""
+        """バウンディングボックスの中心座標"""
         return (
             (self.bbox[0] + self.bbox[2]) / 2,
             (self.bbox[1] + self.bbox[3]) / 2
@@ -40,12 +40,12 @@ class TableInfo:
 
     @property
     def width(self) -> float:
-        """卓球台の幅"""
+        """バウンディングボックスの幅"""
         return self.bbox[2] - self.bbox[0]
 
     @property
     def height(self) -> float:
-        """卓球台の高さ"""
+        """バウンディングボックスの高さ"""
         return self.bbox[3] - self.bbox[1]
 
     @property

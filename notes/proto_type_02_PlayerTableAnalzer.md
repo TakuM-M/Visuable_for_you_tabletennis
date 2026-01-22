@@ -89,7 +89,7 @@ NEAR_TABLE_THRESHOLD = 0.5  # 正規化距離0.5以下で「卓球台に近い�
 
 ## その他
 - ソースコード: src/analysis/player_table_analyzer.py
-- データクラス: src/analysis/models.py (PlayerTableRelation)
-- 依存: src/detection/models.py (TableInfo, CameraAngle)
+- データクラス: src/analysis/data_classes.py (PlayerTableRelation)
+- 依存: src/detection/data_classes.py (TableInfo, CameraAngle)
 - このコンポーネントは状態を持たない（純粋関数的）
 - 複数のプレイヤーに対して繰り返し呼び出すことを想定

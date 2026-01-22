@@ -80,6 +80,6 @@ CACHE_VALID_FRAMES = 100  # 0.1fps × 100 = 10秒
 
 ## その他
 - ソースコード: src/detection/table_detector.py
-- データクラス: src/detection/models.py (TableInfo, CameraAngle)
+- データクラス: src/detection/data_classes.py (TableInfo, CameraAngle)
 - 依存: YOLOv11 (ultralytics)
 - カメラ固定を前提とした設計（将来的にカメラ移動に対応予定）
