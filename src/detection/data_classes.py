@@ -125,3 +125,86 @@ class PlayerCandidate:
     def near_table_ratio(self) -> float:
         """卓球台付近にいた時間の比率"""
         return self.near_table_count / self.total_frames if self.total_frames > 0 else 0.0
+    
+# COCO 17キーポイント定義
+KEYPOINT_NAMES = [
+    "nose",           # 0
+    "left_eye",       # 1
+    "right_eye",      # 2
+    "left_ear",       # 3
+    "right_ear",      # 4
+    "left_shoulder",  # 5
+    "right_shoulder", # 6
+    "left_elbow",     # 7
+    "right_elbow",    # 8
+    "left_wrist",     # 9
+    "right_wrist",    # 10
+    "left_hip",       # 11
+    "right_hip",      # 12
+    "left_knee",      # 13
+    "right_knee",     # 14
+    "left_ankle",     # 15
+    "right_ankle"     # 16
+]
+
+
+@dataclass
+class PersonTrack:
+    """トラッキングされた人物の情報"""
+    track_id: int  # トラッキングID
+    bbox: Tuple[int, int, int, int]  # バウンディングボックス (x1, y1, x2, y2)
+    keypoints: np.ndarray  # キーポイント座標 (17, 3) [x, y, confidence]
+    confidence: float  # 検出信頼度
+
+    def get_center(self) -> Tuple[float, float]:
+        """バウンディングボックスの中心座標を取得"""
+        x1, y1, x2, y2 = self.bbox
+        return ((x1 + x2) / 2, (y1 + y2) / 2)
+
+    def get_keypoint(self, name: str) -> Optional[Tuple[float, float, float]]:
+        """
+        キーポイント名から座標を取得
+
+        Args:
+            name: キーポイント名（例: "nose", "left_shoulder"）
+
+        Returns:
+            (x, y, confidence) または None
+        """
+        if name not in KEYPOINT_NAMES:
+            return None
+
+        idx = KEYPOINT_NAMES.index(name)
+        kp = self.keypoints[idx]
+        return (float(kp[0]), float(kp[1]), float(kp[2]))
+
+    def get_body_center_y(self) -> float:
+        """
+        体の中心Y座標を取得（肩と腰の中間）
+        選手分類に使用
+
+        Returns:
+            体の中心Y座標
+        """
+        left_shoulder = self.get_keypoint("left_shoulder")
+        right_shoulder = self.get_keypoint("right_shoulder")
+        left_hip = self.get_keypoint("left_hip")
+        right_hip = self.get_keypoint("right_hip")
+
+        # 信頼度が高いキーポイントを優先的に使用
+        y_coords = []
+
+        if left_shoulder and left_shoulder[2] > 0.5:
+            y_coords.append(left_shoulder[1])
+        if right_shoulder and right_shoulder[2] > 0.5:
+            y_coords.append(right_shoulder[1])
+        if left_hip and left_hip[2] > 0.5:
+            y_coords.append(left_hip[1])
+        if right_hip and right_hip[2] > 0.5:
+            y_coords.append(right_hip[1])
+
+        if y_coords:
+            return float(np.mean(y_coords))
+
+        # フォールバック: バウンディングボックスの中心
+        return float((self.bbox[1] + self.bbox[3]) / 2)

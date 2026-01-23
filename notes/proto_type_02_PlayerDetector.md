@@ -14,12 +14,10 @@ YOLOv11-poseを用いて動画内の人物を検出・追跡し、PlayerTableAna
 
 ## 入力
 - フレーム画像（numpy.ndarray）
-- table_info: TableInfo（卓球台情報）
 - frame_idx: フレーム番号
 
 ## 出力
 - Dict[int, PlayerTableRelation]: tracking IDをキーとしたプレイヤーと卓球台の位置関係辞書
-- finalize_players()の出力: List[int] - 確定したプレイヤーのtracking IDリスト（シングルス: 2人、ダブルス: 4人）
 
 ## 処理フロー
 
@@ -108,10 +106,8 @@ score = (
 
 ## テストケース
 - 正常系: 2人のプレイヤーが含まれる動画で、正しく2人のtracking IDが返されることを確認する
-- 正常系: 手前側と奥側にそれぞれ1人ずつプレイヤーが選定されることを確認する
 - 正常系: 審判などの静止人物が除外されることを確認する
 - 正常系: tracking IDが動画全体を通じて一貫していることを確認する
-- 正常系: 奥側プレイヤーが一時的に手前側プレイヤーに隠れても、tracking IDが維持されることを確認する
 - 異常系: プレイヤーが1人しか検出できない場合、検出できた人数分のIDが返されることを確認する
 - 境界値: track_bufferの期限切れ後、同じ人物が再検出された場合に新しいtracking IDが付与されることを確認する
 
@@ -131,7 +127,6 @@ MIN_MOVEMENT_THRESHOLD = 0.01
 # スコアリング重み
 WEIGHT_TRACKING_DURATION = 0.4
 WEIGHT_TOTAL_MOVEMENT = 0.3
-WEIGHT_NEAR_TABLE_RATIO = 0.3
 
 # プレイヤー数
 NUM_PLAYERS_SINGLES = 2
