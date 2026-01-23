@@ -5,6 +5,7 @@ detection パッケージのデータクラス定義
 - CameraAngle: カメラアングルの種類を表すEnum
 - TableInfo: 卓球台の検出情報
 - PlayerCandidate: プレイヤー候補の情報
+- PersonTrack: トラッキングされた人物の情報
 """
 
 from dataclasses import dataclass

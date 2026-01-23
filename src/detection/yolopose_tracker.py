@@ -15,7 +15,7 @@ from src.detection.data_classes import PersonTrack
 from ultralytics import YOLO
 
 
-class YOLOPose_PlayerDetector:
+class YOLOPose_Tracker:
     """YOLOv11-Pose トラッキングクラス"""
 
     def __init__(
