@@ -24,7 +24,7 @@ class YOLOPose_Tracker:
         conf_threshold: float = 0.5,
         iou_threshold: float = 0.7,
         device: str = "cpu",
-        table_distance_threshold: float = 0.1
+        table_distance_threshold: float = 0.2
     ):
         """
         YOLOトラッカーの初期化
@@ -189,26 +189,15 @@ class YOLOPose_Tracker:
         """
         # 卓球台のバウンディングボックス
         table_x1, table_y1, table_x2, table_y2 = table_info.bbox
-        table_width = table_x2 - table_x1
-        table_height = table_y2 - table_y1
 
-        # 人物の足元位置を取得（バウンディングボックスの下端中心）
-        person_foot_x = (person.bbox[0] + person.bbox[2]) / 2
-        person_foot_y = person.bbox[3]  # 下端
+        # 人物のバウンディングボックスの中心点を使用
+        person_center_x = (person.bbox[0] + person.bbox[2]) / 2
+        person_center_y = (person.bbox[1] + person.bbox[3]) / 2
 
-        # 体の中心Y座標を取得（腰の位置）
-        person_body_y = person.get_body_center_y()
-
-        # 足元からの距離
-        dx_foot = max(table_x1 - person_foot_x, 0, person_foot_x - table_x2)
-        dy_foot = max(table_y1 - person_foot_y, 0, person_foot_y - table_y2)
-        distance_foot = np.sqrt(dx_foot**2 + dy_foot**2)
-
-        # 体の中心からの距離（Y座標のみ）
-        dy_body = max(table_y1 - person_body_y, 0, person_body_y - table_y2)
-
-        # 両方を考慮した距離（足元を重視）
-        distance = 0.7 * distance_foot + 0.3 * dy_body
+        # 卓球台のバウンディングボックスまでの距離を計算
+        dx = max(table_x1 - person_center_x, 0, person_center_x - table_x2)
+        dy = max(table_y1 - person_center_y, 0, person_center_y - table_y2)
+        distance = np.sqrt(dx**2 + dy**2)
 
         # 卓球台の対角線長で正規化
         table_diagonal = np.sqrt(

@@ -31,7 +31,8 @@ class PlayerClassifier:
         near_table_threshold: float = NEAR_TABLE_THRESHOLD,
         min_tracking_frames: int = 10,
         max_players: int = 2,
-        max_inactive_frames: int = 30
+        max_inactive_frames: int = 30,
+        min_player_score: float = 0.3
     ):
         """
         PlayerClassifierの初期化
@@ -41,11 +42,14 @@ class PlayerClassifier:
             min_tracking_frames: プレイヤー候補とみなす最小フレーム数
             max_players: 検出する最大プレイヤー数
             max_inactive_frames: この期間見られていない候補を削除するフレーム数
+            min_player_score: プレイヤーとして判定する最小スコア閾値（0.0-1.0）
+                            この値以下のスコアの候補はプレイヤーから除外される
         """
         self.near_table_threshold = near_table_threshold
         self.min_tracking_frames = min_tracking_frames
         self.max_players = max_players
         self.max_inactive_frames = max_inactive_frames
+        self.min_player_score = min_player_score
 
         # プレイヤー候補の情報を蓄積
         self.candidates: Dict[int, PlayerCandidate] = {}
@@ -166,9 +170,12 @@ class PlayerClassifier:
         # スコア順にソート（降順）
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
 
-        # 上位max_players人を選定
+        # スコア閾値でフィルタリング & 上位max_players人を選定
+        # 重要: スコアがmin_player_score以下の候補は除外
+        # （例: プレイヤー + 審判の場合、審判は低スコアのため除外される）
         selected_ids = [
-            track_id for track_id, _ in scored_candidates[:self.max_players]
+            track_id for track_id, score in scored_candidates[:self.max_players]
+            if score >= self.min_player_score
         ]
 
         return selected_ids
@@ -183,22 +190,36 @@ class PlayerClassifier:
         Returns:
             スコア（高いほど優先）
         """
+        # 平均運動量を計算（累積値ではなく1フレームあたりの平均）
+        # これにより、長時間映っているだけでスコアが上がることを防ぐ
+        avg_movements = []
+        for c in self.candidates.values():
+            if c.total_frames > 0:
+                avg_movements.append(c.total_movement / c.total_frames)
+            else:
+                avg_movements.append(0.0)
+
+        max_avg_movement = max(avg_movements) if avg_movements else 1.0
+
         # 正規化用の基準値を計算
         max_frames = max(c.total_frames for c in self.candidates.values())
-        max_movement = max(c.total_movement for c in self.candidates.values())
 
         # 各要素を0-1に正規化してスコア計算
         # 重み調整: 卓球台付近の重みを大幅に上げる
         # - tracking継続時間: 10% (長く映っていることは重要だが決定的ではない)
-        # - 総運動量: 30% (動きが激しいことは重要)
+        # - 平均運動量: 30% (動きが激しいことは重要)
         # - 卓球台付近時間: 60% (最も重要: プレイヤーは卓球台の近くにいる)
         tracking_score = candidate.total_frames / max_frames if max_frames > 0 else 0
-        movement_score = candidate.total_movement / max_movement if max_movement > 0 else 0
+
+        # 平均運動量でスコア計算
+        candidate_avg_movement = candidate.total_movement / candidate.total_frames if candidate.total_frames > 0 else 0
+        movement_score = candidate_avg_movement / max_avg_movement if max_avg_movement > 0 else 0
+
         near_table_score = candidate.near_table_ratio
 
         score = (
-            0.1 * tracking_score +
-            0.9 * movement_score
+            # 0.1 * tracking_score +
+            1.0 * movement_score
             # 0.6 * near_table_score
         )
 
@@ -295,25 +316,67 @@ class PlayerClassifier:
         """
         キーポイント間の移動量を計算
 
+        下半身の動きを重視した運動量計算を行います。
+        - 下半身（腰、膝、足首）: 75%の重み
+        - 上半身（顔、肩、肘、手首）: 25%の重み
+
+        これにより、審判のように上半身だけ動く人物と、
+        プレイヤーのように全身を使って動く人物を区別できます。
+
         Args:
             prev_keypoints: 前フレームのキーポイント (17, 3)
             curr_keypoints: 現フレームのキーポイント (17, 3)
 
         Returns:
-            移動量（ピクセル単位の平均移動距離）
+            移動量（ピクセル単位の重み付き平均移動距離）
         """
-        # 信頼度が高いキーポイントのみを使用
-        valid_mask = (prev_keypoints[:, 2] > 0.5) & (curr_keypoints[:, 2] > 0.5)
+        # YOLOv8-Pose キーポイント定義:
+        # 0-10: 顔・肩・肘・手首（上半身）
+        # 11-12: 腰
+        # 13-14: 膝
+        # 15-16: 足首
 
-        if not np.any(valid_mask):
+        # 下半身キーポイントのインデックス（腰、膝、足首）
+        lower_body_indices = [11, 12, 13, 14, 15, 16]
+        # 上半身キーポイントのインデックス（顔、肩、肘、手首）
+        upper_body_indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+        # 下半身の移動量を計算
+        lower_body_movement = 0.0
+        lower_body_valid_count = 0
+
+        for idx in lower_body_indices:
+            if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
+                distance = np.linalg.norm(
+                    curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
+                )
+                lower_body_movement += distance
+                lower_body_valid_count += 1
+
+        # 上半身の移動量を計算
+        upper_body_movement = 0.0
+        upper_body_valid_count = 0
+
+        for idx in upper_body_indices:
+            if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
+                distance = np.linalg.norm(
+                    curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
+                )
+                upper_body_movement += distance
+                upper_body_valid_count += 1
+
+        # 有効なキーポイントがない場合は0を返す
+        if lower_body_valid_count == 0 and upper_body_valid_count == 0:
             return 0.0
 
-        # 有効なキーポイントの移動距離を計算
-        prev_points = prev_keypoints[valid_mask, :2]
-        curr_points = curr_keypoints[valid_mask, :2]
+        # 各部位の平均移動量を計算
+        lower_avg = (lower_body_movement / lower_body_valid_count
+                     if lower_body_valid_count > 0 else 0.0)
+        upper_avg = (upper_body_movement / upper_body_valid_count
+                     if upper_body_valid_count > 0 else 0.0)
 
-        distances = np.linalg.norm(curr_points - prev_points, axis=1)
-        movement = float(np.mean(distances))
+        # 重み付き平均: 下半身75%, 上半身25%
+        movement = 0.75 * lower_avg + 0.25 * upper_avg
 
         return movement
 

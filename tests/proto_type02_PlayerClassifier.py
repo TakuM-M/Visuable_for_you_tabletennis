@@ -24,7 +24,7 @@ python tests/proto_type02_PlayerClassifier.py -i video.mp4 --fps 1
   - プレイヤー: 緑色
   - その他の人物: 赤色
   - バウンディングボックス、骨格データ、トラッキングID
-  - プレイヤースコア情報
+  - プレイヤースqア情報
 """
 import cv2
 import numpy as np
@@ -323,7 +323,13 @@ def main():
         '--max-players',
         type=int,
         default=2,
-        help='最大プレイヤー数（デフォルト: 5）'
+        help='最大プレイヤー数（デフォルト: 2）'
+    )
+    parser.add_argument(
+        '--min-player-score',
+        type=float,
+        default=0.3,
+        help='プレイヤー判定の最小スコア閾値（デフォルト: 0.3、範囲: 0.0-1.0）'
     )
 
     args = parser.parse_args()
@@ -354,12 +360,19 @@ def main():
     print("コンポーネントを初期化しています...")
     table_detector = TableDetector(yolo_model_path=args.table_model)
     pose_tracker = YOLOPose_Tracker(model_path=args.pose_model)
-    player_classifier = PlayerClassifier(max_players=args.max_players)
+    player_classifier = PlayerClassifier(
+        max_players=args.max_players,
+        min_player_score=args.min_player_score
+    )
     visualizer = PlayerClassifierVisualizer(
         table_detector,
         pose_tracker,
         player_classifier
     )
+
+    print(f"プレイヤー分類設定:")
+    print(f"  最大プレイヤー数: {args.max_players}")
+    print(f"  最小スコア閾値: {args.min_player_score:.2f}\n")
 
     # 出力ビデオの準備
     video_writer = None
