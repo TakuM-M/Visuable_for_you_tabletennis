@@ -476,10 +476,12 @@ def main():
             elif table_info is None and processed_count == 1:
                 print("警告: 卓球台が検出できていないため、プレイヤー分類は実行されません")
 
-            # プレイヤーを分類（一定フレームごと）
-            if processed_count % 10 == 0 or processed_count == 1:
-                if table_info:
-                    player_ids = set(player_classifier.classify_players())
+            # プレイヤーを分類（毎フレーム更新）
+            # 重要: 古いIDをプレイヤーとして保持し続けないため、毎回更新する
+            if table_info:
+                player_ids = set(player_classifier.classify_players())
+                # デバッグ出力は一定フレームごと
+                if processed_count % 10 == 0 or processed_count == 1:
                     if player_ids:
                         print(f"Frame {frame_count}: プレイヤーID = {sorted(player_ids)}")
 

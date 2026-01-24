@@ -44,7 +44,7 @@ class YOLOPose_Tracker:
 
         # 卓球台領域に一度でも入ったtrack_idを記憶
         self.validated_track_ids: Set[int] = set()
-
+        
         # YOLOモデルをロード
         print(f"YOLOモデルをロード中: {model_path}")
         self.model = YOLO(model_path)

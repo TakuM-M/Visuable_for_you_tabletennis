@@ -30,7 +30,8 @@ class PlayerClassifier:
         self,
         near_table_threshold: float = NEAR_TABLE_THRESHOLD,
         min_tracking_frames: int = 10,
-        max_players: int = 2
+        max_players: int = 2,
+        max_inactive_frames: int = 30
     ):
         """
         PlayerClassifierの初期化
@@ -39,13 +40,18 @@ class PlayerClassifier:
             near_table_threshold: 卓球台との正規化距離の閾値
             min_tracking_frames: プレイヤー候補とみなす最小フレーム数
             max_players: 検出する最大プレイヤー数
+            max_inactive_frames: この期間見られていない候補を削除するフレーム数
         """
         self.near_table_threshold = near_table_threshold
         self.min_tracking_frames = min_tracking_frames
         self.max_players = max_players
+        self.max_inactive_frames = max_inactive_frames
 
         # プレイヤー候補の情報を蓄積
         self.candidates: Dict[int, PlayerCandidate] = {}
+
+        # 現在のフレーム番号を記録
+        self.current_frame_idx: int = 0
 
     def update(
         self,
@@ -61,6 +67,9 @@ class PlayerClassifier:
             table_info: 卓球台情報
             frame_idx: 現在のフレーム番号
         """
+        # 現在のフレーム番号を更新
+        self.current_frame_idx = frame_idx
+
         current_track_ids = set()
 
         for person in persons:
@@ -99,7 +108,27 @@ class PlayerClassifier:
                 candidate.near_table_count += 1 if is_near else 0
                 candidate.total_frames += 1
 
-    def classify_players(self) -> List[int]:
+        # 古い候補をクリーンアップ
+        self._cleanup_old_candidates()
+
+    def _cleanup_old_candidates(self) -> None:
+        """
+        長期間見られていない候補を削除する
+
+        トラッキングIDが変わった場合に古いIDをプレイヤーとして
+        保持し続けないようにするための処理
+        """
+        inactive_ids = []
+        for track_id, candidate in self.candidates.items():
+            frames_since_last_seen = self.current_frame_idx - candidate.last_seen_frame
+            if frames_since_last_seen > self.max_inactive_frames:
+                inactive_ids.append(track_id)
+
+        # 削除
+        for track_id in inactive_ids:
+            del self.candidates[track_id]
+
+    def classify_players(self, max_inactive_frames_for_selection: int = 10) -> List[int]:
         """
         蓄積された情報からプレイヤーのtracking IDを決定
 
@@ -108,13 +137,21 @@ class PlayerClassifier:
         2. 総運動量が多い（total_movement）
         3. 卓球台の近くにいることが多い（near_table_ratio）
 
+        重要: 長期間見られていない候補は除外されます
+        （トラッキングIDが変わった場合に古いIDを返さないため）
+
+        Args:
+            max_inactive_frames_for_selection: プレイヤー選定時に許容する最大の非アクティブフレーム数
+                                               （デフォルト: 10フレーム以内に見られた候補のみ）
+
         Returns:
             選定されたプレイヤーのtracking IDリスト
         """
-        # 最小フレーム数を満たす候補をフィルタリング
+        # 最小フレーム数を満たし、かつ最近見られている候補をフィルタリング
         valid_candidates = [
             c for c in self.candidates.values()
-            if c.total_frames >= self.min_tracking_frames
+            if (c.total_frames >= self.min_tracking_frames and
+                self.current_frame_idx - c.last_seen_frame <= max_inactive_frames_for_selection)
         ]
 
         if not valid_candidates:
