@@ -24,7 +24,7 @@ class YOLOPose_Tracker:
         conf_threshold: float = 0.5,
         iou_threshold: float = 0.7,
         device: str = "cpu",
-        table_distance_threshold: float = 2.0
+        table_distance_threshold: float = 0.1
     ):
         """
         YOLOトラッカーの初期化
