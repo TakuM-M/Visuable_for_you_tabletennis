@@ -161,8 +161,8 @@ class PlayerClassifier:
 
         score = (
             0.1 * tracking_score +
-            0.3 * movement_score +
-            0.6 * near_table_score
+            0.9 * movement_score
+            # 0.6 * near_table_score
         )
 
         return score

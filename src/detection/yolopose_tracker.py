@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Set
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.detection.data_classes import PersonTrack
@@ -23,7 +23,8 @@ class YOLOPose_Tracker:
         model_path: str = "yolo11n-pose.pt",
         conf_threshold: float = 0.5,
         iou_threshold: float = 0.7,
-        device: str = "cpu"
+        device: str = "cpu",
+        table_distance_threshold: float = 2.0
     ):
         """
         YOLOトラッカーの初期化
@@ -33,11 +34,16 @@ class YOLOPose_Tracker:
             conf_threshold: 検出信頼度の閾値
             iou_threshold: NMS（Non-Maximum Suppression）のIoU閾値
             device: 使用デバイス（"cpu" or "cuda"）
+            table_distance_threshold: 卓球台との正規化距離の閾値（これ以下の距離にいる人物のみトラッキング）
         """
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.device = device
+        self.table_distance_threshold = table_distance_threshold
+
+        # 卓球台領域に一度でも入ったtrack_idを記憶
+        self.validated_track_ids: Set[int] = set()
 
         # YOLOモデルをロード
         print(f"YOLOモデルをロード中: {model_path}")
@@ -48,6 +54,7 @@ class YOLOPose_Tracker:
         print(f"  モデル: {model_path}")
         print(f"  デバイス: {device}")
         print(f"  信頼度閾値: {conf_threshold}")
+        print(f"  卓球台距離閾値: {table_distance_threshold}")
 
     def track_frame(
         self,
@@ -122,11 +129,106 @@ class YOLOPose_Tracker:
 
         return persons
 
+    def track_frame_with_table_filter(
+        self,
+        frame: np.ndarray,
+        table_info,
+        persist: bool = True
+    ) -> List[PersonTrack]:
+        """
+        卓球台フィルタリングを適用した人物トラッキング
+
+        卓球台から遠い人物は検出から除外し、
+        一度でも卓球台領域に入った人物は継続的にトラッキングします。
+
+        Args:
+            frame: 入力フレーム（BGR形式）
+            table_info: 卓球台情報（TableInfo）
+            persist: トラッキングIDを維持するか
+
+        Returns:
+            フィルタリングされた人物のリスト
+        """
+        # まず通常のトラッキングを実行
+        all_persons = self.track_frame(frame, persist=persist)
+
+        if table_info is None:
+            # 卓球台情報がない場合は全員を返す
+            return all_persons
+
+        filtered_persons = []
+
+        for person in all_persons:
+            track_id = person.track_id
+            distance = self._calculate_table_distance(person, table_info)
+
+            # 卓球台に近い場合、このtrack_idを記憶
+            if distance < self.table_distance_threshold:
+                self.validated_track_ids.add(track_id)
+
+            # 一度でも卓球台領域に入ったIDか、または現在卓球台に近い場合のみ追加
+            if track_id in self.validated_track_ids or distance < self.table_distance_threshold:
+                filtered_persons.append(person)
+
+        return filtered_persons
+
+    def _calculate_table_distance(
+        self,
+        person: PersonTrack,
+        table_info
+    ) -> float:
+        """
+        人物と卓球台の正規化距離を計算
+
+        Args:
+            person: 人物トラッキング情報
+            table_info: 卓球台情報（TableInfo）
+
+        Returns:
+            正規化距離（卓球台の対角線長で正規化）
+        """
+        # 卓球台のバウンディングボックス
+        table_x1, table_y1, table_x2, table_y2 = table_info.bbox
+        table_width = table_x2 - table_x1
+        table_height = table_y2 - table_y1
+
+        # 人物の足元位置を取得（バウンディングボックスの下端中心）
+        person_foot_x = (person.bbox[0] + person.bbox[2]) / 2
+        person_foot_y = person.bbox[3]  # 下端
+
+        # 体の中心Y座標を取得（腰の位置）
+        person_body_y = person.get_body_center_y()
+
+        # 足元からの距離
+        dx_foot = max(table_x1 - person_foot_x, 0, person_foot_x - table_x2)
+        dy_foot = max(table_y1 - person_foot_y, 0, person_foot_y - table_y2)
+        distance_foot = np.sqrt(dx_foot**2 + dy_foot**2)
+
+        # 体の中心からの距離（Y座標のみ）
+        dy_body = max(table_y1 - person_body_y, 0, person_body_y - table_y2)
+
+        # 両方を考慮した距離（足元を重視）
+        distance = 0.7 * distance_foot + 0.3 * dy_body
+
+        # 卓球台の対角線長で正規化
+        table_diagonal = np.sqrt(
+            (table_x2 - table_x1)**2 + (table_y2 - table_y1)**2
+        )
+
+        if table_diagonal > 0:
+            normalized_distance = distance / table_diagonal
+        else:
+            normalized_distance = float('inf')
+
+        return normalized_distance
+
     def reset_tracker(self):
         """トラッキングIDをリセット"""
         # 新しいモデルインスタンスを作成してトラッカーをリセット
         self.model = YOLO(self.model_path)
         self.model.to(self.device)
+        # 検証済みtrack_idもリセット
+        self.validated_track_ids.clear()
 
     def draw_tracking(
         self,

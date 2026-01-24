@@ -464,8 +464,11 @@ def main():
                 if table_info is not None:
                     print(f"卓球台を検出しました（フレーム {frame_count}、信頼度: {table_info.confidence:.2f}）\n")
 
-            # 人物を検出・追跡
-            persons = pose_tracker.track_frame(frame)
+            # 人物を検出・追跡（卓球台フィルタリング適用）
+            if table_info:
+                persons = pose_tracker.track_frame_with_table_filter(frame, table_info)
+            else:
+                persons = pose_tracker.track_frame(frame)
 
             # プレイヤー分類器を更新
             if table_info and persons:
