@@ -102,7 +102,11 @@ class YOLOPoseTracker:
         model_path: str = "yolo11n-pose.pt",
         conf_threshold: float = 0.5,
         iou_threshold: float = 0.7,
-        device: str = "cpu"
+        device: str = "cpu",
+        tracker: str = "bytetrack.yaml",
+        track_max_age: int = 60,
+        track_min_hits: int = 3,
+        track_iou_thresh: float = 0.3
     ):
         """
         YOLOトラッカーの初期化
@@ -112,11 +116,19 @@ class YOLOPoseTracker:
             conf_threshold: 検出信頼度の閾値
             iou_threshold: NMS（Non-Maximum Suppression）のIoU閾値
             device: 使用デバイス（"cpu" or "cuda"）
+            tracker: トラッカー設定ファイル（"botsort.yaml" or "bytetrack.yaml"）
+            track_max_age: トラックが失われるまでのフレーム数（大きいほどIDが維持されやすい）
+            track_min_hits: トラックとして確立されるまでの連続検出数（小さいほど早くIDが付く）
+            track_iou_thresh: トラッキングのIoU閾値（大きいほど厳密にマッチング）
         """
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.device = device
+        self.tracker = tracker
+        self.track_max_age = track_max_age
+        self.track_min_hits = track_min_hits
+        self.track_iou_thresh = track_iou_thresh
 
         # YOLOモデルをロード
         print(f"YOLOモデルをロード中: {model_path}")
@@ -127,6 +139,8 @@ class YOLOPoseTracker:
         print(f"  モデル: {model_path}")
         print(f"  デバイス: {device}")
         print(f"  信頼度閾値: {conf_threshold}")
+        print(f"  トラッカー: {tracker}")
+        print(f"  Max Age: {track_max_age}, Min Hits: {track_min_hits}, IoU: {track_iou_thresh}")
 
     def track_frame(
         self,
@@ -149,7 +163,13 @@ class YOLOPoseTracker:
             conf=self.conf_threshold,
             iou=self.iou_threshold,
             persist=persist,
-            verbose=False
+            tracker=self.tracker,
+            verbose=False,
+            # トラッカー固有のパラメータ
+            # これらのパラメータは内部的にトラッカー設定を上書き
+            max_age=self.track_max_age,
+            min_hits=self.track_min_hits,
+            iou_threshold=self.track_iou_thresh
         )
 
         persons = []

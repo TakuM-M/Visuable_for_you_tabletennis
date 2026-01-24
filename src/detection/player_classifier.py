@@ -10,7 +10,7 @@ from src.detection.data_classes import PersonTrack, TableInfo, PlayerCandidate
 
 
 # パラメータ定数
-NEAR_TABLE_THRESHOLD = 0.3  # 正規化距離0.3以下で「卓球台に近い」と判定（厳しめに調整）
+NEAR_TABLE_THRESHOLD = 0.3  # 正規化距離0.3以下で「卓球台に近い」と判定（厳qしめに調整）
 
 
 class PlayerClassifier:
