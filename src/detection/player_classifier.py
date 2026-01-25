@@ -10,7 +10,7 @@ from src.detection.data_classes import PersonTrack, TableInfo, PlayerCandidate
 
 
 # パラメータ定数
-NEAR_TABLE_THRESHOLD = 0.3  # 正規化距離0.3以下で「卓球台に近い」と判定（厳しめに調整）
+NEAR_TABLE_THRESHOLD = 0.1  # 正規化距離0.1以下で「卓球台に近い」と判定（厳しめに調整）
 MOVEMENT_NOISE_THRESHOLD = 5.0  # 5px以下の動きはYOLOのブレ（ノイズ）として無視
 
 
@@ -82,7 +82,7 @@ class PlayerClassifier:
             current_track_ids.add(track_id)
 
             # 卓球台との距離を計算
-            distance = self._calculate_normalized_distance(person, table_info)
+            distance = self._calculate_table_distance(person, table_info)
             is_near = distance < self.near_table_threshold
 
             # 運動量を計算（前フレームとの比較）
@@ -185,14 +185,17 @@ class PlayerClassifier:
         """
         プレイヤー候補のスコアを計算
 
+        スコアは以下の要素で構成されます:
+        1. 運動量スコア: 平均的な動きの多さ（重み: 0.6）
+        2. 卓球台近接率スコア: 卓球台の近くにいた割合（重み: 0.4）
+
         Args:
             candidate: プレイヤー候補
 
         Returns:
-            スコア（高いほど優先）
+            スコア（高いほど優先、0.0-1.0）
         """
-        # 平均運動量を計算（累積値ではなく1フレームあたりの平均）
-        # これにより、長時間映っているだけでスコアが上がることを防ぐ
+        # 1. 運動量スコアの計算
         avg_movements = []
         for c in self.candidates.values():
             if c.total_frames > 0:
@@ -202,90 +205,53 @@ class PlayerClassifier:
 
         max_avg_movement = max(avg_movements) if avg_movements else 1.0
 
-        # 正規化用の基準値を計算
-        max_frames = max(c.total_frames for c in self.candidates.values())
-
         # 平均運動量でスコア計算
         candidate_avg_movement = candidate.total_movement / candidate.total_frames if candidate.total_frames > 0 else 0
         movement_score = candidate_avg_movement / max_avg_movement if max_avg_movement > 0 else 0
 
+        # 2. 卓球台近接率スコアの計算
+        near_table_ratio = candidate.near_table_count / candidate.total_frames if candidate.total_frames > 0 else 0
 
-        score = (
-            1.0 * movement_score
+        # 全候補の中での最大近接率を取得（正規化用）
+        max_near_ratio = max(
+            c.near_table_count / c.total_frames if c.total_frames > 0 else 0
+            for c in self.candidates.values()
         )
+
+        # 近接率スコアを正規化（0.0-1.0）
+        proximity_score = near_table_ratio / max_near_ratio if max_near_ratio > 0 else 0
+
+        # 3. 重み付きスコアの計算
+        score = 0.8 * movement_score + 0.2 * proximity_score
 
         return score
 
-    def _calculate_normalized_distance(
+    def _calculate_table_distance(
         self,
         person: PersonTrack,
-        table_info: TableInfo
+        table_info
     ) -> float:
         """
         人物と卓球台の正規化距離を計算
 
-        卓球台の対角線長で正規化することで、画角に依存しない
-        相対距離を計算します。
-
-        改善点:
-        1. Y座標制約: プレイヤーは卓球台より下側にいるべき
-        2. 体の中心位置も考慮: 足元だけでなく体の中心（腰）も使用
-        3. プレイエリアチェック: 卓球台の周辺エリア外は大きなペナルティ
-
         Args:
             person: 人物トラッキング情報
-            table_info: 卓球台情報
+            table_info: 卓球台情報（TableInfo）
 
         Returns:
-            正規化距離（0.0 = 卓球台に接触、1.0 = 対角線長分離れている）
-            プレイエリア外の場合は大きな値（10.0）を返す
+            正規化距離（卓球台の対角線長で正規化）
         """
         # 卓球台のバウンディングボックス
         table_x1, table_y1, table_x2, table_y2 = table_info.bbox
-        table_width = table_x2 - table_x1
-        table_height = table_y2 - table_y1
 
-        # 人物の足元位置を取得（バウンディングボックスの下端中心）
-        person_foot_x = (person.bbox[0] + person.bbox[2]) / 2
-        person_foot_y = person.bbox[3]  # 下端
+        # 人物のバウンディングボックスの中心点を使用
+        person_center_x = (person.bbox[0] + person.bbox[2]) / 2
+        person_center_y = (person.bbox[1] + person.bbox[3]) / 2
 
-        # 体の中心Y座標を取得（腰の位置）
-        person_body_y = person.get_body_center_y()
-
-        # ===== 改善1: Y座標制約 =====
-        # プレイヤーは卓球台より下側（画面下側、Y座標が大きい）にいるべき
-        # 審判や背景の人物は卓球台より上側にいることが多い
-        if person_foot_y < table_y1:
-            # 足元が卓球台の上端より上にある = 審判や背景の可能性が高い
-            return 10.0  # 大きなペナルティ
-
-        # ===== 改善2: プレイエリア定義 =====
-        # 卓球台を中心とした拡張エリアを定義
-        # X方向: 卓球台の左右に幅の1.5倍まで
-        # Y方向: 卓球台の下に高さの3倍まで
-        play_area_x1 = table_x1 - table_width * 1.5
-        play_area_x2 = table_x2 + table_width * 1.5
-        play_area_y1 = table_y1  # 上端は卓球台の上端
-        play_area_y2 = table_y2 + table_height * 3.0  # 下端は卓球台の下に3倍
-
-        # プレイエリア外の場合は大きなペナルティ
-        if not (play_area_x1 <= person_foot_x <= play_area_x2 and
-                play_area_y1 <= person_foot_y <= play_area_y2):
-            return 10.0  # プレイエリア外
-
-        # ===== 改善3: 体の中心位置も考慮した距離計算 =====
-        # 足元と体の中心の両方から距離を計算し、より小さい方を採用
-
-        # 足元からの距離
-        dx_foot = max(table_x1 - person_foot_x, 0, person_foot_x - table_x2)
-        dy_foot = max(table_y1 - person_foot_y, 0, person_foot_y - table_y2)
-        distance_foot = np.sqrt(dx_foot**2 + dy_foot**2)
-
-        # 体の中心からの距離（Y座標のみ）
-        dy_body = max(table_y1 - person_body_y, 0, person_body_y - table_y2)
-
-        # 両方を考慮した距離（足元を重視）
-        distance = 0.7 * distance_foot + 0.3 * dy_body
+        # 卓球台のバウンディングボックスまでの距離を計算
+        dx = max(table_x1 - person_center_x, 0, person_center_x - table_x2)
+        dy = max(table_y1 - person_center_y, 0, person_center_y - table_y2)
+        distance = np.sqrt(dx**2 + dy**2)
 
         # 卓球台の対角線長で正規化
         table_diagonal = np.sqrt(
@@ -298,7 +264,7 @@ class PlayerClassifier:
             normalized_distance = float('inf')
 
         return normalized_distance
-
+    
     def _calculate_movement(
         self,
         prev_keypoints: np.ndarray,
