@@ -46,6 +46,101 @@ class TrackingExporter:
             persons=persons
         ))
 
+    def filter_by_consecutive_frames(
+        self,
+        min_consecutive_frames: int = 30,
+        max_frame_gap: int = 5
+    ) -> None:
+        """
+        連続して出現している区間のみを保持し、断片的な出現を除外する
+
+        各トラッキングIDについて:
+        1. フレーム番号のリストを取得
+        2. 連続区間を検出（max_frame_gap以下の欠けは許容）
+        3. min_consecutive_frames未満の区間を削除
+
+        Args:
+            min_consecutive_frames: 保持する最小連続フレーム数
+            max_frame_gap: 連続とみなす最大フレーム間隔
+        """
+        if not self.frame_data_list:
+            return
+
+        # トラッキングIDごとにフレーム番号をグループ化
+        track_id_frames: Dict[int, List[int]] = {}
+        for frame_data in self.frame_data_list:
+            for person in frame_data.persons:
+                track_id = person.track_id
+                if track_id not in track_id_frames:
+                    track_id_frames[track_id] = []
+                track_id_frames[track_id].append(frame_data.frame_num)
+
+        # 各トラッキングIDについて連続区間を検出
+        valid_frame_sets: Dict[int, set] = {}
+
+        for track_id, frame_nums in track_id_frames.items():
+            frame_nums_sorted = sorted(set(frame_nums))
+
+            # 連続区間を検出
+            consecutive_segments = []
+            current_segment = [frame_nums_sorted[0]]
+
+            for i in range(1, len(frame_nums_sorted)):
+                frame_gap = frame_nums_sorted[i] - frame_nums_sorted[i-1]
+
+                if frame_gap <= max_frame_gap:
+                    # ほぼ連続とみなす
+                    current_segment.append(frame_nums_sorted[i])
+                else:
+                    # 区間が途切れた
+                    consecutive_segments.append(current_segment)
+                    current_segment = [frame_nums_sorted[i]]
+
+            # 最後の区間を追加
+            consecutive_segments.append(current_segment)
+
+            # 最小連続フレーム数を満たす区間のみを保持
+            valid_frames = set()
+            for segment in consecutive_segments:
+                if len(segment) >= min_consecutive_frames:
+                    valid_frames.update(segment)
+
+            if valid_frames:
+                valid_frame_sets[track_id] = valid_frames
+
+        # フィルタリング: 有効な区間のみを保持
+        filtered_frame_data_list = []
+        removed_count = 0
+
+        for frame_data in self.frame_data_list:
+            filtered_persons = []
+
+            for person in frame_data.persons:
+                track_id = person.track_id
+                frame_num = frame_data.frame_num
+
+                # このトラッキングIDのこのフレームが有効な区間に含まれるかチェック
+                if track_id in valid_frame_sets and frame_num in valid_frame_sets[track_id]:
+                    filtered_persons.append(person)
+                else:
+                    removed_count += 1
+
+            # このフレームに有効な人物がいる場合のみ保持
+            if filtered_persons:
+                filtered_frame_data_list.append(FrameData(
+                    frame_num=frame_data.frame_num,
+                    timestamp=frame_data.timestamp,
+                    persons=filtered_persons
+                ))
+
+        self.frame_data_list = filtered_frame_data_list
+
+        print(f"\n連続性フィルタリング完了:")
+        print(f"  最小連続フレーム数: {min_consecutive_frames}")
+        print(f"  最大フレーム間隔: {max_frame_gap}")
+        print(f"  削除されたデータ数: {removed_count}")
+        print(f"  保持されたトラッキングID: {sorted(valid_frame_sets.keys())}")
+
     def export_csv(
         self,
         output_path: str,

@@ -338,6 +338,18 @@ def main():
         default=None,
         help='プレイヤーの骨格データをCSVファイルに出力するパス（指定しない場合は出力しない）'
     )
+    parser.add_argument(
+        '--min-consecutive-frames',
+        type=int,
+        default=30,
+        help='CSV出力時に保持する最小連続フレーム数（デフォルト: 30）。この値未満の断片的な出現は除外される'
+    )
+    parser.add_argument(
+        '--max-frame-gap',
+        type=int,
+        default=5,
+        help='連続性を判定する際の最大フレーム間隔（デフォルト: 5）。この値以下の欠けは連続とみなす'
+    )
 
     args = parser.parse_args()
 
@@ -610,6 +622,12 @@ def main():
 
         # CSV出力
         if csv_exporter and args.csv_output:
+            # 連続性フィルタリングを適用
+            csv_exporter.filter_by_consecutive_frames(
+                min_consecutive_frames=args.min_consecutive_frames,
+                max_frame_gap=args.max_frame_gap
+            )
+
             # プレイヤーの役割情報を作成（すべてのプレイヤーIDに"player"を割り当て）
             player_roles = {track_id: "player" for track_id in player_ids}
             csv_exporter.export_csv(args.csv_output, player_roles)
