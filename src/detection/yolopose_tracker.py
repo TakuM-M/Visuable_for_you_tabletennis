@@ -211,6 +211,19 @@ class YOLOPose_Tracker:
 
         return normalized_distance
 
+    def remove_validated_track_ids(self, track_ids: List[int]) -> None:
+        """
+        検証済みtrack_idのセットから指定されたIDを削除
+
+        PlayerClassifierでother判定が長期間続いたプレイヤーを
+        トラッキング候補から削除する際に使用します。
+
+        Args:
+            track_ids: 削除するtrack_idのリスト
+        """
+        for track_id in track_ids:
+            self.validated_track_ids.discard(track_id)
+
     def reset_tracker(self):
         """トラッキングIDをリセット"""
         # 新しいモデルインスタンスを作成してトラッカーをリセット

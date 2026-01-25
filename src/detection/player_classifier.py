@@ -130,7 +130,7 @@ class PlayerClassifier:
         # 古い候補をクリーンアップ
         self._cleanup_old_candidates()
 
-    def _update_other_count(self, selected_player_ids: List[int]) -> None:
+    def _update_other_count(self, selected_player_ids: List[int]) -> List[int]:
         """
         プレイヤーとして選定されなかった候補のother判定カウントを更新し、
         連続other判定が閾値を超えた候補を削除する
@@ -140,6 +140,9 @@ class PlayerClassifier:
 
         Args:
             selected_player_ids: プレイヤーとして選定されたtracking IDのリスト
+
+        Returns:
+            削除されたtracking IDのリスト
         """
         remove_ids = []
 
@@ -159,6 +162,8 @@ class PlayerClassifier:
         for track_id in remove_ids:
             del self.candidates[track_id]
 
+        return remove_ids
+
     def _cleanup_old_candidates(self) -> None:
         """
         長期間見られていない候補を削除する
@@ -176,7 +181,7 @@ class PlayerClassifier:
         for track_id in inactive_ids:
             del self.candidates[track_id]
 
-    def classify_players(self, max_inactive_frames_for_selection: int = 10) -> List[int]:
+    def classify_players(self, max_inactive_frames_for_selection: int = 10) -> tuple[List[int], List[int]]:
         """
         蓄積された情報からプレイヤーのtracking IDを決定
 
@@ -195,7 +200,7 @@ class PlayerClassifier:
                                                （デフォルト: 10フレーム以内に見られた候補のみ）
 
         Returns:
-            選定されたプレイヤーのtracking IDリスト
+            タプル: (選定されたプレイヤーのtracking IDリスト, 削除されたtracking IDリスト)
         """
         # 最小フレーム数を満たし、かつ最近見られている候補をフィルタリング
         valid_candidates = [
@@ -205,7 +210,7 @@ class PlayerClassifier:
         ]
 
         if not valid_candidates:
-            return []
+            return [], []
 
         # スコアリング
         scored_candidates = []
@@ -225,9 +230,10 @@ class PlayerClassifier:
         ]
 
         # プレイヤーとして選定されたIDと選定されなかったIDを追跡
-        self._update_other_count(selected_ids)
+        # 削除されたIDのリストを取得
+        removed_ids = self._update_other_count(selected_ids)
 
-        return selected_ids
+        return selected_ids, removed_ids
 
     def _calculate_player_score(self, candidate: PlayerCandidate) -> float:
         """

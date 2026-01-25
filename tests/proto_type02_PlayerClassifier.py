@@ -492,7 +492,15 @@ def main():
             # プレイヤーを分類（毎フレーム更新）
             # 重要: 古いIDをプレイヤーとして保持し続けないため、毎回更新する
             if table_info:
-                player_ids = set(player_classifier.classify_players())
+                selected_ids, removed_ids = player_classifier.classify_players()
+                player_ids = set(selected_ids)
+
+                # other判定が長期間続いたIDをトラッカーからも削除
+                if removed_ids:
+                    pose_tracker.remove_validated_track_ids(removed_ids)
+                    if processed_count % 10 == 0 or processed_count == 1:
+                        print(f"Frame {frame_count}: 削除されたID = {sorted(removed_ids)}")
+
                 # デバッグ出力は一定フレームごと
                 if processed_count % 10 == 0 or processed_count == 1:
                     if player_ids:
