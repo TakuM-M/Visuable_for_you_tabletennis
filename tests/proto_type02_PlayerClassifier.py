@@ -322,8 +322,8 @@ def main():
     parser.add_argument(
         '--max-players',
         type=int,
-        default=2,
-        help='最大プレイヤー数（デフォルト: 2）'
+        default=4,
+        help='最大プレイヤー数（デフォルト: 4）'
     )
     parser.add_argument(
         '--min-player-score',

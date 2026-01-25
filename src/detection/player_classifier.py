@@ -204,23 +204,13 @@ class PlayerClassifier:
         # 正規化用の基準値を計算
         max_frames = max(c.total_frames for c in self.candidates.values())
 
-        # 各要素を0-1に正規化してスコア計算
-        # 重み調整: 卓球台付近の重みを大幅に上げる
-        # - tracking継続時間: 10% (長く映っていることは重要だが決定的ではない)
-        # - 平均運動量: 30% (動きが激しいことは重要)
-        # - 卓球台付近時間: 60% (最も重要: プレイヤーは卓球台の近くにいる)
-        tracking_score = candidate.total_frames / max_frames if max_frames > 0 else 0
-
         # 平均運動量でスコア計算
         candidate_avg_movement = candidate.total_movement / candidate.total_frames if candidate.total_frames > 0 else 0
         movement_score = candidate_avg_movement / max_avg_movement if max_avg_movement > 0 else 0
 
-        near_table_score = candidate.near_table_ratio
 
         score = (
-            # 0.1 * tracking_score +
             1.0 * movement_score
-            # 0.6 * near_table_score
         )
 
         return score
