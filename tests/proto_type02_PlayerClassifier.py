@@ -310,7 +310,7 @@ def main():
     parser.add_argument(
         '--pose-model',
         type=str,
-        default='models/yolo11n-pose.pt',
+        default='models/yolo11l-pose.pt',
         help='YOLOv11-poseモデルのパス'
     )
     parser.add_argument(
