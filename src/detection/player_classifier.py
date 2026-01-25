@@ -13,6 +13,7 @@ from src.detection.data_classes import PersonTrack, TableInfo, PlayerCandidate
 NEAR_TABLE_THRESHOLD = 0.1  # 正規化距離0.1以下で「卓球台に近い」と判定（厳しめに調整）
 MOVEMENT_NOISE_THRESHOLD = 5.0  # 5px以下の動きはYOLOのブレ（ノイズ）として無視
 RECENT_FRAMES_WINDOW = 146  # 直近60フレームの運動量を考慮（約2秒 @ 30fps）
+MAX_CONSECUTIVE_OTHER_COUNT = 30  # other判定が30回連続したら候補をリセット（約1秒 @ 30fps）
 
 
 class PlayerClassifier:
@@ -35,7 +36,8 @@ class PlayerClassifier:
         max_players: int = 2,
         max_inactive_frames: int = 30,
         min_player_score: float = 0.3,
-        recent_frames_window: int = RECENT_FRAMES_WINDOW
+        recent_frames_window: int = RECENT_FRAMES_WINDOW,
+        max_consecutive_other_count: int = MAX_CONSECUTIVE_OTHER_COUNT
     ):
         """
         PlayerClassifierの初期化
@@ -48,6 +50,7 @@ class PlayerClassifier:
             min_player_score: プレイヤーとして判定する最小スコア閾値（0.0-1.0）
                             この値以下のスコアの候補はプレイヤーから除外される
             recent_frames_window: 運動量計算に使用する直近フレーム数（デフォルト: 60フレーム）
+            max_consecutive_other_count: other判定が連続でこの回数を超えたら候補をリセット
         """
         self.near_table_threshold = near_table_threshold
         self.min_tracking_frames = min_tracking_frames
@@ -55,6 +58,7 @@ class PlayerClassifier:
         self.max_inactive_frames = max_inactive_frames
         self.min_player_score = min_player_score
         self.recent_frames_window = recent_frames_window
+        self.max_consecutive_other_count = max_consecutive_other_count
 
         # プレイヤー候補の情報を蓄積
         self.candidates: Dict[int, PlayerCandidate] = {}
@@ -126,6 +130,35 @@ class PlayerClassifier:
         # 古い候補をクリーンアップ
         self._cleanup_old_candidates()
 
+    def _update_other_count(self, selected_player_ids: List[int]) -> None:
+        """
+        プレイヤーとして選定されなかった候補のother判定カウントを更新し、
+        連続other判定が閾値を超えた候補を削除する
+
+        削除された候補は、再び卓球台周辺に来ない限り候補として復活しない。
+        これにより、審判などのプレイヤー以外の人物が候補として残り続けるのを防ぐ。
+
+        Args:
+            selected_player_ids: プレイヤーとして選定されたtracking IDのリスト
+        """
+        remove_ids = []
+
+        for track_id, candidate in self.candidates.items():
+            if track_id in selected_player_ids:
+                # プレイヤーとして選定された場合はカウントをリセット
+                candidate.consecutive_other_count = 0
+            else:
+                # other判定された場合はカウントを増やす
+                candidate.consecutive_other_count += 1
+
+                # 連続other判定が閾値を超えた場合は削除対象に追加
+                if candidate.consecutive_other_count >= self.max_consecutive_other_count:
+                    remove_ids.append(track_id)
+
+        # 削除対象の候補を完全に削除
+        for track_id in remove_ids:
+            del self.candidates[track_id]
+
     def _cleanup_old_candidates(self) -> None:
         """
         長期間見られていない候補を削除する
@@ -154,6 +187,8 @@ class PlayerClassifier:
 
         重要: 長期間見られていない候補は除外されます
         （トラッキングIDが変わった場合に古いIDを返さないため）
+
+        other判定が連続で一定回数を超えた候補は自動的にリセットされます。
 
         Args:
             max_inactive_frames_for_selection: プレイヤー選定時に許容する最大の非アクティブフレーム数
@@ -188,6 +223,9 @@ class PlayerClassifier:
             track_id for track_id, score in scored_candidates[:self.max_players]
             if score >= self.min_player_score
         ]
+
+        # プレイヤーとして選定されたIDと選定されなかったIDを追跡
+        self._update_other_count(selected_ids)
 
         return selected_ids
 

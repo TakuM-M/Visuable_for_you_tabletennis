@@ -105,6 +105,7 @@ class PlayerCandidate:
     near_table_count: int
     total_frames: int
     movement_history: List[float] = None  # 各フレームの運動量履歴（直近フレーム用）
+    consecutive_other_count: int = 0  # プレイヤーとして選定されなかった連続回数
 
     def __post_init__(self):
         """初期化後の処理"""
