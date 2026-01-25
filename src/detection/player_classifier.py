@@ -10,7 +10,8 @@ from src.detection.data_classes import PersonTrack, TableInfo, PlayerCandidate
 
 
 # パラメータ定数
-NEAR_TABLE_THRESHOLD = 0.3  # 正規化距離0.3以下で「卓球台に近い」と判定（厳qしめに調整）
+NEAR_TABLE_THRESHOLD = 0.3  # 正規化距離0.3以下で「卓球台に近い」と判定（厳しめに調整）
+MOVEMENT_NOISE_THRESHOLD = 5.0  # 5px以下の動きはYOLOのブレ（ノイズ）として無視
 
 
 class PlayerClassifier:
@@ -340,8 +341,10 @@ class PlayerClassifier:
                 distance = np.linalg.norm(
                     curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
                 )
-                lower_body_movement += distance
-                lower_body_valid_count += 1
+                # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
+                if distance >= MOVEMENT_NOISE_THRESHOLD:
+                    lower_body_movement += distance
+                    lower_body_valid_count += 1
 
         # 上半身の移動量を計算
         upper_body_movement = 0.0
@@ -352,8 +355,10 @@ class PlayerClassifier:
                 distance = np.linalg.norm(
                     curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
                 )
-                upper_body_movement += distance
-                upper_body_valid_count += 1
+                # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
+                if distance >= MOVEMENT_NOISE_THRESHOLD:
+                    upper_body_movement += distance
+                    upper_body_valid_count += 1
 
         # 有効なキーポイントがない場合は0を返す
         if lower_body_valid_count == 0 and upper_body_valid_count == 0:
