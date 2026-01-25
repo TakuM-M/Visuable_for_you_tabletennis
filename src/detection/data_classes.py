@@ -104,6 +104,12 @@ class PlayerCandidate:
     total_movement: float
     near_table_count: int
     total_frames: int
+    movement_history: List[float] = None  # 各フレームの運動量履歴（直近フレーム用）
+
+    def __post_init__(self):
+        """初期化後の処理"""
+        if self.movement_history is None:
+            self.movement_history = []
 
     @property
     def tracking_duration_frames(self) -> int:

@@ -12,6 +12,7 @@ from src.detection.data_classes import PersonTrack, TableInfo, PlayerCandidate
 # パラメータ定数
 NEAR_TABLE_THRESHOLD = 0.1  # 正規化距離0.1以下で「卓球台に近い」と判定（厳しめに調整）
 MOVEMENT_NOISE_THRESHOLD = 5.0  # 5px以下の動きはYOLOのブレ（ノイズ）として無視
+RECENT_FRAMES_WINDOW = 146  # 直近60フレームの運動量を考慮（約2秒 @ 30fps）
 
 
 class PlayerClassifier:
@@ -33,7 +34,8 @@ class PlayerClassifier:
         min_tracking_frames: int = 10,
         max_players: int = 2,
         max_inactive_frames: int = 30,
-        min_player_score: float = 0.3
+        min_player_score: float = 0.3,
+        recent_frames_window: int = RECENT_FRAMES_WINDOW
     ):
         """
         PlayerClassifierの初期化
@@ -45,12 +47,14 @@ class PlayerClassifier:
             max_inactive_frames: この期間見られていない候補を削除するフレーム数
             min_player_score: プレイヤーとして判定する最小スコア閾値（0.0-1.0）
                             この値以下のスコアの候補はプレイヤーから除外される
+            recent_frames_window: 運動量計算に使用する直近フレーム数（デフォルト: 60フレーム）
         """
         self.near_table_threshold = near_table_threshold
         self.min_tracking_frames = min_tracking_frames
         self.max_players = max_players
         self.max_inactive_frames = max_inactive_frames
         self.min_player_score = min_player_score
+        self.recent_frames_window = recent_frames_window
 
         # プレイヤー候補の情報を蓄積
         self.candidates: Dict[int, PlayerCandidate] = {}
@@ -101,7 +105,8 @@ class PlayerClassifier:
                     keypoints_history=[person.keypoints.copy()],
                     total_movement=movement,
                     near_table_count=1 if is_near else 0,
-                    total_frames=1
+                    total_frames=1,
+                    movement_history=[movement]
                 )
             else:
                 # 既存の候補を更新
@@ -112,6 +117,11 @@ class PlayerClassifier:
                 candidate.total_movement += movement
                 candidate.near_table_count += 1 if is_near else 0
                 candidate.total_frames += 1
+
+                # 運動量履歴を追加（サイズ制限あり）
+                candidate.movement_history.append(movement)
+                if len(candidate.movement_history) > self.recent_frames_window:
+                    candidate.movement_history.pop(0)  # 古いデータを削除
 
         # 古い候補をクリーンアップ
         self._cleanup_old_candidates()
@@ -186,8 +196,11 @@ class PlayerClassifier:
         プレイヤー候補のスコアを計算
 
         スコアは以下の要素で構成されます:
-        1. 運動量スコア: 平均的な動きの多さ（重み: 0.6）
-        2. 卓球台近接率スコア: 卓球台の近くにいた割合（重み: 0.4）
+        1. 運動量スコア: 直近フレームでの平均的な動きの多さ（重み: 0.8）
+        2. 卓球台近接率スコア: 卓球台の近くにいた割合（重み: 0.2）
+
+        運動量は直近のフレームのみを考慮することで、
+        最初は静止していて後から動き出したプレイヤーを正しく検出できます。
 
         Args:
             candidate: プレイヤー候補
@@ -195,18 +208,22 @@ class PlayerClassifier:
         Returns:
             スコア（高いほど優先、0.0-1.0）
         """
-        # 1. 運動量スコアの計算
+        # 1. 運動量スコアの計算（直近フレームの平均）
         avg_movements = []
         for c in self.candidates.values():
-            if c.total_frames > 0:
-                avg_movements.append(c.total_movement / c.total_frames)
+            if c.movement_history and len(c.movement_history) > 0:
+                # 直近フレームの平均運動量を計算
+                avg_movements.append(sum(c.movement_history) / len(c.movement_history))
             else:
                 avg_movements.append(0.0)
 
         max_avg_movement = max(avg_movements) if avg_movements else 1.0
 
-        # 平均運動量でスコア計算
-        candidate_avg_movement = candidate.total_movement / candidate.total_frames if candidate.total_frames > 0 else 0
+        # 候補の直近フレーム平均運動量でスコア計算
+        if candidate.movement_history and len(candidate.movement_history) > 0:
+            candidate_avg_movement = sum(candidate.movement_history) / len(candidate.movement_history)
+        else:
+            candidate_avg_movement = 0
         movement_score = candidate_avg_movement / max_avg_movement if max_avg_movement > 0 else 0
 
         # 2. 卓球台近接率スコアの計算
@@ -222,6 +239,7 @@ class PlayerClassifier:
         proximity_score = near_table_ratio / max_near_ratio if max_near_ratio > 0 else 0
 
         # 3. 重み付きスコアの計算
+        # 運動量: 80%, 卓球台近接率: 20%
         score = 0.8 * movement_score + 0.2 * proximity_score
 
         return score
