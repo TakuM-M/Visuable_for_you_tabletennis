@@ -39,6 +39,7 @@ from src.detection.table_detector import TableDetector
 from src.detection.yolopose_tracker import YOLOPose_Tracker
 from src.detection.player_classifier import PlayerClassifier
 from src.detection.data_classes import TableInfo, PersonTrack
+from src.detection.tracking_exporter import TrackingExporter
 
 
 class PlayerClassifierVisualizer:
@@ -331,6 +332,12 @@ def main():
         default=0.3,
         help='プレイヤー判定の最小スコア閾値（デフォルト: 0.3、範囲: 0.0-1.0）'
     )
+    parser.add_argument(
+        '--csv-output',
+        type=str,
+        default=None,
+        help='プレイヤーの骨格データをCSVファイルに出力するパス（指定しない場合は出力しない）'
+    )
 
     args = parser.parse_args()
 
@@ -380,6 +387,12 @@ def main():
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(args.output, fourcc, video_fps, (width, height))
         print(f"出力ビデオ: {args.output}\n")
+
+    # CSV出力の準備
+    csv_exporter = None
+    if args.csv_output:
+        csv_exporter = TrackingExporter()
+        print(f"CSV出力: {args.csv_output}\n")
 
     # フレームカウント
     frame_count = 0
@@ -506,6 +519,14 @@ def main():
                     if player_ids:
                         print(f"Frame {frame_count}: プレイヤーID = {sorted(player_ids)}")
 
+            # CSV出力: プレイヤーとして判定された人物のみを記録
+            if csv_exporter and player_ids:
+                # プレイヤーのみをフィルタリング
+                player_persons = [p for p in persons if p.track_id in player_ids]
+                if player_persons:
+                    timestamp = frame_count / video_fps
+                    csv_exporter.add_frame(frame_count, timestamp, player_persons)
+
             # 結果を描画
             display_frame = visualizer.draw_results(
                 frame, table_info, persons, player_ids
@@ -586,6 +607,13 @@ def main():
 
         if args.output:
             print(f"\n出力ビデオ: {args.output}")
+
+        # CSV出力
+        if csv_exporter and args.csv_output:
+            # プレイヤーの役割情報を作成（すべてのプレイヤーIDに"player"を割り当て）
+            player_roles = {track_id: "player" for track_id in player_ids}
+            csv_exporter.export_csv(args.csv_output, player_roles)
+            print(f"\nプレイヤー骨格データをCSVに保存しました: {args.csv_output}")
 
 
 if __name__ == "__main__":

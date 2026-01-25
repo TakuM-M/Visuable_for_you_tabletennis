@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
-from .yolo_tracker import PersonTrack, KEYPOINT_NAMES
+from .data_classes import PersonTrack, KEYPOINT_NAMES
 
 
 @dataclass
