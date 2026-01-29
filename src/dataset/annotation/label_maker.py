@@ -3,14 +3,14 @@
     Args:
         video_path: 動画ファイルのパス
         output_path: 出力CSVパス（デフォルトは動画名_labels.csv）
-        fps_divisor: 表示フレームレートの分割数（2なら半分速度）
+        fps_divisor: 表示フレームレートの倍率（2なら半分速度、0.5なら2倍速）
         
     Returns:
         動画に対するラベルをフレーム単位およびシーン単位で保存
 Usage:
 python -m src.dataset.annotation.label_maker \
-    data/detect/sample_video_01_02/detect_pose.mp4 \
-    -o data/detect/sample_video_01_02/play_labels.csv \
+    data/raw/sample_video_01_01.MOV \
+    -o data/detect/sample_video_01_01/play_labels.csv \
     --fps-divisor 1
 """
 import cv2
@@ -35,14 +35,14 @@ class LabelMaker:
     - 'q': 保存して終了
     """
 
-    def __init__(self, video_path: str, output_path: str = None, fps_divisor: int = 1):
+    def __init__(self, video_path: str, output_path: str = None, fps_divisor: float = 1.0):
         """
         初期化
 
         Args:
             video_path: 動画ファイルのパス
             output_path: 出力CSVパス（Noneの場合は自動生成）
-            fps_divisor: 表示フレームレートの分割数（2なら半分速度）
+            fps_divisor: 表示フレームレートの倍率（2なら半分速度、0.5なら2倍速）
         """
         self.video_path = Path(video_path)
         if not self.video_path.exists():
@@ -240,7 +240,7 @@ class LabelMaker:
             cv2.imshow(window_name, display_frame)
 
             # キー入力待ち
-            wait_time = int(1000 / self.fps * self.fps_divisor) if self.is_playing else 0
+            wait_time = max(1, int(1000 / self.fps * self.fps_divisor)) if self.is_playing else 0
             key = cv2.waitKey(wait_time) & 0xFF
 
             # キー操作
@@ -289,7 +289,9 @@ class LabelMaker:
 
             # フレーム進行
             if self.is_playing:
-                self.current_frame += 1
+                # fps_divisorが1未満の場合、フレームをスキップして高速再生
+                frame_step = max(1, int(1 / self.fps_divisor)) if self.fps_divisor < 1 else 1
+                self.current_frame += frame_step
                 if self.current_frame >= self.total_frames:
                     self.current_frame = 0
                     self.is_playing = False
@@ -306,8 +308,8 @@ def main():
     parser.add_argument('video', type=str, help='動画ファイルのパス')
     parser.add_argument('-o', '--output', type=str, default=None,
                        help='出力CSVパス（デフォルト: 動画名_labels.csv）')
-    parser.add_argument('--fps-divisor', type=int, default=1,
-                       help='表示速度の分割数（2なら半分速度）')
+    parser.add_argument('--fps-divisor', type=float, default=1.0,
+                       help='表示速度の倍率（2なら半分速度、0.5なら2倍速）')
 
     args = parser.parse_args()
 
