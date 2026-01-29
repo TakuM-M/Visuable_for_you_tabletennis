@@ -1,6 +1,6 @@
 """
-トラッキング結果CSV出力モジュール
-フレームごとのキーポイント座標をCSV形式で保存する
+トラッキング結果出力モジュール
+フレームごとのキーポイント保存する
 """
 import csv
 import numpy as np
@@ -20,10 +20,10 @@ class FrameData:
 
 
 class TrackingExporter:
-    """トラッキング結果のCSV出力クラス"""
+    """トラッキング結果の出力クラス"""
 
     def __init__(self):
-        """CSV出力器の初期化"""
+        """出力器の初期化"""
         self.frame_data_list: List[FrameData] = []
 
     def add_frame(
