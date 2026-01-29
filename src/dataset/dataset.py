@@ -173,6 +173,179 @@ class PoseSequenceDataset(Dataset):
         }
 
 
+class InMemoryPoseSequenceDataset(Dataset):
+    """
+    メモリ上の骨格データから直接データセットを作成
+
+    推論時やリアルタイム処理で使用
+    CSVの入出力を省略してメモリ効率と速度を向上
+    """
+
+    def __init__(
+        self,
+        pose_data: np.ndarray,
+        frames: Optional[np.ndarray] = None,
+        labels: Optional[np.ndarray] = None,
+        sequence_length: int = 30,
+        stride: int = 1,
+        keypoint_features: List[str] = None,
+        normalize_features: bool = True,
+        feature_mean: Optional[np.ndarray] = None,
+        feature_std: Optional[np.ndarray] = None
+    ):
+        """
+        初期化
+
+        Args:
+            pose_data: 正規化済み骨格データ (num_frames, num_features)
+                      num_features = len(keypoint_names) * 2 (x, y座標)
+            frames: フレーム番号配列 (num_frames,)。Noneの場合は0から連番
+            labels: ラベル配列 (num_frames,)。Noneの場合は全て0
+            sequence_length: シーケンスの長さ（フレーム数）
+            stride: シーケンス切り出しのストライド
+            keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全キーポイント）
+            normalize_features: 特徴量を正規化するか
+            feature_mean: 正規化用の平均値（学習時と同じものを使用）。Noneの場合は自動計算
+            feature_std: 正規化用の標準偏差（学習時と同じものを使用）。Noneの場合は自動計算
+        """
+        self.sequence_length = sequence_length
+        self.stride = stride
+        self.normalize_features = normalize_features
+
+        # 使用するキーポイントを決定
+        if keypoint_features is None:
+            self.keypoint_names = KEYPOINT_NAMES
+        else:
+            self.keypoint_names = keypoint_features
+
+        # データの検証
+        expected_features = len(self.keypoint_names) * 2
+        if pose_data.shape[1] != expected_features:
+            raise ValueError(
+                f"pose_dataの特徴量次元が不正です。"
+                f"期待値: {expected_features} (キーポイント数: {len(self.keypoint_names)} × 2), "
+                f"実際: {pose_data.shape[1]}"
+            )
+
+        # 特徴量を保存
+        self.features = pose_data.astype(np.float32)
+
+        # フレーム番号
+        if frames is None:
+            self.frames = np.arange(len(pose_data), dtype=np.int64)
+        else:
+            if len(frames) != len(pose_data):
+                raise ValueError(
+                    f"framesの長さがpose_dataと一致しません。"
+                    f"pose_data: {len(pose_data)}, frames: {len(frames)}"
+                )
+            self.frames = frames.astype(np.int64)
+
+        # ラベル
+        if labels is None:
+            self.labels = np.zeros(len(pose_data), dtype=np.int64)
+        else:
+            if len(labels) != len(pose_data):
+                raise ValueError(
+                    f"labelsの長さがpose_dataと一致しません。"
+                    f"pose_data: {len(pose_data)}, labels: {len(labels)}"
+                )
+            self.labels = labels.astype(np.int64)
+
+        # 特徴量の正規化
+        if self.normalize_features:
+            if feature_mean is not None and feature_std is not None:
+                # 学習時のパラメータを使用
+                self.feature_mean = feature_mean
+                self.feature_std = feature_std
+            else:
+                # 新規に計算
+                self.feature_mean = np.mean(self.features, axis=0)
+                self.feature_std = np.std(self.features, axis=0) + 1e-8
+
+            self.features = (self.features - self.feature_mean) / self.feature_std
+        else:
+            self.feature_mean = None
+            self.feature_std = None
+
+        # シーケンスのインデックスを作成
+        self.sequence_indices = self._create_sequence_indices()
+
+        print(f"InMemoryPoseSequenceDataset初期化完了:")
+        print(f"  総フレーム数: {len(self.features)}")
+        print(f"  シーケンス数: {len(self.sequence_indices)}")
+        print(f"  シーケンス長: {self.sequence_length}")
+        print(f"  特徴量次元: {self.features.shape[1]}")
+        print(f"  プレー中フレーム: {np.sum(self.labels == 1)} / {len(self.labels)}")
+
+    def _create_sequence_indices(self) -> List[Tuple[int, int]]:
+        """
+        シーケンスの開始・終了インデックスのリストを作成
+
+        Returns:
+            [(start_idx, end_idx), ...] のリスト
+        """
+        indices = []
+        max_start = len(self.features) - self.sequence_length
+
+        for start_idx in range(0, max_start + 1, self.stride):
+            end_idx = start_idx + self.sequence_length
+            indices.append((start_idx, end_idx))
+
+        return indices
+
+    def __len__(self) -> int:
+        """データセットのサイズ"""
+        return len(self.sequence_indices)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+        """
+        データの取得
+
+        Args:
+            idx: インデックス
+
+        Returns:
+            features: 特徴量テンソル (sequence_length, num_features)
+            labels: ラベルテンソル (sequence_length,)
+            metadata: メタデータ（フレーム番号など）
+        """
+        start_idx, end_idx = self.sequence_indices[idx]
+
+        # 特徴量とラベルを切り出し
+        features = self.features[start_idx:end_idx]
+        labels = self.labels[start_idx:end_idx]
+        frames = self.frames[start_idx:end_idx]
+
+        # テンソルに変換
+        features_tensor = torch.from_numpy(features)
+        labels_tensor = torch.from_numpy(labels).float()
+
+        # メタデータ
+        metadata = {
+            'start_frame': frames[0],
+            'end_frame': frames[-1],
+            'start_idx': start_idx,
+            'end_idx': end_idx
+        }
+
+        return features_tensor, labels_tensor, metadata
+
+    def get_statistics(self) -> Dict:
+        """データセットの統計情報を取得"""
+        return {
+            'total_frames': len(self.features),
+            'total_sequences': len(self.sequence_indices),
+            'sequence_length': self.sequence_length,
+            'stride': self.stride,
+            'num_features': self.features.shape[1],
+            'num_keypoints': len(self.keypoint_names),
+            'play_frames': int(np.sum(self.labels == 1)),
+            'non_play_frames': int(np.sum(self.labels == 0)),
+            'play_ratio': float(np.mean(self.labels == 1))
+        }
+
+
 class MultiVideoPoseDataset(Dataset):
     """
     複数動画のデータを扱うデータセット
