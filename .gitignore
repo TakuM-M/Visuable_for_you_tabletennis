@@ -57,16 +57,16 @@ data/processed/*.mp4
 data/processed/*.avi
 data/processed/*.mov
 
-# Output files
-output/
-output/*.mp4
-output/*.avi
-output/*.mov
+# outputs files
+outputs/
+outputs/*.mp4
+outputs/*.avi
+outputs/*.mov
 ougput/*.png
-output/*.jpg
-output/*.jpeg
-output/*.csv
-output/*.txt
+outputs/*.jpg
+outputs/*.jpeg
+outputs/*.csv
+outputs/*.txt
 
 # Environment variables
 .env
