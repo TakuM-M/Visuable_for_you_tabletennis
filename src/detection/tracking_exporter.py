@@ -25,6 +25,11 @@ class TrackingExporter:
     def __init__(self):
         """出力器の初期化"""
         self.frame_data_list: List[FrameData] = []
+        self.is_normalized: bool = False  # 正規化済みフラグ
+
+        # キーポイントのインデックス（COCO形式）
+        self.LEFT_HIP_IDX = KEYPOINT_NAMES.index("left_hip")
+        self.RIGHT_HIP_IDX = KEYPOINT_NAMES.index("right_hip")
 
     def add_frame(
         self,
@@ -140,6 +145,192 @@ class TrackingExporter:
         print(f"  最大フレーム間隔: {max_frame_gap}")
         print(f"  削除されたデータ数: {removed_count}")
         print(f"  保持されたトラッキングID: {sorted(valid_frame_sets.keys())}")
+
+    def normalize_poses(
+        self,
+        min_confidence: float = 0.3
+    ) -> Dict[str, any]:
+        """
+        保持している全フレームの骨格データを正規化する（訓練データと同じ方法）
+
+        正規化方法:
+        1. 腰の中心（left_hip と right_hip の中点）を原点とする
+        2. 腰幅（left_hip と right_hip の距離）でスケールを正規化
+        3. 各キーポイントを相対座標に変換
+
+        Args:
+            min_confidence: キーポイントの最小信頼度（これ以下は無効として0に設定）
+
+        Returns:
+            正規化の統計情報（成功数、失敗数、スケールファクターの統計など）
+        """
+        if self.is_normalized:
+            print("警告: 既に正規化済みです。再度正規化はスキップされます。")
+            return {}
+
+        if not self.frame_data_list:
+            print("警告: 正規化するデータがありません。")
+            return {}
+
+        total_persons = 0
+        valid_count = 0
+        invalid_count = 0
+        scale_factors = []
+
+        print("\n骨格データを正規化中...")
+
+        # 全フレーム・全人物を正規化
+        for frame_data in self.frame_data_list:
+            for person in frame_data.persons:
+                total_persons += 1
+
+                # 腰の中心と腰幅を計算
+                hip_center, hip_width, is_valid = self._compute_hip_center_and_width(
+                    person.keypoints, min_confidence
+                )
+
+                if not is_valid:
+                    invalid_count += 1
+                    # 正規化できない場合は元の座標をそのまま保持
+                    continue
+
+                valid_count += 1
+                scale_factors.append(hip_width)
+
+                # 各キーポイントを正規化（インプレース更新）
+                for i in range(17):
+                    kp_x, kp_y, conf = person.keypoints[i]
+
+                    if conf >= min_confidence:
+                        # 腰中心を原点とした相対座標
+                        relative_x = kp_x - hip_center[0]
+                        relative_y = kp_y - hip_center[1]
+
+                        # 腰幅でスケール正規化
+                        person.keypoints[i, 0] = relative_x / hip_width
+                        person.keypoints[i, 1] = relative_y / hip_width
+                    else:
+                        # 信頼度が低い場合は0に設定
+                        person.keypoints[i, 0] = 0.0
+                        person.keypoints[i, 1] = 0.0
+
+        self.is_normalized = True
+
+        # 統計情報
+        stats = {
+            'total_persons': total_persons,
+            'valid_count': valid_count,
+            'invalid_count': invalid_count,
+            'scale_factors': scale_factors
+        }
+
+        print(f"正規化完了:")
+        print(f"  総データ数: {total_persons}")
+        print(f"  正規化成功: {valid_count}")
+        print(f"  正規化失敗: {invalid_count}")
+
+        if scale_factors:
+            print(f"  腰幅統計:")
+            print(f"    平均: {np.mean(scale_factors):.2f}px")
+            print(f"    標準偏差: {np.std(scale_factors):.2f}px")
+            print(f"    範囲: {np.min(scale_factors):.2f} - {np.max(scale_factors):.2f}px")
+
+        return stats
+
+    def _compute_hip_center_and_width(
+        self,
+        keypoints: np.ndarray,
+        min_confidence: float
+    ) -> tuple:
+        """
+        腰の中心座標と腰幅を計算（訓練データと同じ方法）
+
+        Args:
+            keypoints: キーポイント配列 (17, 3) [x, y, confidence]
+            min_confidence: 最小信頼度
+
+        Returns:
+            ((center_x, center_y), hip_width, is_valid)
+        """
+        left_hip = keypoints[self.LEFT_HIP_IDX]
+        right_hip = keypoints[self.RIGHT_HIP_IDX]
+
+        # 両方の腰が検出されているかチェック
+        if (left_hip[2] >= min_confidence and
+            right_hip[2] >= min_confidence):
+            # 腰の中心を計算
+            center_x = (left_hip[0] + right_hip[0]) / 2.0
+            center_y = (left_hip[1] + right_hip[1]) / 2.0
+
+            # 腰幅を計算（スケール係数）
+            dx = right_hip[0] - left_hip[0]
+            dy = right_hip[1] - left_hip[1]
+            hip_width = np.sqrt(dx * dx + dy * dy)
+
+            # 腰幅が極端に小さい場合は無効
+            if hip_width > 0:
+                return ((center_x, center_y), hip_width, True)
+
+        # 両方検出されていない、または腰幅が0の場合は無効
+        return ((0.0, 0.0), 1.0, False)
+
+    def get_pose_data_for_dataset(
+        self,
+        track_id: Optional[int] = None
+    ) -> tuple:
+        """
+        InMemoryPoseSequenceDatasetへの入力用データを取得
+
+        Args:
+            track_id: 特定のトラッキングIDのみ抽出（Noneの場合は全データ）
+
+        Returns:
+            (pose_data, frames) のタプル
+            - pose_data: 正規化済み骨格データ (num_frames, 34) [17キーポイント × 2座標]
+            - frames: フレーム番号配列 (num_frames,)
+        """
+        if not self.is_normalized:
+            raise ValueError(
+                "データが正規化されていません。先に normalize_poses() を実行してください。"
+            )
+
+        if not self.frame_data_list:
+            return np.array([]).reshape(0, 34), np.array([])
+
+        pose_list = []
+        frame_list = []
+
+        for frame_data in self.frame_data_list:
+            for person in frame_data.persons:
+                # track_idが指定されている場合はフィルタリング
+                if track_id is not None and person.track_id != track_id:
+                    continue
+
+                # キーポイントのx, y座標のみを抽出 (17, 2) -> (34,)
+                keypoints_xy = person.keypoints[:, :2].flatten()
+                pose_list.append(keypoints_xy)
+                frame_list.append(frame_data.frame_num)
+
+        if not pose_list:
+            return np.array([]).reshape(0, 34), np.array([])
+
+        pose_data = np.array(pose_list, dtype=np.float32)
+        frames = np.array(frame_list, dtype=np.int64)
+
+        return pose_data, frames
+
+    def get_all_track_ids(self) -> List[int]:
+        """
+        保持している全てのトラッキングIDを取得
+
+        Returns:
+            トラッキングIDのリスト（ソート済み）
+        """
+        track_ids = set()
+        for frame_data in self.frame_data_list:
+            for person in frame_data.persons:
+                track_ids.add(person.track_id)
+        return sorted(track_ids)
 
     def export_csv(
         self,
@@ -286,31 +477,6 @@ class TrackingExporter:
         print(f"  出力対象役割: {roles_to_export}")
         print(f"  出力トラッキングID: {sorted(target_track_ids)}")
         print(f"  総データ行数: {exported_count}")
-
-    def export_separate_player_csvs(
-        self,
-        output_dir: str,
-        player_roles: Dict[int, str],
-        base_filename: str = "player"
-    ):
-        """
-        手前選手と相手選手を別々のCSVファイルに出力
-
-        Args:
-            output_dir: 出力ディレクトリ
-            player_roles: トラッキングIDごとの役割
-            base_filename: ベースファイル名
-        """
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        # 手前選手のCSV
-        near_output = output_path / f"{base_filename}_near.csv"
-        self.export_player_csv(str(near_output), player_roles, roles_to_export=["near_player"])
-
-        # 相手選手のCSV
-        far_output = output_path / f"{base_filename}_far.csv"
-        self.export_player_csv(str(far_output), player_roles, roles_to_export=["far_player"])
 
     def get_statistics(self) -> Dict:
         """
