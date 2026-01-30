@@ -1,14 +1,12 @@
 """
 卓球台検出モジュール
 """
-import cv2
 import numpy as np
 from typing import Optional, Tuple, List
-from collections import defaultdict
-
-from ultralytics import YOLO
 
 from src.core.data_classes import TableInfo
+
+from ultralytics import YOLO
 
 
 class TableDetector:

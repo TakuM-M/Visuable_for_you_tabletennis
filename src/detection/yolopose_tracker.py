@@ -1,15 +1,10 @@
 """
 YOLOv11-Pose を用いた人物トラッキングモジュール
-
 """
-
 import cv2
 import numpy as np
-import sys
-from pathlib import Path
 from typing import List, Set
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.core.data_classes import PersonTrack
 
 from ultralytics import YOLO
@@ -71,7 +66,6 @@ class YOLOPose_Tracker:
         Returns:
             検出された人物のリスト
         """
-        # YOLOで推論（トラッキング有効）
         results = self.model.track(
             frame,
             conf=self.conf_threshold,
@@ -81,20 +75,19 @@ class YOLOPose_Tracker:
         )
 
         persons = []
-
         if len(results) == 0:
             return persons
 
+        # YOLOの検出結果
+        # results[0]（Resultsオブジェクト） 検出結果
+        # result.boxes (Boxesオブジェクト)
+        # result.keypoints (Keypointsオブジェクト)
         result = results[0]
-
-        # トラッキング結果が存在するか確認
         if result.boxes is None or len(result.boxes) == 0:
             return persons
-
         if result.keypoints is None:
             return persons
 
-        # 各検出結果を処理
         for i in range(len(result.boxes)):
             box = result.boxes[i]
             kps = result.keypoints[i]
@@ -149,7 +142,6 @@ class YOLOPose_Tracker:
         Returns:
             フィルタリングされた人物のリスト
         """
-        # まず通常のトラッキングを実行
         all_persons = self.track_frame(frame, persist=persist)
 
         if table_info is None:

@@ -119,7 +119,7 @@ class PlayerPoseExporter:
         print(f"CSV出力: {csv_output}\n")
 
         try:
-            table_info = self._detect_table(cap, max_detection_attempts)
+            table_info = self._detect_table(cap, max_detection_attempts, min_confidence=0.6)
 
             if table_info is None:
                 raise RuntimeError("エラー: 卓球台を検出できませんでした")
@@ -159,7 +159,7 @@ class PlayerPoseExporter:
         self,
         cap: cv2.VideoCapture,
         max_attempts: int,
-        min_confidence: float = 0.7
+        min_confidence: float = 0.6,
     ):
         """
         動画の異なる位置からサンプリングして検出を試行
