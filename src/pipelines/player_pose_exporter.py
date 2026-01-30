@@ -21,6 +21,7 @@ class PlayerPoseExporter:
         table_model_path: str,
         pose_model_path: str,
         device: str = 'cuda',
+        table_cache_valid_frames: int = 1000,
         max_players: int = 4,
         min_player_score: float = 0.3,
     ):
@@ -29,6 +30,7 @@ class PlayerPoseExporter:
             table_model_path: 卓球台検出モデルのパス
             pose_model_path: 姿勢推定モデルのパス
             device: 使用デバイス ('cuda' or 'cpu')
+            table_cache_valid_frames: 卓球台検出のキャッシュ有効フレーム数
             max_players: 最大プレイヤー数
             min_player_score: プレイヤー判定の最小スコア閾値
         """
@@ -37,9 +39,13 @@ class PlayerPoseExporter:
         self.device = device
         self.max_players = max_players
         self.min_player_score = min_player_score
+        self.table_cache_valid_frames = table_cache_valid_frames
 
         # コンポーネントの初期化
-        self.table_detector = TableDetector(yolo_model_path=table_model_path)
+        self.table_detector = TableDetector(
+            yolo_model_path=table_model_path,
+            cache_valid_frames=table_cache_valid_frames
+            )
         self.pose_tracker = YOLOPose_Tracker(
             model_path=pose_model_path,
             device=device
@@ -149,25 +155,73 @@ class PlayerPoseExporter:
             cap.release()
             video_writer.release()
 
-    def _detect_table(self, cap: cv2.VideoCapture, max_attempts: int):
-        """卓球台を検出"""
-        print("卓球台を検出中...")
-        table_info = None
+    def _detect_table(
+        self,
+        cap: cv2.VideoCapture,
+        max_attempts: int,
+        min_confidence: float = 0.7
+    ):
+        """
+        動画の異なる位置からサンプリングして検出を試行
+        sanple_step=総フレーム数/最大試行回数
+
+        Args:
+            cap: ビデオキャプチャオブジェクト
+            max_attempts: 最大試行回数
+            min_confidence: 検出に必要な最小信頼度閾値（デフォルト: 0.7）
+
+        Returns:
+            TableInfo: 検出された卓球台情報、失敗時はNone
+        """
+        print(f"\n卓球台を検出中（最大{max_attempts}回試行、信頼度閾値: {min_confidence:.2f}）...")
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            print("警告: 動画の総フレーム数を取得できませんでした")
+            total_frames = 10000  # フォールバック値
+
+        # 動画全体から均等にサンプリング位置を計算
+        # ex: max_attempts=100, total_frames=3000 → 30フレームごとにサンプリング
+        sample_step = max(1, total_frames // max_attempts)
+        print(f"  総フレーム数: {total_frames}")
+        print(f"  サンプリング間隔: {sample_step}フレーム\n")
 
         for attempt in range(max_attempts):
+            # サンプリング位置を計算（動画全体から均等に分散）
+            frame_pos = attempt * sample_step
+            # 動画の範囲を超えないようにクリップ
+            frame_pos = min(frame_pos, total_frames - 1)
+
+            # 指定位置にシーク
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_pos)
+
             ret, frame = cap.read()
             if not ret:
-                raise RuntimeError("エラー: 動画の終端に達しました")
+                print(f"警告: フレーム読み込み失敗（試行 {attempt + 1}/{max_attempts}, フレーム位置: {frame_pos}）")
+                continue
 
-            table_info = self.table_detector.detect_table_from_frame(
-                frame, frame_idx=attempt, force_detect=True
+            # 実際のフレーム位置を取得（シークが正確でない場合がある）
+            actual_frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+
+            # 卓球台を検出（force_detect=Trueでキャッシュを無視）
+            table_info = self.table_detector.detect_table_frame(
+                frame=frame,
+                frame_idx=actual_frame_idx,
+                force_detect=True
             )
 
             if table_info is not None:
-                print(f"✓ 卓球台を検出しました（フレーム {attempt + 1}、信頼度: {table_info.confidence:.2f}）\n")
-                break
+                if table_info.confidence >= min_confidence:
+                    print(f"✓ 卓球台を検出しました（試行 {attempt + 1}/{max_attempts}）")
+                    print(f"  フレーム位置: {actual_frame_idx}/{total_frames} ({actual_frame_idx/total_frames*100:.1f}%)")
+                    print(f"  信頼度: {table_info.confidence:.3f}")
+                    print(f"  座標: {table_info.bbox}")
+                    return table_info
+                else:
+                    print(f"  信頼度不足: {table_info.confidence:.3f} < {min_confidence:.2f} (試行 {attempt + 1}/{max_attempts}, フレーム: {actual_frame_idx})")
 
-        return table_info
+        print(f"✗ {max_attempts}回の試行で十分な信頼度の卓球台を検出できませんでした")
+        return None
 
     def _process_frames(
         self,
