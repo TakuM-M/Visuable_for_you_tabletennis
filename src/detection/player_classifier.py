@@ -1,6 +1,5 @@
 """
-映像から獲得した全人間の骨格データと卓球台の位置情報をもとに、
-トラッキングすべきプレイヤーを選定するコンポーネント
+映像から獲得した人間骨格データと卓球台情報をもとにトラッキングすべきプレイヤーを選定するコンポーネント
 """
 
 from typing import List, Dict
@@ -19,14 +18,12 @@ MAX_CONSECUTIVE_OTHER_COUNT = 30  # other判定が30回連続したら候補を�
 class PlayerClassifier:
     """
     プレイヤー分類クラス
-
-    複数フレームにわたって検出された人物トラッキング情報から、
-    実際のプレイヤーを特定します。
+    
+    人間情報と卓球台情報から選手であるトラッキングIDを判定
 
     選定基準:
-    1. tracking継続時間が長い
-    2. 総運動量が多い
-    3. 卓球台の近くにいることが多い
+    1. 総運動量が多い
+    2. 卓球台の近くにいることが多い
     """
 
     def __init__(
@@ -80,7 +77,6 @@ class PlayerClassifier:
             table_info: 卓球台情報
             frame_idx: 現在のフレーム番号
         """
-        # 現在のフレーム番号を更新
         self.current_frame_idx = frame_idx
 
         current_track_ids = set()
@@ -113,7 +109,6 @@ class PlayerClassifier:
                     movement_history=[movement]
                 )
             else:
-                # 既存の候補を更新
                 candidate = self.candidates[track_id]
                 candidate.last_seen_frame = frame_idx
                 candidate.positions.append("near" if is_near else "far")
@@ -122,10 +117,9 @@ class PlayerClassifier:
                 candidate.near_table_count += 1 if is_near else 0
                 candidate.total_frames += 1
 
-                # 運動量履歴を追加（サイズ制限あり）
                 candidate.movement_history.append(movement)
                 if len(candidate.movement_history) > self.recent_frames_window:
-                    candidate.movement_history.pop(0)  # 古いデータを削除
+                    candidate.movement_history.pop(0)
 
         # 古い候補をクリーンアップ
         self._cleanup_old_candidates()
@@ -185,15 +179,13 @@ class PlayerClassifier:
         """
         蓄積された情報からプレイヤーのtracking IDを決定
 
-        選定基準（優先順位順）:
-        1. tracking継続時間が長い（tracking_duration_frames）
-        2. 総運動量が多い（total_movement）
-        3. 卓球台の近くにいることが多い（near_table_ratio）
+        選定基準:
+        1. 総運動量が多い（total_movement）
+        2. 卓球台の近くにいることが多い（near_table_ratio）
+        3. 最近のフレームで見られていること
 
-        重要: 長期間見られていない候補は除外されます
-        （トラッキングIDが変わった場合に古いIDを返さないため）
-
-        other判定が連続で一定回数を超えた候補は自動的にリセットされます。
+        重要: 長期間プレイヤー候補として情報が蓄積されていない場合は削除
+        　　  other判定が連続で一定回数を超えた候補は自動的にリセット
 
         Args:
             max_inactive_frames_for_selection: プレイヤー選定時に許容する最大の非アクティブフレーム数
@@ -211,8 +203,7 @@ class PlayerClassifier:
 
         if not valid_candidates:
             return [], []
-
-        # スコアリング
+        
         scored_candidates = []
         for candidate in valid_candidates:
             score = self._calculate_player_score(candidate)
@@ -238,13 +229,8 @@ class PlayerClassifier:
     def _calculate_player_score(self, candidate: PlayerCandidate) -> float:
         """
         プレイヤー候補のスコアを計算
-
-        スコアは以下の要素で構成されます:
         1. 運動量スコア: 直近フレームでの平均的な動きの多さ（重み: 0.8）
         2. 卓球台近接率スコア: 卓球台の近くにいた割合（重み: 0.2）
-
-        運動量は直近のフレームのみを考慮することで、
-        最初は静止していて後から動き出したプレイヤーを正しく検出できます。
 
         Args:
             candidate: プレイヤー候補
@@ -256,7 +242,6 @@ class PlayerClassifier:
         avg_movements = []
         for c in self.candidates.values():
             if c.movement_history and len(c.movement_history) > 0:
-                # 直近フレームの平均運動量を計算
                 avg_movements.append(sum(c.movement_history) / len(c.movement_history))
             else:
                 avg_movements.append(0.0)
@@ -303,19 +288,15 @@ class PlayerClassifier:
         Returns:
             正規化距離（卓球台の対角線長で正規化）
         """
-        # 卓球台のバウンディングボックス
         table_x1, table_y1, table_x2, table_y2 = table_info.bbox
 
-        # 人物のバウンディングボックスの中心点を使用
         person_center_x = (person.bbox[0] + person.bbox[2]) / 2
         person_center_y = (person.bbox[1] + person.bbox[3]) / 2
 
-        # 卓球台のバウンディングボックスまでの距離を計算
         dx = max(table_x1 - person_center_x, 0, person_center_x - table_x2)
         dy = max(table_y1 - person_center_y, 0, person_center_y - table_y2)
         distance = np.sqrt(dx**2 + dy**2)
 
-        # 卓球台の対角線長で正規化
         table_diagonal = np.sqrt(
             (table_x2 - table_x1)**2 + (table_y2 - table_y1)**2
         )
@@ -334,13 +315,10 @@ class PlayerClassifier:
     ) -> float:
         """
         キーポイント間の移動量を計算
-
-        下半身の動きを重視した運動量計算を行います。
         - 下半身（腰、膝、足首）: 75%の重み
         - 上半身（顔、肩、肘、手首）: 25%の重み
-
-        これにより、審判のように上半身だけ動く人物と、
-        プレイヤーのように全身を使って動く人物を区別できます。
+        判定を行う：
+        審判のように上半身だけ動く人物 or プレイヤーのように全身を使って動く人物
 
         Args:
             prev_keypoints: 前フレームのキーポイント (17, 3)
@@ -349,58 +327,40 @@ class PlayerClassifier:
         Returns:
             移動量（ピクセル単位の重み付き平均移動距離）
         """
-        # YOLOv8-Pose キーポイント定義:
-        # 0-10: 顔・肩・肘・手首（上半身）
-        # 11-12: 腰
-        # 13-14: 膝
-        # 15-16: 足首
-
         # 下半身キーポイントのインデックス（腰、膝、足首）
         lower_body_indices = [11, 12, 13, 14, 15, 16]
         # 上半身キーポイントのインデックス（顔、肩、肘、手首）
         upper_body_indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-        # 下半身の移動量を計算
         lower_body_movement = 0.0
         lower_body_valid_count = 0
-
         for idx in lower_body_indices:
             if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
-                distance = np.linalg.norm(
-                    curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
-                )
+                distance = np.linalg.norm(curr_keypoints[idx, :2] - prev_keypoints[idx, :2])
                 # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
                 if distance >= MOVEMENT_NOISE_THRESHOLD:
                     lower_body_movement += distance
                     lower_body_valid_count += 1
 
-        # 上半身の移動量を計算
         upper_body_movement = 0.0
         upper_body_valid_count = 0
-
         for idx in upper_body_indices:
             if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
-                distance = np.linalg.norm(
-                    curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
-                )
+                distance = np.linalg.norm(curr_keypoints[idx, :2] - prev_keypoints[idx, :2])
                 # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
                 if distance >= MOVEMENT_NOISE_THRESHOLD:
                     upper_body_movement += distance
                     upper_body_valid_count += 1
 
-        # 有効なキーポイントがない場合は0を返す
         if lower_body_valid_count == 0 and upper_body_valid_count == 0:
             return 0.0
 
-        # 各部位の平均移動量を計算
         lower_avg = (lower_body_movement / lower_body_valid_count
                      if lower_body_valid_count > 0 else 0.0)
         upper_avg = (upper_body_movement / upper_body_valid_count
                      if upper_body_valid_count > 0 else 0.0)
-
-        # 重み付き平均: 下半身75%, 上半身25%
         movement = 0.75 * lower_avg + 0.25 * upper_avg
-
+        
         return movement
 
     def reset(self) -> None:

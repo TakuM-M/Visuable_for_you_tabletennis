@@ -92,13 +92,11 @@ class YOLOPose_Tracker:
             box = result.boxes[i]
             kps = result.keypoints[i]
 
-            # トラッキングIDを取得
             if box.id is not None:
                 track_id = int(box.id.item())
             else:
                 track_id = i  # IDがない場合はインデックスを使用
 
-            # バウンディングボックス
             bbox_xyxy = box.xyxy[0].cpu().numpy()
             bbox = (
                 int(bbox_xyxy[0]),
@@ -106,13 +104,9 @@ class YOLOPose_Tracker:
                 int(bbox_xyxy[2]),
                 int(bbox_xyxy[3])
             )
-
-            # 信頼度
             confidence = float(box.conf.item())
-
             # キーポイント (17, 3) [x, y, confidence]
             keypoints = kps.data[0].cpu().numpy()
-
             persons.append(PersonTrack(
                 track_id=track_id,
                 bbox=bbox,
@@ -145,11 +139,9 @@ class YOLOPose_Tracker:
         all_persons = self.track_frame(frame, persist=persist)
 
         if table_info is None:
-            # 卓球台情報がない場合は全員を返す
             return all_persons
 
         filtered_persons = []
-
         for person in all_persons:
             track_id = person.track_id
             distance = self._calculate_table_distance(person, table_info)
@@ -179,14 +171,11 @@ class YOLOPose_Tracker:
         Returns:
             正規化距離（卓球台の対角線長で正規化）
         """
-        # 卓球台のバウンディングボックス
         table_x1, table_y1, table_x2, table_y2 = table_info.bbox
 
-        # 人物のバウンディングボックスの中心点を使用
         person_center_x = (person.bbox[0] + person.bbox[2]) / 2
         person_center_y = (person.bbox[1] + person.bbox[3]) / 2
 
-        # 卓球台のバウンディングボックスまでの距離を計算
         dx = max(table_x1 - person_center_x, 0, person_center_x - table_x2)
         dy = max(table_y1 - person_center_y, 0, person_center_y - table_y2)
         distance = np.sqrt(dx**2 + dy**2)

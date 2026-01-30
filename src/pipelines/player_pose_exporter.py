@@ -258,13 +258,12 @@ class PlayerPoseExporter:
                 frame_count += 1
                 pbar.update(1)
 
-                # 指定FPSで処理（スキップフレームは何もしない）
                 if frame_count % frame_step != 0:
                     continue
-
+                
                 processed_count += 1
-
-                # 人物を検出・追跡
+                
+                # 卓球台の位置情報からフィルタリングした人物のみを返す
                 if table_info:
                     persons = self.pose_tracker.track_frame_with_table_filter(frame, table_info)
                 else:
