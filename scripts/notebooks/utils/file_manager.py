@@ -420,7 +420,6 @@ class ModelFileManager:
 
         source_dir = Path(source_dir)
 
-        # タイムスタンプ付きディレクトリを作成
         if use_timestamp:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             drive_path = os.path.join(drive_path, timestamp)
