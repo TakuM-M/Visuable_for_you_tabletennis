@@ -1,24 +1,11 @@
-"""ラベル作成ツール，動画を再生しながらプレー中/プレー外のラベルを手動で付けるGUIツール
+"""LabelMaker class for manual annotation of play/non-play scenes in table tennis videos.
 
-    Args:
-        video_path: 動画ファイルのパス
-        output_path: 出力CSVパス（デフォルトは動画名_labels.csv）
-        fps_divisor: 表示フレームレートの倍率（2なら半分速度、0.5なら2倍速）
-        
-    Returns:
-        動画に対するラベルをフレーム単位およびシーン単位で保存
-Usage:
-python -m src.dataset.annotation.label_maker \
-    data/raw/sample_video_01_01.MOV \
-    -o data/detect/sample_video_01_01/play_labels.csv \
-    --fps-divisor 1
+This module provides an interactive GUI tool for labeling video frames.
 """
 import cv2
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import argparse
-import json
 
 
 class LabelMaker:
@@ -301,30 +288,3 @@ class LabelMaker:
         self._save_labels()
         self.cap.release()
         cv2.destroyAllWindows()
-
-
-def main():
-    parser = argparse.ArgumentParser(description='ラベル作成ツール')
-    parser.add_argument('video', type=str, help='動画ファイルのパス')
-    parser.add_argument('-o', '--output', type=str, default=None,
-                       help='出力CSVパス（デフォルト: 動画名_labels.csv）')
-    parser.add_argument('--fps-divisor', type=float, default=1.0,
-                       help='表示速度の倍率（2なら半分速度、0.5なら2倍速）')
-
-    args = parser.parse_args()
-
-    try:
-        maker = LabelMaker(
-            video_path=args.video,
-            output_path=args.output,
-            fps_divisor=args.fps_divisor
-        )
-        maker.run()
-    except Exception as e:
-        print(f"エラー: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-if __name__ == "__main__":
-    main()
