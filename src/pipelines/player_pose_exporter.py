@@ -24,6 +24,9 @@ class PlayerPoseExporter:
         table_cache_valid_frames: int = 1000,
         max_players: int = 4,
         min_player_score: float = 0.3,
+        min_consecutive_frames: int = 30,
+        max_frame_gap: int = 5,
+        min_keypoint_confidence: float = 0.3
     ):
         """
         Args:
@@ -33,6 +36,9 @@ class PlayerPoseExporter:
             table_cache_valid_frames: 卓球台検出のキャッシュ有効フレーム数
             max_players: 最大プレイヤー数
             min_player_score: プレイヤー判定の最小スコア閾値
+            min_consecutive_frames: トラッキング連続性フィルタの最小フレーム数
+            max_frame_gap: トラッキング連続性フィルタの最大フレーム間隔
+            min_keypoint_confidence: 骨格正規化時のキーポイント最小信頼度
         """
         self.table_model_path = table_model_path
         self.pose_model_path = pose_model_path
@@ -41,11 +47,16 @@ class PlayerPoseExporter:
         self.min_player_score = min_player_score
         self.table_cache_valid_frames = table_cache_valid_frames
 
+        # TrackingExporter用の設定
+        self.min_consecutive_frames = min_consecutive_frames
+        self.max_frame_gap = max_frame_gap
+        self.min_keypoint_confidence = min_keypoint_confidence
+
         # コンポーネントの初期化
         self.table_detector = TableDetector(
             yolo_model_path=table_model_path,
             cache_valid_frames=table_cache_valid_frames
-            )
+        )
         self.pose_tracker = YOLOPose_Tracker(
             model_path=pose_model_path,
             device=device
@@ -53,6 +64,11 @@ class PlayerPoseExporter:
         self.player_classifier = PlayerClassifier(
             max_players=max_players,
             min_player_score=min_player_score
+        )
+        self.tracking_exporter = TrackingExporter(
+            min_consecutive_frames=min_consecutive_frames,
+            max_frame_gap=max_frame_gap,
+            min_confidence=min_keypoint_confidence
         )
         self.visualizer = PlayerClassifierVisualizer(
             self.table_detector,
@@ -66,8 +82,6 @@ class PlayerPoseExporter:
         output_video: str,
         csv_output: str,
         target_fps: float = 30.0,
-        min_consecutive_frames: int = 30,
-        max_frame_gap: int = 5,
         max_detection_attempts: int = 100,
         show_progress: bool = True
     ) -> Dict[str, Any]:
@@ -79,8 +93,6 @@ class PlayerPoseExporter:
             output_video: 出力動画パス
             csv_output: CSV出力パス
             target_fps: 処理FPS
-            min_consecutive_frames: CSV出力時に保持する最小検出連続フレーム数
-            max_frame_gap: 連続性を判定する際の最大フレーム間隔
             max_detection_attempts: 卓球台検出の最大試行回数
             show_progress: プログレスバーを表示するか
 
@@ -115,7 +127,6 @@ class PlayerPoseExporter:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(output_video, fourcc, target_fps, (width, height))
 
-        exporter = TrackingExporter()
         print(f"CSV出力: {csv_output}\n")
 
         try:
@@ -129,7 +140,6 @@ class PlayerPoseExporter:
             results = self._process_frames(
                 cap=cap,
                 video_writer=video_writer,
-                exporter=exporter,
                 table_info=table_info,
                 width=width,
                 height=height,
@@ -140,11 +150,8 @@ class PlayerPoseExporter:
             )
 
             self._export_csv(
-                exporter=exporter,
                 csv_output=csv_output,
-                player_ids=results['player_ids'],
-                min_consecutive_frames=min_consecutive_frames,
-                max_frame_gap=max_frame_gap
+                player_ids=results['player_ids']
             )
 
             print(f"\n出力ビデオ: {output_video} ({target_fps:.1f}fps)")
@@ -227,7 +234,6 @@ class PlayerPoseExporter:
         self,
         cap: cv2.VideoCapture,
         video_writer: cv2.VideoWriter,
-        exporter: TrackingExporter,
         table_info,
         width: int,
         height: int,
@@ -281,12 +287,11 @@ class PlayerPoseExporter:
                     if removed_ids:
                         self.pose_tracker.remove_validated_track_ids(removed_ids)
 
-                # CSV出力: プレイヤーとして判定された人物のみを記録
                 if player_ids:
                     player_persons = [p for p in persons if p.track_id in player_ids]
                     if player_persons:
                         timestamp = frame_count / video_fps
-                        exporter.add_frame(frame_count, timestamp, player_persons)
+                        self.tracking_exporter.add_frame(frame_count, timestamp, player_persons)
 
                 # 結果を描画
                 display_frame = self.visualizer.draw_results(
@@ -362,21 +367,14 @@ class PlayerPoseExporter:
 
     def _export_csv(
         self,
-        exporter: TrackingExporter,
         csv_output: str,
-        player_ids: Set[int],
-        min_consecutive_frames: int,
-        max_frame_gap: int
+        player_ids: Set[int]
     ):
         """CSV出力"""
-        if exporter:
-            # 連続性フィルタリングを適用
-            exporter.filter_by_consecutive_frames(
-                min_consecutive_frames=min_consecutive_frames,
-                max_frame_gap=max_frame_gap
-            )
+        # 連続性フィルタリングを適用（初期化時の設定を使用）
+        self.tracking_exporter.filter_by_consecutive_frames()
 
-            # プレイヤーの役割情報を作成
-            player_roles = {track_id: "player" for track_id in player_ids}
-            exporter.export_csv(csv_output, player_roles)
-            print(f"\nプレイヤー骨格データをCSVに保存しました: {csv_output}")
+        # プレイヤーの役割情報を作成
+        player_roles = {track_id: "player" for track_id in player_ids}
+        self.tracking_exporter.export_csv(csv_output, player_roles)
+        print(f"\nプレイヤー骨格データをCSVに保存しました: {csv_output}")

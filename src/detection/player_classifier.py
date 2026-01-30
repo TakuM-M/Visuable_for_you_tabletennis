@@ -8,13 +8,6 @@ import numpy as np
 from src.core.data_classes import PersonTrack, TableInfo, PlayerCandidate
 
 
-# パラメータ定数
-NEAR_TABLE_THRESHOLD = 0.1  # 正規化距離0.1以下で「卓球台に近い」と判定（厳しめに調整）
-MOVEMENT_NOISE_THRESHOLD = 5.0  # 5px以下の動きはYOLOのブレ（ノイズ）として無視
-RECENT_FRAMES_WINDOW = 146  # 直近60フレームの運動量を考慮（約2秒 @ 30fps）
-MAX_CONSECUTIVE_OTHER_COUNT = 30  # other判定が30回連続したら候補をリセット（約1秒 @ 30fps）
-
-
 class PlayerClassifier:
     """
     プレイヤー分類クラス
@@ -28,26 +21,28 @@ class PlayerClassifier:
 
     def __init__(
         self,
-        near_table_threshold: float = NEAR_TABLE_THRESHOLD,
+        near_table_threshold: float = 0.1,
         min_tracking_frames: int = 10,
         max_players: int = 2,
         max_inactive_frames: int = 30,
         min_player_score: float = 0.3,
-        recent_frames_window: int = RECENT_FRAMES_WINDOW,
-        max_consecutive_other_count: int = MAX_CONSECUTIVE_OTHER_COUNT
+        recent_frames_window: int = 146,
+        max_consecutive_other_count: int = 30,
+        movement_noise_threshold: float = 5.0
     ):
         """
         PlayerClassifierの初期化
 
         Args:
-            near_table_threshold: 卓球台との正規化距離の閾値
-            min_tracking_frames: プレイヤー候補とみなす最小フレーム数
-            max_players: 検出する最大プレイヤー数
-            max_inactive_frames: この期間見られていない候補を削除するフレーム数
+            near_table_threshold: 卓球台との正規化距離の閾値（デフォルト: 0.1）
+            min_tracking_frames: プレイヤー候補とみなす最小フレーム数（デフォルト: 10）
+            max_players: 検出する最大プレイヤー数（デフォルト: 2）
+            max_inactive_frames: この期間見られていない候補を削除するフレーム数（デフォルト: 30）
             min_player_score: プレイヤーとして判定する最小スコア閾値（0.0-1.0）
-                            この値以下のスコアの候補はプレイヤーから除外される
-            recent_frames_window: 運動量計算に使用する直近フレーム数（デフォルト: 60フレーム）
-            max_consecutive_other_count: other判定が連続でこの回数を超えたら候補をリセット
+                            この値以下のスコアの候補はプレイヤーから除外される（デフォルト: 0.3）
+            recent_frames_window: 運動量計算に使用する直近フレーム数（デフォルト: 146フレーム）
+            max_consecutive_other_count: other判定が連続でこの回数を超えたら候補をリセット（デフォルト: 30）
+            movement_noise_threshold: この値以下の動きはノイズとして無視（デフォルト: 5.0px）
         """
         self.near_table_threshold = near_table_threshold
         self.min_tracking_frames = min_tracking_frames
@@ -56,6 +51,7 @@ class PlayerClassifier:
         self.min_player_score = min_player_score
         self.recent_frames_window = recent_frames_window
         self.max_consecutive_other_count = max_consecutive_other_count
+        self.movement_noise_threshold = movement_noise_threshold
 
         # プレイヤー候補の情報を蓄積
         self.candidates: Dict[int, PlayerCandidate] = {}
@@ -338,7 +334,7 @@ class PlayerClassifier:
             if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
                 distance = np.linalg.norm(curr_keypoints[idx, :2] - prev_keypoints[idx, :2])
                 # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
-                if distance >= MOVEMENT_NOISE_THRESHOLD:
+                if distance >= self.movement_noise_threshold:
                     lower_body_movement += distance
                     lower_body_valid_count += 1
 
@@ -348,7 +344,7 @@ class PlayerClassifier:
             if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
                 distance = np.linalg.norm(curr_keypoints[idx, :2] - prev_keypoints[idx, :2])
                 # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
-                if distance >= MOVEMENT_NOISE_THRESHOLD:
+                if distance >= self.movement_noise_threshold:
                     upper_body_movement += distance
                     upper_body_valid_count += 1
 

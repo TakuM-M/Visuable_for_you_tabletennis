@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
-from ..core.data_classes import PersonTrack, KEYPOINT_NAMES
+from src.core.data_classes import PersonTrack, KEYPOINT_NAMES
 
 
 @dataclass
@@ -22,10 +22,29 @@ class FrameData:
 class TrackingExporter:
     """トラッキング結果の出力クラス"""
 
-    def __init__(self):
-        """出力器の初期化"""
+    def __init__(
+        self,
+        min_consecutive_frames: int = 30,
+        max_frame_gap: int = 5,
+        min_confidence: float = 0.3
+    ):
+        """
+        出力器の初期化
+
+        Args:
+            min_consecutive_frames: 連続性フィルタで保持する最小フレーム数（デフォルト: 30）
+            max_frame_gap: 連続とみなす最大フレーム間隔（デフォルト: 5）
+            min_confidence: 正規化時のキーポイント最小信頼度（デフォルト: 0.3）
+        """
         self.frame_data_list: List[FrameData] = []
         self.is_normalized: bool = False  # 正規化済みフラグ
+
+        # 連続性フィルタリング設定
+        self.min_consecutive_frames = min_consecutive_frames
+        self.max_frame_gap = max_frame_gap
+
+        # 正規化設定
+        self.min_confidence = min_confidence
 
         # キーポイントのインデックス（COCO形式）
         self.LEFT_HIP_IDX = KEYPOINT_NAMES.index("left_hip")
@@ -53,8 +72,8 @@ class TrackingExporter:
 
     def filter_by_consecutive_frames(
         self,
-        min_consecutive_frames: int = 30,
-        max_frame_gap: int = 5
+        min_consecutive_frames: Optional[int] = None,
+        max_frame_gap: Optional[int] = None
     ) -> None:
         """
         連続して出現している区間のみを保持し、断片的な出現を除外する
@@ -65,9 +84,14 @@ class TrackingExporter:
         3. min_consecutive_frames未満の区間を削除
 
         Args:
-            min_consecutive_frames: 保持する最小連続フレーム数
-            max_frame_gap: 連続とみなす最大フレーム間隔
+            min_consecutive_frames: 保持する最小連続フレーム数（Noneの場合は初期化時の値を使用）
+            max_frame_gap: 連続とみなす最大フレーム間隔（Noneの場合は初期化時の値を使用）
         """
+        # Noneの場合はインスタンス変数の値を使用
+        if min_consecutive_frames is None:
+            min_consecutive_frames = self.min_consecutive_frames
+        if max_frame_gap is None:
+            max_frame_gap = self.max_frame_gap
         if not self.frame_data_list:
             return
 
@@ -82,14 +106,12 @@ class TrackingExporter:
 
         # 各トラッキングIDについて連続区間を検出
         valid_frame_sets: Dict[int, set] = {}
-
         for track_id, frame_nums in track_id_frames.items():
             frame_nums_sorted = sorted(set(frame_nums))
 
             # 連続区間を検出
             consecutive_segments = []
             current_segment = [frame_nums_sorted[0]]
-
             for i in range(1, len(frame_nums_sorted)):
                 frame_gap = frame_nums_sorted[i] - frame_nums_sorted[i-1]
 
@@ -148,7 +170,7 @@ class TrackingExporter:
 
     def normalize_poses(
         self,
-        min_confidence: float = 0.3
+        min_confidence: Optional[float] = None
     ) -> Dict[str, any]:
         """
         保持している全フレームの骨格データを正規化する（訓練データと同じ方法）
@@ -159,11 +181,14 @@ class TrackingExporter:
         3. 各キーポイントを相対座標に変換
 
         Args:
-            min_confidence: キーポイントの最小信頼度（これ以下は無効として0に設定）
+            min_confidence: キーポイントの最小信頼度（Noneの場合は初期化時の値を使用）
 
         Returns:
             正規化の統計情報（成功数、失敗数、スケールファクターの統計など）
         """
+        # Noneの場合はインスタンス変数の値を使用
+        if min_confidence is None:
+            min_confidence = self.min_confidence
         if self.is_normalized:
             print("警告: 既に正規化済みです。再度正規化はスキップされます。")
             return {}
