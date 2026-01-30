@@ -40,8 +40,8 @@ env/
 .ipynb_checkpoints
 
 # config_api
-config/
-config/api.config
+configs/
+configs/api.config
 
 # pytest
 .pytest_cache/

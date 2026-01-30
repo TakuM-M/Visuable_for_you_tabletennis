@@ -6,7 +6,7 @@
 from typing import List, Dict
 import numpy as np
 
-from src.detection.data_classes import PersonTrack, TableInfo, PlayerCandidate
+from src.core.data_classes import PersonTrack, TableInfo, PlayerCandidate
 
 
 # パラメータ定数

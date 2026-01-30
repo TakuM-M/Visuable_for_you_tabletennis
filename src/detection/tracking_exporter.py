@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
-from .data_classes import PersonTrack, KEYPOINT_NAMES
+from ..core.data_classes import PersonTrack, KEYPOINT_NAMES
 
 
 @dataclass

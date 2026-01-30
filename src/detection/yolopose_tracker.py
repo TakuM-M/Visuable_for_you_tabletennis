@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Set
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.detection.data_classes import PersonTrack
+from src.core.data_classes import PersonTrack
 
 from ultralytics import YOLO
 

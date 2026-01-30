@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.detection.table_detector import TableDetector
 from src.detection.yolopose_tracker import YOLOPose_Tracker
 from src.detection.player_classifier import PlayerClassifier
-from src.detection.data_classes import TableInfo, PersonTrack
+from src.core.data_classes import TableInfo, PersonTrack
 from src.detection.tracking_exporter import TrackingExporter
 
 

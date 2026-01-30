@@ -9,7 +9,7 @@ import numpy as np
 from typing import Optional, Tuple
 
 from src.utils.video_loader import VideoLoader
-from src.detection.data_classes import TableInfo
+from src.core.data_classes import TableInfo
 
 from ultralytics import YOLO
 

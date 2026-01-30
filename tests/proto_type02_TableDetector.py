@@ -32,7 +32,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.detection.table_detector import TableDetector
-from src.detection.data_classes import TableInfo
+from src.core.data_classes import TableInfo
 
 
 class TableDetectorVisualizer:
