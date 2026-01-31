@@ -161,8 +161,14 @@ class PersonTrack:
     """トラッキングされた人物の情報"""
     track_id: int  # トラッキングID
     bbox: Tuple[int, int, int, int]  # バウンディングボックス (x1, y1, x2, y2)
-    keypoints: np.ndarray  # キーポイント座標 (17, 3) [x, y, confidence]
+    keypoints: np.ndarray  # キーポイント座標（生座標） (17, 3) [x, y, confidence]
     confidence: float  # 検出信頼度
+
+    # 正規化データ（normalize_poses実行後に設定される）
+    normalized_keypoints: Optional[np.ndarray] = None  # 正規化座標 (17, 2) [norm_x, norm_y]
+    hip_center: Optional[Tuple[float, float]] = None  # 腰の中心座標（生座標系）
+    scale_factor: Optional[float] = None  # スケール係数（腰幅）
+    is_normalized_valid: bool = False  # 正規化が成功したかどうか
 
     def get_center(self) -> Tuple[float, float]:
         """バウンディングボックスの中心座標を取得"""

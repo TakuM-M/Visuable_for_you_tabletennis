@@ -119,7 +119,7 @@ class PlayerPoseExporter:
 
         # 動画の初期化
         cap, video_writer, video_info = self._initialize_video_processing(
-            input_video, output_video, target_fps
+            input_video, output_video, csv_output, target_fps
         )
 
         try:
@@ -152,6 +152,7 @@ class PlayerPoseExporter:
         self,
         input_video: str,
         output_video: str,
+        csv_output: str,
         target_fps: float
     ) -> Tuple[cv2.VideoCapture, cv2.VideoWriter, Dict[str, Any]]:
         """
@@ -160,6 +161,7 @@ class PlayerPoseExporter:
         Args:
             input_video: 入力動画パス
             output_video: 出力動画パス
+            csv_output: CSV出力パス
             target_fps: 目標FPS
 
         Returns:
@@ -167,6 +169,7 @@ class PlayerPoseExporter:
 
         Raises:
             VideoInputError: 動画ファイルが開けない場合
+            VideoProcessingError: VideoWriterの初期化に失敗した場合
         """
         print(f"\n動画ファイルを開いています: {input_video}...")
         cap = cv2.VideoCapture(input_video)
@@ -193,11 +196,19 @@ class PlayerPoseExporter:
         # 動画情報を表示
         self._print_video_info(video_info)
 
+        # 出力ディレクトリを作成
+        output_dir = Path(output_video).parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+
         # VideoWriterの初期化
         fourcc = cv2.VideoWriter_fourcc(*self.VIDEO_CODEC_FOURCC)
         video_writer = cv2.VideoWriter(output_video, fourcc, target_fps, (width, height))
 
-        print(f"CSV出力パス: {output_video}\n")
+        if not video_writer.isOpened():
+            raise VideoProcessingError(f"VideoWriterの初期化に失敗しました: {output_video}")
+
+        print(f"出力動画パス: {output_video}")
+        print(f"CSV出力パス: {csv_output}\n")
 
         return cap, video_writer, video_info
 

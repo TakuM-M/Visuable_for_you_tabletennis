@@ -216,13 +216,21 @@ class TrackingExporter:
 
                 if not is_valid:
                     invalid_count += 1
-                    # 正規化できない場合は元の座標をそのまま保持
+                    # 正規化できない場合はフラグのみ設定
+                    person.is_normalized_valid = False
                     continue
 
                 valid_count += 1
                 scale_factors.append(hip_width)
 
-                # 各キーポイントを正規化（インプレース更新）
+                # 正規化メタデータを保存
+                person.hip_center = hip_center
+                person.scale_factor = hip_width
+                person.is_normalized_valid = True
+
+                # 正規化座標を別配列として作成（生座標は保持）
+                normalized_kps = np.zeros((17, 2), dtype=np.float32)
+
                 for i in range(17):
                     kp_x, kp_y, conf = person.keypoints[i]
 
@@ -232,12 +240,15 @@ class TrackingExporter:
                         relative_y = kp_y - hip_center[1]
 
                         # 腰幅でスケール正規化
-                        person.keypoints[i, 0] = relative_x / hip_width
-                        person.keypoints[i, 1] = relative_y / hip_width
+                        normalized_kps[i, 0] = relative_x / hip_width
+                        normalized_kps[i, 1] = relative_y / hip_width
                     else:
                         # 信頼度が低い場合は0に設定
-                        person.keypoints[i, 0] = 0.0
-                        person.keypoints[i, 1] = 0.0
+                        normalized_kps[i, 0] = 0.0
+                        normalized_kps[i, 1] = 0.0
+
+                # 正規化座標を保存
+                person.normalized_keypoints = normalized_kps
 
         self.is_normalized = True
 
@@ -375,13 +386,23 @@ class TrackingExporter:
         # CSVヘッダーを作成
         header = ["track_id", "frame", "timestamp", "role", "confidence", "bbox_x1", "bbox_y1", "bbox_x2", "bbox_y2"]
 
-        # キーポイントのカラムを追加
+        # 生座標のキーポイントカラムを追加
         for kp_name in KEYPOINT_NAMES:
             header.extend([
                 f"{kp_name}_x",
                 f"{kp_name}_y",
                 f"{kp_name}_conf"
             ])
+
+        # 正規化座標のカラムを追加（normalize_poses実行後のみ）
+        if self.is_normalized:
+            for kp_name in KEYPOINT_NAMES:
+                header.extend([
+                    f"{kp_name}_norm_x",
+                    f"{kp_name}_norm_y"
+                ])
+            # 正規化メタデータ
+            header.extend(["hip_center_x", "hip_center_y", "scale_factor", "is_normalized_valid"])
 
         # CSV書き込み
         with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -408,13 +429,34 @@ class TrackingExporter:
                         person.bbox[3]
                     ]
 
-                    # キーポイント座標を追加
+                    # 生座標のキーポイントを追加
                     for kp in person.keypoints:
                         row.extend([
                             f"{kp[0]:.2f}",
                             f"{kp[1]:.2f}",
                             f"{kp[2]:.3f}"
                         ])
+
+                    # 正規化座標を追加（normalize_poses実行後のみ）
+                    if self.is_normalized:
+                        if person.normalized_keypoints is not None:
+                            for norm_kp in person.normalized_keypoints:
+                                row.extend([
+                                    f"{norm_kp[0]:.6f}",
+                                    f"{norm_kp[1]:.6f}"
+                                ])
+                            # 正規化メタデータ
+                            row.extend([
+                                f"{person.hip_center[0]:.2f}" if person.hip_center else "0.0",
+                                f"{person.hip_center[1]:.2f}" if person.hip_center else "0.0",
+                                f"{person.scale_factor:.2f}" if person.scale_factor else "0.0",
+                                "1" if person.is_normalized_valid else "0"
+                            ])
+                        else:
+                            # 正規化失敗時は0で埋める
+                            for _ in range(17):
+                                row.extend(["0.0", "0.0"])
+                            row.extend(["0.0", "0.0", "0.0", "0"])
 
                     writer.writerow(row)
 

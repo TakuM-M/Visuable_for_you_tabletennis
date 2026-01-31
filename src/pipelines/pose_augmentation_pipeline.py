@@ -183,14 +183,32 @@ class PoseAugmentationPipeline:
             if col not in df.columns:
                 raise DataInputError("", f"必須カラム '{col}' が見つかりません")
 
-        # キーポイントカラムの確認
-        for kp_name in self.KEYPOINT_NAMES:
-            norm_x = f'{kp_name}_norm_x'
-            norm_y = f'{kp_name}_norm_y'
-            if norm_x not in df.columns or norm_y not in df.columns:
-                raise DataInputError("", f"キーポイント '{kp_name}' のカラムが見つかりません")
+        # 正規化座標カラムの確認
+        has_normalized = all(
+            f'{kp_name}_norm_x' in df.columns and f'{kp_name}_norm_y' in df.columns
+            for kp_name in self.KEYPOINT_NAMES
+        )
 
-        print(f"  ✓ フォーマット検証完了\n")
+        if not has_normalized:
+            raise DataInputError(
+                "",
+                "正規化座標カラム（*_norm_x, *_norm_y）が見つかりません。\n"
+                "PlayerPoseExporterでnormalize_poses()を実行してからエクスポートしてください。"
+            )
+
+        # 正規化メタデータの確認（推奨）
+        has_metadata = all(
+            col in df.columns
+            for col in ['hip_center_x', 'hip_center_y', 'scale_factor']
+        )
+
+        if not has_metadata:
+            print("  ⚠ 警告: 正規化メタデータ（hip_center, scale_factor）が見つかりません")
+            print("         逆変換が必要な場合は正しく動作しない可能性があります")
+
+        print(f"  ✓ フォーマット検証完了")
+        print(f"    - 正規化座標: あり")
+        print(f"    - 正規化メタデータ: {'あり' if has_metadata else 'なし'}\n")
 
     def _augment_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
