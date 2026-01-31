@@ -2,7 +2,8 @@
 パイプライン処理モジュール
 """
 from .player_pose_exporter import PlayerPoseExporter
-from .pose_augmentation_pipeline import PoseAugmentationPipeline
+from .pose_augmentation import PoseAugmentationPipeline
+from .training_pipeline import TrainingPipeline
 from .config import (
     PipelineConfig,
     TableDetectionConfig,
@@ -11,7 +12,12 @@ from .config import (
     TrackingExportConfig,
     VideoProcessingConfig,
     AugmentationConfig,
-    AugmentationPipelineConfig
+    AugmentationPipelineConfig,
+    ModelConfig,
+    DatasetConfig,
+    OptimizerConfig,
+    TrainingConfig,
+    TrainingPipelineConfig
 )
 from .exceptions import (
     PipelineError,
@@ -20,13 +26,15 @@ from .exceptions import (
     VideoProcessingError,
     ExportError,
     DataInputError,
-    AugmentationError
+    AugmentationError,
+    TrainingError
 )
 
 __all__ = [
     # Pipelines
     'PlayerPoseExporter',
     'PoseAugmentationPipeline',
+    'TrainingPipeline',
     # Configs
     'PipelineConfig',
     'TableDetectionConfig',
@@ -36,6 +44,11 @@ __all__ = [
     'VideoProcessingConfig',
     'AugmentationConfig',
     'AugmentationPipelineConfig',
+    'ModelConfig',
+    'DatasetConfig',
+    'OptimizerConfig',
+    'TrainingConfig',
+    'TrainingPipelineConfig',
     # Exceptions
     'PipelineError',
     'TableDetectionError',
@@ -44,4 +57,5 @@ __all__ = [
     'ExportError',
     'DataInputError',
     'AugmentationError',
+    'TrainingError',
 ]

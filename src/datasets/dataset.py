@@ -12,7 +12,7 @@ from typing import List, Tuple, Optional, Dict
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.detection.yolo_tracker import KEYPOINT_NAMES
+from src.core import KEYPOINT_NAMES
 
 
 class PoseSequenceDataset(Dataset):

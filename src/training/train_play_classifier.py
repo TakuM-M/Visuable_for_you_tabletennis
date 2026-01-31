@@ -1,7 +1,5 @@
 """
 プレー検知モデルの学習スクリプト
-
-LSTMモデルを使って、プレー中/プレー外を判別するモデルを学習する
 """
 import argparse
 import sys
@@ -18,8 +16,8 @@ import numpy as np
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.models.play_classifier import PlayClassifierLSTM, PlayClassifierCNNLSTM
-from src.dataset.dataset import PoseSequenceDataset, collate_fn
+from src.models.play_classifier_lstm import PlayClassifierLSTM, PlayClassifierCNNLSTM
+from src.datasets import PoseSequenceDataset, collate_fn
 
 
 class Trainer:

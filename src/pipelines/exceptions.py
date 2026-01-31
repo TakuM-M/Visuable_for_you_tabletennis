@@ -92,3 +92,18 @@ class AugmentationError(PipelineError):
         if sample_index >= 0:
             message = f"[Sample {sample_index}] {message}"
         super().__init__(message)
+
+
+class TrainingError(PipelineError):
+    """モデル学習に失敗した場合の例外"""
+
+    def __init__(self, message: str, epoch: int = -1):
+        """
+        Args:
+            message: エラーメッセージ
+            epoch: エラーが発生したエポック
+        """
+        self.epoch = epoch
+        if epoch >= 0:
+            message = f"[Epoch {epoch}] {message}"
+        super().__init__(message)
