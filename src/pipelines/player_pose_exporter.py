@@ -137,6 +137,10 @@ class PlayerPoseExporter:
                 video_info=video_info,
                 show_progress=show_progress
             )
+            
+            # 連続性フィルタリングを適用および正規化
+            self.tracking_exporter.filter_by_consecutive_frames()
+            self.tracking_exporter.normalize_poses()
 
             # CSV出力
             self._export_results(csv_output, results['player_ids'])
@@ -201,6 +205,7 @@ class PlayerPoseExporter:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # VideoWriterの初期化
+        # 出力先ディレクトリが存在しない場合は警告なしに終了するため、事前にディレクトリを作成
         fourcc = cv2.VideoWriter_fourcc(*self.VIDEO_CODEC_FOURCC)
         video_writer = cv2.VideoWriter(output_video, fourcc, target_fps, (width, height))
 
@@ -573,9 +578,6 @@ class PlayerPoseExporter:
             ExportError: エクスポートに失敗した場合
         """
         try:
-            # 連続性フィルタリングを適用
-            self.tracking_exporter.filter_by_consecutive_frames()
-
             # プレイヤーの役割情報を作成
             player_roles = {track_id: "player" for track_id in player_ids}
             self.tracking_exporter.export_csv(csv_output, player_roles)
