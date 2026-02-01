@@ -10,8 +10,8 @@ from typing import Dict, Any, List, Optional
 from tqdm import tqdm
 import json
 
-from src.pipelines.config import AugmentationPipelineConfig
-from src.pipelines.exceptions import (
+from src.traing.config import AugmentationPipelineConfig
+from src.traing.exceptions import (
     DataInputError,
     AugmentationError,
     ExportError
@@ -49,8 +49,6 @@ class PoseAugmentationPipeline:
             config: データ拡張パイプラインの設定
         """
         self.config = config
-
-        # ランダムシードの設定
         if config.augmentation.random_seed is not None:
             np.random.seed(config.augmentation.random_seed)
 
