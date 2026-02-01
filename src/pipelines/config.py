@@ -102,7 +102,6 @@ class VideoProcessingConfig:
     target_fps: float = 30.0
     show_progress: bool = True
     output_codec: str = 'mp4v'
-    save_video: bool = True
 
     def __post_init__(self):
         """バリデーション"""
@@ -118,13 +117,15 @@ class PlayerPoseExporterConfig:
     player_classification: PlayerClassificationConfig
     tracking_export: TrackingExportConfig
     video_processing: VideoProcessingConfig = field(default_factory=VideoProcessingConfig)
+    save_output: bool = True
 
     @classmethod
     def create_default(
         cls,
         table_model_path: str,
         pose_model_path: str,
-        device: str = 'cuda'
+        device: str = 'cuda',
+        save_output: bool = True
     ) -> 'PlayerPoseExporterConfig':
         """
         デフォルト設定でPlayerPoseExporterConfigを作成
@@ -133,7 +134,7 @@ class PlayerPoseExporterConfig:
             table_model_path: 卓球台検出モデルのパス
             pose_model_path: 姿勢推定モデルのパス
             device: 使用デバイス ('cuda', 'cpu', 'mps')
-
+            save_output: 出力保存を有効にするか
         Returns:
             デフォルト設定のPlayerPoseExporterConfig
         """

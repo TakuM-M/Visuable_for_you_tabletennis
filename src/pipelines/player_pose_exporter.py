@@ -62,7 +62,9 @@ class PlayerPoseExporter:
             max_frame_gap=config.tracking_export.max_frame_gap,
             min_confidence=config.pose_tracking.min_keypoint_confidence
         )
-        if config.video_processing.save_video:
+
+        self.visualizer = None
+        if config.save_output:
             self.visualizer = PlayerClassifierVisualizer(
                 self.table_detector,
                 self.pose_tracker,
@@ -74,7 +76,8 @@ class PlayerPoseExporter:
         cls,
         table_model_path: str,
         pose_model_path: str,
-        device: str = 'cuda'
+        device: str = 'cuda',
+        save_output: bool = True
     ) -> 'PlayerPoseExporter':
         """
         デフォルト設定でPlayerPoseExporterを作成
@@ -87,10 +90,11 @@ class PlayerPoseExporter:
         Returns:
             デフォルト設定のPlayerPoseExporter
         """
-        config = PipelineConfig.create_default(
+        config = PlayerPoseExporterConfig.create_default(
             table_model_path=table_model_path,
             pose_model_path=pose_model_path,
-            device=device
+            device=device,
+            save_output=save_output
         )
         return cls(config)
 
@@ -152,7 +156,8 @@ class PlayerPoseExporter:
             self.tracking_exporter.normalize_poses()
 
             # CSV出力
-            self._export_results(csv_output, results['player_ids'])
+            if self.visualizer is not None and video_writer is not None:
+                self._export_results(csv_output, results['player_ids'])
 
             print(f"\n出力ビデオ: {output_video} ({target_fps:.1f}fps)")
 
@@ -212,21 +217,22 @@ class PlayerPoseExporter:
 
         # 動画情報を表示
         self._print_video_info(video_info)
+        
+        video_writer = None
+        if self.visualizer is not None:
+            output_dir = Path(output_video).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        # 出力ディレクトリを作成
-        output_dir = Path(output_video).parent
-        output_dir.mkdir(parents=True, exist_ok=True)
+            # VideoWriterの初期化
+            # 出力先ディレクトリが存在しない場合は警告なしに終了するため、事前にディレクトリを作成
+            fourcc = cv2.VideoWriter_fourcc(*self.VIDEO_CODEC_FOURCC)
+            video_writer = cv2.VideoWriter(output_video, fourcc, target_fps, (width, height))
 
-        # VideoWriterの初期化
-        # 出力先ディレクトリが存在しない場合は警告なしに終了するため、事前にディレクトリを作成
-        fourcc = cv2.VideoWriter_fourcc(*self.VIDEO_CODEC_FOURCC)
-        video_writer = cv2.VideoWriter(output_video, fourcc, target_fps, (width, height))
+            if not video_writer.isOpened():
+                raise VideoProcessingError(f"VideoWriterの初期化に失敗しました: {output_video}")
 
-        if not video_writer.isOpened():
-            raise VideoProcessingError(f"VideoWriterの初期化に失敗しました: {output_video}")
-
-        print(f"出力動画パス: {output_video}")
-        print(f"CSV出力パス: {csv_output}\n")
+            print(f"出力動画パス: {output_video}")
+            print(f"CSV出力パス: {csv_output}\n")
 
         return cap, video_writer, video_info
 
@@ -406,16 +412,17 @@ class PlayerPoseExporter:
                 )
 
                 # 結果描画と保存
-                display_frame = self._create_display_frame(
-                    frame=frame,
-                    table_info=table_info,
-                    frame_count=frame_count,
-                    processed_count=processed_count,
-                    total_frames=video_info['total_frames'],
-                    height=video_info['height'],
-                    player_ids=player_ids
-                )
-                video_writer.write(display_frame)
+                if video_writer is not None and self.visualizer is not None:
+                    display_frame = self._create_display_frame(
+                        frame=frame,
+                        table_info=table_info,
+                        frame_count=frame_count,
+                        processed_count=processed_count,
+                        total_frames=video_info['total_frames'],
+                        height=video_info['height'],
+                        player_ids=player_ids
+                    )
+                    video_writer.write(display_frame)
 
         finally:
             pbar.close()

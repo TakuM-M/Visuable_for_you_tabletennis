@@ -13,7 +13,11 @@ from tqdm import tqdm
 
 from src.models import PlayClassifierLSTM
 from src.detection.tracking_exporter import TrackingExporter
-from src.datasets import InMemoryPoseSequenceDataset
+from src.datasets import (
+    CSVPoseSequenceDataset,
+    MemoryPoseSequenceDataset,
+)
+
 
 from src.pipelines.exceptions import DataInputError
 
@@ -25,9 +29,9 @@ class PlaySceneDetector:
         self,
         model_path: str,
         config_path: Optional[str] = None,
-        device: str = 'cuda',
         threshold: float = 0.5,
-        min_scene_duration: int = 10
+        min_scene_duration: int = 10,
+        device: str = 'cuda'
     ):
         """
         初期化
@@ -35,26 +39,16 @@ class PlaySceneDetector:
         Args:
             model_path: 学習済みモデルのパス
             config_path: モデル設定ファイルのパス（Noneの場合は自動推定）
-            device: 使用デバイス
             threshold: プレー中判定の閾値
             min_scene_duration: 最小シーン長（フレーム数）
+            device: 使用デバイス ('cuda' or 'cpu')
         """
         self.model_path = Path(model_path)
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         self.threshold = threshold
         self.min_scene_duration = min_scene_duration
+        self.config_path = Path(config_path) if config_path is not None else None
 
-        # 設定ファイルのパスを決定
-        if config_path is None:
-            # モデルと同じディレクトリの config.json を使用
-            self.config_path = self.model_path.parent / 'lstm_config.json'
-            if not self.config_path.exists():
-                # 代替として model_config.json を探す
-                self.config_path = self.model_path.parent / 'config.json'
-        else:
-            self.config_path = Path(config_path)
-
-        # モデルと設定を読み込み
         self.config = self._load_config()
         self.model = self._load_model()
 
@@ -82,10 +76,8 @@ class PlaySceneDetector:
         with open(self.config_path, 'r') as f:
             config = json.load(f)
 
-        # model キーがある場合はそれを使用（TrainingPipelineの設定形式）
         if 'model' in config:
             model_config = config['model']
-            # use_attention の処理
             use_attention = model_config.get('use_attention', True)
             return {
                 'model_type': model_config.get('model_type', 'lstm'),
@@ -100,7 +92,6 @@ class PlaySceneDetector:
 
     def _load_model(self) -> PlayClassifierLSTM:
         """学習済みモデルを読み込み"""
-        # モデルの作成
         model = PlayClassifierLSTM(
             input_size=34,  # 17 keypoints × 2 coordinates
             hidden_size=self.config.get('hidden_size', 128),
@@ -155,20 +146,12 @@ class PlaySceneDetector:
         # InMemoryPoseSequenceDatasetを作成
         sequence_length = self.config.get('sequence_length', 30)
 
-        # チェックポイントから正規化パラメータを取得（存在する場合）
-        checkpoint = torch.load(self.model_path, map_location=self.device, weights_only=False)
-        feature_mean = checkpoint.get('feature_mean', None)
-        feature_std = checkpoint.get('feature_std', None)
-
-        dataset = InMemoryPoseSequenceDataset(
+        dataset = MemoryPoseSequenceDataset(
             pose_data=pose_data,
             frames=frames,
-            labels=None,  # 予測のみなのでラベルなし
             sequence_length=sequence_length,
-            stride=1,  # 全フレームを予測
-            normalize_features=False,  # 既に正規化済み
-            feature_mean=feature_mean,
-            feature_std=feature_std
+            stride=1,
+            keypoint_features=None
         )
 
         print(f"\nInMemoryPoseSequenceDataset作成完了:")
@@ -205,19 +188,16 @@ class PlaySceneDetector:
         if not csv_path.exists():
             raise DataInputError(str(csv_path), "CSVファイルが存在しません")
 
-        # CSVからデータセットを作成
-        from src.datasets.dataset import PoseSequenceDataset
-
         sequence_length = self.config.get('sequence_length', 30)
 
-        dataset = PoseSequenceDataset(
+        dataset = CSVPoseSequenceDataset(
             csv_path=str(csv_path),
-            label_path=None,  # 予測のみなのでラベルなし
+            label_path=None,
             sequence_length=sequence_length,
-            stride=1,  # 全フレームを予測
-            normalize_features=False  # 既にCSVで正規化済み
+            stride=1,
+            keypoint_features=None
         )
-
+        
         # 予測実行
         result_df = self._predict(dataset, show_progress)
 
