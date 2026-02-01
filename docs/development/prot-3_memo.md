@@ -41,11 +41,8 @@
     - configについて複数のパイプラインの設定が混ざっている
     - パイプラインのディレクトリにtraingおよびaugmentationについては必要ないと思われる
     - player_pose_exporter.py, play_scene_detector.py, video_composer.py
-    - []play_pose_ecporter.py
-    - []play_scene_detector.py
-    - []video_composer.py
-
-
-
-- []モデルについて，現在はLSTMで設計をする．LSTM以外のモデルについては今後の展望としてまとめる
-- []end-to-end処理の場合についてのyolo可視化の設定実装，可視化する必要性はアプリ時はない
+    - [-]]play_pose_ecporter.py
+    - [-]play_scene_detector.py
+    - [-]video_composer.py
+- [-]モデルについて，現在はLSTMで設計をする．LSTM以外のモデルについては今後の展望としてまとめる
+- [-]end-to-end処理の場合についてのyolo可視化の設定実装，可視化する必要性はアプリ時はない
