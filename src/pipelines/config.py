@@ -174,6 +174,8 @@ class VideoCompositionConfig:
     show_progress: bool = True
     max_scenes: Optional[int] = None
     min_scene_duration_for_highlights: Optional[int] = None
+    scene_buffer_before_sec: float = 0.0
+    scene_buffer_after_sec: float = 0.0
 
     def __post_init__(self):
         """バリデーション"""
@@ -183,6 +185,10 @@ class VideoCompositionConfig:
             raise ValueError("max_scenes must be at least 1")
         if self.min_scene_duration_for_highlights is not None and self.min_scene_duration_for_highlights < 1:
             raise ValueError("min_scene_duration_for_highlights must be at least 1")
+        if self.scene_buffer_before_sec < 0.0:
+            raise ValueError("scene_buffer_before_sec must be non-negative")
+        if self.scene_buffer_after_sec < 0.0:
+            raise ValueError("scene_buffer_after_sec must be non-negative")
 
 
 @dataclass

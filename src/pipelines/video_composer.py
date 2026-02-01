@@ -28,11 +28,15 @@ class VideoComposer:
         self.output_fps = config.output_fps
         self.add_scene_info = config.add_scene_info
         self.show_progress = config.show_progress
+        self.scene_buffer_before_sec = config.scene_buffer_before_sec
+        self.scene_buffer_after_sec = config.scene_buffer_after_sec
 
         print(f"VideoComposer初期化完了:")
         print(f"  コーデック: {self.output_codec}")
         print(f"  出力FPS: {self.output_fps or '元動画と同じ'}")
         print(f"  シーン情報表示: {self.add_scene_info}")
+        if self.scene_buffer_before_sec > 0 or self.scene_buffer_after_sec > 0:
+            print(f"  シーンバッファ: 前 {self.scene_buffer_before_sec}秒, 後 {self.scene_buffer_after_sec}秒")
 
     def compose_play_scenes(
         self,
@@ -72,18 +76,15 @@ class VideoComposer:
         print(f"  出力動画: {output_path}")
         print(f"  シーン数: {len(scenes)}")
 
-        # 元の動画を開く
         cap = cv2.VideoCapture(input_video_path)
         if not cap.isOpened():
             raise VideoInputError(input_video_path, "動画ファイルを開けませんでした")
 
         try:
-            # 動画情報を取得
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
 
-            # 出力FPSを決定
             output_fps = self.output_fps if self.output_fps is not None else video_fps
 
             print(f"\n動画情報:")
@@ -148,6 +149,12 @@ class VideoComposer:
             処理統計
         """
         total_written_frames = 0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+        # バッファをフレーム数に変換
+        buffer_before_frames = int(self.scene_buffer_before_sec * video_fps)
+        buffer_after_frames = int(self.scene_buffer_after_sec * video_fps)
 
         iterator = tqdm(scenes, desc="シーン処理中") if self.show_progress else scenes
 
@@ -157,11 +164,15 @@ class VideoComposer:
             original_start = int(start_frame * frame_interval)
             original_end = int(end_frame * frame_interval)
 
+            # バッファを適用
+            buffered_start = max(0, original_start - buffer_before_frames)
+            buffered_end = min(total_frames - 1, original_end + buffer_after_frames)
+
             # シーンの開始位置にシーク
-            cap.set(cv2.CAP_PROP_POS_FRAMES, original_start)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, buffered_start)
 
             # このシーンのフレームを読み込んで書き込む
-            for frame_idx in range(original_start, original_end + 1, frame_interval):
+            for frame_idx in range(buffered_start, buffered_end + 1, frame_interval):
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -233,102 +244,3 @@ class VideoComposer:
         )
 
         return frame
-
-    def create_highlights_video(
-        self,
-        input_video_path: str,
-        scenes: List[Tuple[int, int]],
-        output_path: str,
-        frame_interval: int = 1,
-        max_scenes: Optional[int] = None,
-        min_scene_duration: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        ハイライト動画を作成（シーンのフィルタリング機能付き）
-
-        Args:
-            input_video_path: 元の動画ファイルパス
-            scenes: [(start_frame, end_frame), ...] シーンのリスト
-            output_path: 出力動画ファイルパス
-            frame_interval: 元動画での処理時のフレーム間隔
-            max_scenes: 最大シーン数（長いシーンを優先）
-            min_scene_duration: 最小シーン長（フレーム数）
-
-        Returns:
-            作成結果の統計情報
-        """
-        # シーンのフィルタリング
-        filtered_scenes = self._filter_scenes(
-            scenes=scenes,
-            max_scenes=max_scenes,
-            min_scene_duration=min_scene_duration
-        )
-
-        if not filtered_scenes:
-            print("警告: フィルタリング後のシーンがありません")
-            return {
-                'total_scenes': 0,
-                'filtered_scenes': 0,
-                'total_frames': 0,
-                'duration_sec': 0.0,
-                'output_path': None
-            }
-
-        print(f"\nハイライト動画作成:")
-        print(f"  元のシーン数: {len(scenes)}")
-        print(f"  フィルタ後: {len(filtered_scenes)}")
-
-        # 通常の動画作成処理を実行
-        stats = self.compose_play_scenes(
-            input_video_path=input_video_path,
-            scenes=filtered_scenes,
-            output_path=output_path,
-            frame_interval=frame_interval
-        )
-
-        stats['filtered_scenes'] = len(filtered_scenes)
-        stats['original_scenes'] = len(scenes)
-
-        return stats
-
-    def _filter_scenes(
-        self,
-        scenes: List[Tuple[int, int]],
-        max_scenes: Optional[int] = None,
-        min_scene_duration: Optional[int] = None
-    ) -> List[Tuple[int, int]]:
-        """
-        シーンをフィルタリング
-
-        Args:
-            scenes: 元のシーンリスト
-            max_scenes: 最大シーン数
-            min_scene_duration: 最小シーン長
-
-        Returns:
-            フィルタリング済みシーンリスト
-        """
-        filtered = scenes.copy()
-
-        # 最小シーン長でフィルタ
-        if min_scene_duration is not None:
-            filtered = [
-                (start, end) for start, end in filtered
-                if (end - start + 1) >= min_scene_duration
-            ]
-
-        # 長いシーンを優先してmax_scenesまで絞る
-        if max_scenes is not None and len(filtered) > max_scenes:
-            # シーンの長さでソート（降順）
-            filtered_with_duration = [
-                (start, end, end - start + 1) for start, end in filtered
-            ]
-            filtered_with_duration.sort(key=lambda x: x[2], reverse=True)
-
-            # 上位max_scenesを取得してフレーム順に並べ直す
-            filtered = [
-                (start, end) for start, end, _ in filtered_with_duration[:max_scenes]
-            ]
-            filtered.sort(key=lambda x: x[0])
-
-        return filtered
