@@ -24,8 +24,7 @@ from src.pipelines.exceptions import (
 
 class PlayerPoseExporter:
     """プレイヤーの姿勢を検出してCSVにエクスポートするパイプライン"""
-
-    # 定数定義
+    
     DEFAULT_FALLBACK_TOTAL_FRAMES = 10000
     VIDEO_CODEC_FOURCC = 'mp4v'
 
@@ -36,7 +35,6 @@ class PlayerPoseExporter:
         """
         self.config = config
         
-        # コンポーネントの初期化
         self.table_detector = TableDetector(
             yolo_model_path=config.table_detection.model_path,
             cache_valid_frames=config.table_detection.cache_valid_frames
@@ -146,6 +144,10 @@ class PlayerPoseExporter:
             self._export_results(csv_output, results['player_ids'])
 
             print(f"\n出力ビデオ: {output_video} ({target_fps:.1f}fps)")
+
+            # frame_intervalとvideo_fpsを結果に追加
+            results['frame_interval'] = video_info['frame_step']
+            results['video_fps'] = video_info['video_fps']
 
             return results
 

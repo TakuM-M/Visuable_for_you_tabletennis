@@ -4,6 +4,9 @@
 from .player_pose_exporter import PlayerPoseExporter
 from .pose_augmentation import PoseAugmentationPipeline
 from .training_pipeline import TrainingPipeline
+from .play_scene_detector import PlaySceneDetector
+from .video_composer import VideoComposer
+from .inference_pipeline import InferencePipeline
 from .config import (
     PipelineConfig,
     TableDetectionConfig,
@@ -17,7 +20,10 @@ from .config import (
     DatasetConfig,
     OptimizerConfig,
     TrainingConfig,
-    TrainingPipelineConfig
+    TrainingPipelineConfig,
+    PlaySceneDetectionConfig,
+    VideoCompositionConfig,
+    InferencePipelineConfig
 )
 from .exceptions import (
     PipelineError,
@@ -35,6 +41,9 @@ __all__ = [
     'PlayerPoseExporter',
     'PoseAugmentationPipeline',
     'TrainingPipeline',
+    'PlaySceneDetector',
+    'VideoComposer',
+    'InferencePipeline',
     # Configs
     'PipelineConfig',
     'TableDetectionConfig',
@@ -49,6 +58,9 @@ __all__ = [
     'OptimizerConfig',
     'TrainingConfig',
     'TrainingPipelineConfig',
+    'PlaySceneDetectionConfig',
+    'VideoCompositionConfig',
+    'InferencePipelineConfig',
     # Exceptions
     'PipelineError',
     'TableDetectionError',

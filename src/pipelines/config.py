@@ -363,3 +363,91 @@ class TrainingPipelineConfig:
             training=TrainingConfig(device=device),
             output_dir=output_dir
         )
+
+
+@dataclass
+class PlaySceneDetectionConfig:
+    """プレーシーン検出の設定"""
+    model_path: str
+    config_path: Optional[str] = None
+    device: str = 'cuda'
+    threshold: float = 0.5
+    min_scene_duration: int = 10
+
+    def __post_init__(self):
+        """バリデーション"""
+        if self.device not in ['cuda', 'cpu', 'mps']:
+            raise ValueError(f"Unsupported device: {self.device}")
+        if not 0.0 <= self.threshold <= 1.0:
+            raise ValueError("threshold must be between 0.0 and 1.0")
+        if self.min_scene_duration < 1:
+            raise ValueError("min_scene_duration must be at least 1")
+
+
+@dataclass
+class VideoCompositionConfig:
+    """動画作成の設定"""
+    output_codec: str = 'mp4v'
+    output_fps: Optional[float] = None
+    add_scene_info: bool = True
+    max_scenes: Optional[int] = None
+    min_scene_duration_for_highlights: Optional[int] = None
+
+    def __post_init__(self):
+        """バリデーション"""
+        if self.output_fps is not None and self.output_fps <= 0:
+            raise ValueError("output_fps must be positive")
+        if self.max_scenes is not None and self.max_scenes < 1:
+            raise ValueError("max_scenes must be at least 1")
+        if self.min_scene_duration_for_highlights is not None and self.min_scene_duration_for_highlights < 1:
+            raise ValueError("min_scene_duration_for_highlights must be at least 1")
+
+
+@dataclass
+class InferencePipelineConfig:
+    """推論パイプライン全体の設定"""
+    pose_export: PipelineConfig
+    scene_detection: PlaySceneDetectionConfig
+    video_composition: VideoCompositionConfig
+    show_progress: bool = True
+    save_intermediate: bool = True
+    save_graph: bool = True
+
+    @classmethod
+    def create_default(
+        cls,
+        table_model_path: str,
+        pose_model_path: str,
+        play_classifier_model_path: str,
+        device: str = 'cuda',
+        detection_threshold: float = 0.5,
+        min_scene_duration: int = 10
+    ) -> 'InferencePipelineConfig':
+        """
+        デフォルト設定でInferencePipelineConfigを作成
+
+        Args:
+            table_model_path: 卓球台検出モデルのパス
+            pose_model_path: 姿勢推定モデルのパス
+            play_classifier_model_path: プレー検知モデルのパス
+            device: 使用デバイス
+            detection_threshold: プレー中判定の閾値
+            min_scene_duration: 最小シーン長（フレーム数）
+
+        Returns:
+            デフォルト設定のInferencePipelineConfig
+        """
+        return cls(
+            pose_export=PipelineConfig.create_default(
+                table_model_path=table_model_path,
+                pose_model_path=pose_model_path,
+                device=device
+            ),
+            scene_detection=PlaySceneDetectionConfig(
+                model_path=play_classifier_model_path,
+                device=device,
+                threshold=detection_threshold,
+                min_scene_duration=min_scene_duration
+            ),
+            video_composition=VideoCompositionConfig()
+        )

@@ -1,62 +1,61 @@
 """
-複数CSVファイル対応のデータセット
+複数CSV骨格シーケンスデータセット
 
-複数の動画から抽出したCSVファイルを統合して1つのデータセットとして扱う
+複数のCSVファイルを単一のデータセットに結合
+複数動画の骨格データを扱う
 """
-import pandas as pd
-import numpy as np
-import torch
-from torch.utils.data import Dataset
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Dict
+from torch.utils.data import Dataset
 
-from src.datasets.dataset import PoseSequenceDataset
+from src.datasets.csv_dataset import CSVPoseSequenceDataset
 
 
 class MultiCSVPoseDataset(Dataset):
     """
-    複数のCSVファイルを統合したデータセット
+    複数CSV骨格シーケンスデータセット
 
-    各動画のCSVファイルをPoseSequenceDatasetとして読み込み、
-    内部的に結合して1つのデータセットとして扱う
+    複数のCSVファイルを個別のPoseSequenceDatasetとして読み込み
+    単一のデータセットに結合
     """
 
     def __init__(
         self,
         csv_label_pairs: List[Tuple[str, str]],
         sequence_length: int = 30,
-        stride: int = 5,
-        normalize_features: bool = True
+        stride: int = 5
     ):
         """
-        初期化
+        複数CSVデータセットを初期化
 
         Args:
-            csv_label_pairs: [(csv_path, label_path), ...] のリスト
+            csv_label_pairs: (csv_path, label_path)タプルのリスト
             sequence_length: シーケンス長
-            stride: ストライド
-            normalize_features: 特徴量を正規化するか
+            stride: シーケンス抽出時のストライド
+
+        Note:
+            CSVデータは既に正規化されていることを想定
         """
         self.csv_label_pairs = csv_label_pairs
         self.sequence_length = sequence_length
         self.stride = stride
-        self.normalize_features = normalize_features
 
-        # 各CSVファイルのデータセットを作成
-        self.datasets: List[PoseSequenceDataset] = []
+        # 各CSV用の個別データセット
+        self.datasets: List[CSVPoseSequenceDataset] = []
         self.dataset_lengths: List[int] = []
         self.cumulative_lengths: List[int] = [0]
 
-        print("複数CSVデータセット初期化中...")
+        print(f"Initializing MultiCSVPoseDataset with {len(csv_label_pairs)} videos...")
+
+        # 全データセットを読み込み
         for i, (csv_path, label_path) in enumerate(csv_label_pairs):
             print(f"  [{i+1}/{len(csv_label_pairs)}] {Path(csv_path).name}")
 
-            dataset = PoseSequenceDataset(
+            dataset = CSVPoseSequenceDataset(
                 csv_path=csv_path,
                 label_path=label_path,
                 sequence_length=sequence_length,
-                stride=stride,
-                normalize_features=normalize_features
+                stride=stride
             )
 
             self.datasets.append(dataset)
@@ -65,40 +64,42 @@ class MultiCSVPoseDataset(Dataset):
                 self.cumulative_lengths[-1] + len(dataset)
             )
 
-            print(f"    → {len(dataset)} シーケンス")
+            print(f"    -> {len(dataset)} sequences")
 
         self.total_length = self.cumulative_lengths[-1]
 
-        print(f"\n統合完了: 合計 {self.total_length} シーケンス")
-        print(f"  動画数: {len(self.datasets)}")
-        print(f"  シーケンス長: {sequence_length}")
-        print(f"  ストライド: {stride}")
+        print(f"\nMultiCSVPoseDataset initialized:")
+        print(f"  Total videos: {len(self.datasets)}")
+        print(f"  Total sequences: {self.total_length}")
+        print(f"  Sequence length: {sequence_length}")
+        print(f"  Stride: {stride}")
+
 
     def __len__(self) -> int:
         """データセットの長さを返す"""
         return self.total_length
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
+    def __getitem__(self, idx: int) -> Tuple:
         """
-        指定されたインデックスのデータを返す
+        指定されたインデックスのデータを取得
 
         Args:
-            idx: データのインデックス
+            idx: データインデックス
 
         Returns:
-            (features, labels, metadata) のタプル
+            (features, labels, metadata) タプル
         """
         if idx < 0 or idx >= self.total_length:
-            raise IndexError(f"Index {idx} out of range [0, {self.total_length})")
+            raise IndexError(f"インデックス {idx} が範囲外です [0, {self.total_length})")
 
-        # どのデータセットに属するかを特定
+        # このインデックスがどのデータセットに属するか検索
         dataset_idx = 0
         for i in range(len(self.cumulative_lengths) - 1):
             if self.cumulative_lengths[i] <= idx < self.cumulative_lengths[i + 1]:
                 dataset_idx = i
                 break
 
-        # そのデータセット内でのインデックス
+        # そのデータセット内でのローカルインデックスを取得
         local_idx = idx - self.cumulative_lengths[dataset_idx]
 
         # データを取得
@@ -121,11 +122,9 @@ class MultiCSVPoseDataset(Dataset):
         }
 
         for i, (csv_path, label_path) in enumerate(self.csv_label_pairs):
-            video_stats = {
-                'csv_path': str(csv_path),
-                'label_path': str(label_path),
-                'num_sequences': self.dataset_lengths[i]
-            }
+            video_stats = self.datasets[i].get_statistics()
+            video_stats['csv_path'] = str(csv_path)
+            video_stats['label_path'] = str(label_path)
             stats['videos'].append(video_stats)
 
         return stats
@@ -134,14 +133,13 @@ class MultiCSVPoseDataset(Dataset):
     def from_directories(
         cls,
         data_dirs: List[str],
-        csv_filename: str = 'original_pose_data.csv',
+        csv_filename: str = 'normalized_pose_data.csv',
         label_filename: str = 'play_labels.csv',
         sequence_length: int = 30,
-        stride: int = 5,
-        normalize_features: bool = True
+        stride: int = 5
     ) -> 'MultiCSVPoseDataset':
         """
-        ディレクトリリストから複数CSVデータセットを作成
+        ディレクトリリストからMultiCSVPoseDatasetを作成
 
         Args:
             data_dirs: データディレクトリのリスト
@@ -149,10 +147,9 @@ class MultiCSVPoseDataset(Dataset):
             label_filename: ラベルファイル名
             sequence_length: シーケンス長
             stride: ストライド
-            normalize_features: 正規化するか
 
         Returns:
-            MultiCSVPoseDataset
+            MultiCSVPoseDatasetインスタンス
         """
         csv_label_pairs = []
 
@@ -161,21 +158,20 @@ class MultiCSVPoseDataset(Dataset):
             label_path = Path(data_dir) / label_filename
 
             if not csv_path.exists():
-                print(f"警告: CSVファイルが見つかりません: {csv_path}")
+                print(f"Warning: CSV file not found: {csv_path}")
                 continue
 
             if not label_path.exists():
-                print(f"警告: ラベルファイルが見つかりません: {label_path}")
+                print(f"Warning: Label file not found: {label_path}")
                 continue
 
             csv_label_pairs.append((str(csv_path), str(label_path)))
 
         if not csv_label_pairs:
-            raise ValueError("有効なCSVファイルが見つかりませんでした")
+            raise ValueError("有効なCSVファイルが見つかりません")
 
         return cls(
             csv_label_pairs=csv_label_pairs,
             sequence_length=sequence_length,
-            stride=stride,
-            normalize_features=normalize_features
+            stride=stride
         )
