@@ -37,26 +37,37 @@ class PlayerPoseExporter:
         
         self.table_detector = TableDetector(
             yolo_model_path=config.table_detection.model_path,
-            cache_valid_frames=config.table_detection.cache_valid_frames
+            cache_valid_frames=config.table_detection.cache_valid_frames,
+            device=config.table_detection.device,
         )
         self.pose_tracker = YOLOPose_Tracker(
             model_path=config.pose_tracking.model_path,
-            device=config.pose_tracking.device
+            conf_threshold=config.pose_tracking.conf_threshold,
+            iou_threshold=config.pose_tracking.iou_threshold,
+            table_distance_threshold=config.pose_tracking.table_distance_threshold,
+            device=config.pose_tracking.device,
         )
         self.player_classifier = PlayerClassifier(
+            near_table_threshold=config.player_classification.near_table_threshold,
+            min_tracking_frames=config.player_classification.min_tracking_frames,
             max_players=config.player_classification.max_players,
-            min_player_score=config.player_classification.min_player_score
+            max_inactive_frames=config.player_classification.max_inactive_frames,
+            min_player_score=config.player_classification.min_player_score,
+            recent_frames_window=config.player_classification.recent_frames_window,
+            max_consecutive_other_count=config.player_classification.max_consecutive_other_count,
+            movement_noise_threshold=config.player_classification.movement_noise_threshold,
         )
         self.tracking_exporter = TrackingExporter(
             min_consecutive_frames=config.tracking_export.min_consecutive_frames,
             max_frame_gap=config.tracking_export.max_frame_gap,
             min_confidence=config.pose_tracking.min_keypoint_confidence
         )
-        self.visualizer = PlayerClassifierVisualizer(
-            self.table_detector,
-            self.pose_tracker,
-            self.player_classifier
-        )
+        if config.video_processing.save_video:
+            self.visualizer = PlayerClassifierVisualizer(
+                self.table_detector,
+                self.pose_tracker,
+                self.player_classifier
+            )
 
     @classmethod
     def create_default(

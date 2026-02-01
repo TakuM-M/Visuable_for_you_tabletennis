@@ -18,8 +18,8 @@ class YOLOPose_Tracker:
         model_path: str = "yolo11n-pose.pt",
         conf_threshold: float = 0.5,
         iou_threshold: float = 0.7,
+        table_distance_threshold: float = 0.2,
         device: str = "cpu",
-        table_distance_threshold: float = 0.2
     ):
         """
         YOLOトラッカーの初期化
@@ -28,14 +28,14 @@ class YOLOPose_Tracker:
             model_path: YOLOモデルのパス（デフォルト: yolo11n-pose.pt）
             conf_threshold: 検出信頼度の閾値
             iou_threshold: NMS（Non-Maximum Suppression）のIoU閾値
-            device: 使用デバイス（"cpu" or "cuda"）
             table_distance_threshold: 卓球台との正規化距離の閾値（これ以下の距離にいる人物のみトラッキング）
+            device: 使用デバイス（"cpu" or "cuda"）
         """
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
-        self.device = device
         self.table_distance_threshold = table_distance_threshold
+        self.device = device
 
         # 卓球台領域に一度でも入ったtrack_idを記憶
         self.validated_track_ids: Set[int] = set()

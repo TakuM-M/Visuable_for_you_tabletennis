@@ -12,6 +12,7 @@ class TableDetectionConfig:
     cache_valid_frames: int = 1000
     min_confidence: float = 0.6
     max_detection_attempts: int = 100
+    device: str = 'cuda'
 
     def __post_init__(self):
         """バリデーション"""
@@ -21,35 +22,64 @@ class TableDetectionConfig:
             raise ValueError("min_confidence must be between 0.0 and 1.0")
         if self.max_detection_attempts < 1:
             raise ValueError("max_detection_attempts must be at least 1")
+        if self.device not in ['cuda', 'cpu', 'mps']:
+            raise ValueError(f"Unsupported device: {self.device}")
 
 
 @dataclass
 class PoseTrackingConfig:
     """姿勢推定・トラッキングの設定"""
     model_path: str
-    device: str = 'cuda'
+    conf_threshold: float = 0.5
+    iou_threshold: float = 0.7
+    table_distance_threshold: float = 0.2
     min_keypoint_confidence: float = 0.3
+    device: str = 'cuda'
 
     def __post_init__(self):
         """バリデーション"""
-        if self.device not in ['cuda', 'cpu', 'mps']:
-            raise ValueError(f"Unsupported device: {self.device}")
+        if not 0.0 <= self.conf_threshold <= 1.0:
+            raise ValueError("conf_threshold must be between 0.0 and 1.0")
+        if not 0.0 <= self.iou_threshold <= 1.0:
+            raise ValueError("iou_threshold must be between 0.0 and 1.0")
+        if self.table_distance_threshold < 0.0:
+            raise ValueError("table_distance_threshold must be non-negative")
         if not 0.0 <= self.min_keypoint_confidence <= 1.0:
             raise ValueError("min_keypoint_confidence must be between 0.0 and 1.0")
+        if self.device not in ['cuda', 'cpu', 'mps']:
+            raise ValueError(f"Unsupported device: {self.device}")
 
 
 @dataclass
 class PlayerClassificationConfig:
     """プレイヤー分類の設定"""
-    max_players: int = 4
+    near_table_threshold: float = 0.1
+    min_tracking_frames: int = 10
+    max_players: int = 2
+    max_inactive_frames: int = 30
     min_player_score: float = 0.3
+    recent_frames_window: int = 146
+    max_consecutive_other_count: int = 30
+    movement_noise_threshold: float = 5.0
 
     def __post_init__(self):
         """バリデーション"""
+        if self.near_table_threshold < 0.0:
+            raise ValueError("near_table_threshold must be non-negative")
+        if self.min_tracking_frames < 1:
+            raise ValueError("min_tracking_frames must be at least 1")
         if self.max_players < 1:
             raise ValueError("max_players must be at least 1")
+        if self.max_inactive_frames < 1:
+            raise ValueError("max_inactive_frames must be at least 1")
         if not 0.0 <= self.min_player_score <= 1.0:
             raise ValueError("min_player_score must be between 0.0 and 1.0")
+        if self.recent_frames_window < 1:
+            raise ValueError("recent_frames_window must be at least 1")
+        if self.max_consecutive_other_count < 1:
+            raise ValueError("max_consecutive_other_count must be at least 1")
+        if self.movement_noise_threshold < 0.0:
+            raise ValueError("movement_noise_threshold must be non-negative")
 
 
 @dataclass
@@ -72,6 +102,7 @@ class VideoProcessingConfig:
     target_fps: float = 30.0
     show_progress: bool = True
     output_codec: str = 'mp4v'
+    save_video: bool = True
 
     def __post_init__(self):
         """バリデーション"""
@@ -107,8 +138,8 @@ class PlayerPoseExporterConfig:
             デフォルト設定のPlayerPoseExporterConfig
         """
         return cls(
-            table_detection=TableDetectionConfig(model_path=table_model_path),
-            pose_tracking=PoseTrackingConfig(model_path=pose_model_path),
+            table_detection=TableDetectionConfig(model_path=table_model_path, device=device),
+            pose_tracking=PoseTrackingConfig(model_path=pose_model_path, device=device),
             player_classification=PlayerClassificationConfig(),
             tracking_export=TrackingExportConfig(),
             video_processing=VideoProcessingConfig()
