@@ -146,31 +146,6 @@ class PlayerPoseExporterConfig:
             video_processing=VideoProcessingConfig()
         )
 
-
-@dataclass
-class ModelConfig:
-    """モデルの設定"""
-    model_type: str = 'lstm'  # 'lstm' or 'cnn_lstm'
-    hidden_size: int = 128
-    num_layers: int = 2
-    dropout: float = 0.3
-    use_attention: bool = True  # LSTMの場合のみ有効
-    cnn_channels: int = 64  # CNN+LSTMの場合のみ有効
-
-    def __post_init__(self):
-        """バリデーション"""
-        if self.model_type not in ['lstm', 'cnn_lstm']:
-            raise ValueError(f"model_type must be 'lstm' or 'cnn_lstm', got: {self.model_type}")
-        if self.hidden_size < 1:
-            raise ValueError("hidden_size must be at least 1")
-        if self.num_layers < 1:
-            raise ValueError("num_layers must be at least 1")
-        if not 0.0 <= self.dropout < 1.0:
-            raise ValueError("dropout must be between 0.0 and 1.0")
-        if self.cnn_channels < 1:
-            raise ValueError("cnn_channels must be at least 1")
-
-
 @dataclass
 class PlaySceneDetectionConfig:
     """プレーシーン検出の設定"""
