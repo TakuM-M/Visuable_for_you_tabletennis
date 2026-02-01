@@ -11,34 +11,30 @@ import pandas as pd
 from src.pipelines.player_pose_exporter import PlayerPoseExporter
 from src.pipelines.play_scene_detector import PlaySceneDetector
 from src.pipelines.video_composer import VideoComposer
-from src.pipelines.config import PipelineConfig, PlaySceneDetectionConfig, VideoProcessingConfig
+from src.pipelines.config import (
+    InferencePipelineConfig,
+    PlayerPoseExporterConfig,
+    PlaySceneDetectionConfig,
+    VideoCompositionConfig
+)
 from src.pipelines.exceptions import PipelineError
 
 
 class InferencePipeline:
     """End-to-End推論パイプライン"""
 
-    def __init__(
-        self,
-        pose_export_config: PipelineConfig,
-        play_scene_detection_config: PlaySceneDetectionConfig,
-        video_processing_config: VideoProcessingConfig,
-        device: str = 'cuda',
-        show_progress: bool = True
-    ):
+    def __init__(self, config: InferencePipelineConfig):
         """
         初期化
 
         Args:
-            pose_export_config: 骨格データ抽出パイプラインの設定
-            play_scene_detection_config: プレイシーン検出パイプラインの設定
-            video_processing_config: 動画処理パイプラインの設定
-            device: 使用デバイス
-            show_progress: プログレスバーを表示するか
+            config: 推論パイプライン全体の設定
         """
-        self.pose_exporter = PlayerPoseExporter(pose_export_config)
-        self.scene_detector = PlaySceneDetector(play_scene_detection_config)
-        self.video_composer = VideoComposer(video_processing_config)
+        self.config = config
+        self.show_progress = config.show_progress
+        self.pose_exporter = PlayerPoseExporter(config.pose_export)
+        self.scene_detector = PlaySceneDetector(config.scene_detection)
+        self.video_composer = VideoComposer(config.video_composition)
 
     @classmethod
     def create_default(
@@ -47,7 +43,8 @@ class InferencePipeline:
         pose_model_path: str,
         play_classifier_model_path: str,
         device: str = 'cuda',
-        detection_threshold: float = 0.5
+        detection_threshold: float = 0.5,
+        min_scene_duration: int = 10
     ) -> 'InferencePipeline':
         """
         デフォルト設定でInferencePipelineを作成
@@ -58,30 +55,27 @@ class InferencePipeline:
             play_classifier_model_path: プレー検知モデルのパス
             device: 使用デバイス
             detection_threshold: プレー中判定の閾値
+            min_scene_duration: 最小シーン長（フレーム数）
 
         Returns:
             デフォルト設定のInferencePipeline
         """
-        pose_export_config = PipelineConfig.create_default(
+        config = InferencePipelineConfig.create_default(
             table_model_path=table_model_path,
             pose_model_path=pose_model_path,
-            device=device
+            play_classifier_model_path=play_classifier_model_path,
+            device=device,
+            detection_threshold=detection_threshold,
+            min_scene_duration=min_scene_duration
         )
 
-        return cls(
-            pose_export_config=pose_export_config,
-            model_path=play_classifier_model_path,
-            detection_threshold=detection_threshold,
-            device=device
-        )
+        return cls(config=config)
 
     def process_video(
         self,
         input_video: str,
         output_dir: str,
         base_name: Optional[str] = None,
-        save_intermediate: bool = True,
-        save_graph: bool = True
     ) -> Dict[str, Any]:
         """
         動画を処理してプレーシーンを検出・抽出
@@ -90,8 +84,6 @@ class InferencePipeline:
             input_video: 入力動画パス
             output_dir: 出力ディレクトリ
             base_name: 出力ファイルのベース名（Noneの場合は入力動画名を使用）
-            save_intermediate: 中間ファイル（骨格CSV、予測CSVなど）を保存するか
-            save_graph: 予測グラフを保存するか
 
         Returns:
             処理結果の統計情報
@@ -99,10 +91,6 @@ class InferencePipeline:
         Raises:
             PipelineError: パイプライン処理中にエラーが発生した場合
         """
-        print(f"\n{'='*70}")
-        print("End-to-End推論パイプライン開始")
-        print(f"{'='*70}\n")
-
         input_path = Path(input_video)
         output_dir_path = Path(output_dir)
         output_dir_path.mkdir(parents=True, exist_ok=True)
@@ -110,20 +98,22 @@ class InferencePipeline:
         if base_name is None:
             base_name = input_path.stem
 
+        # configから設定を取得
+        save_output = self.config.save_output
+
         pose_video_path = output_dir_path / f"{base_name}_poses.mp4"
         pose_csv_path = output_dir_path / f"{base_name}_poses.csv"
         play_scenes_video_path = output_dir_path / f"{base_name}_play_scenes.mp4"
 
         try:
-            # Task1: 骨格データ抽出
             print(f"\n{'='*70}")
             print("Task1: 骨格データ抽出")
             print(f"{'='*70}\n")
 
             pose_results = self.pose_exporter.process_video(
                 input_video=str(input_video),
-                output_video=str(pose_video_path),
-                csv_output=str(pose_csv_path),
+                output_video=str(pose_video_path) if save_output else None,
+                csv_output=str(pose_csv_path) if save_output else None,
                 show_progress=self.show_progress
             )
 
@@ -142,7 +132,7 @@ class InferencePipeline:
             )
 
             # 予測結果を保存
-            if save_intermediate:
+            if save_output:
                 self.scene_detector.save_results(
                     result_df=result_df,
                     scenes=scenes,
@@ -152,7 +142,7 @@ class InferencePipeline:
                 )
 
             # グラフ作成
-            if save_graph:
+            if save_output:
                 self._save_prediction_graph(
                     result_df=result_df,
                     scenes=scenes,
@@ -200,8 +190,8 @@ class InferencePipeline:
                 },
                 'video_composition': video_stats,
                 'output_files': {
-                    'pose_video': str(pose_video_path),
-                    'pose_csv': str(pose_csv_path) if save_intermediate else None,
+                    'pose_video': str(pose_video_path) if save_output else None,
+                    'pose_csv': str(pose_csv_path) if save_output else None,
                     'play_scenes_video': str(play_scenes_video_path) if scenes else None
                 }
             }
@@ -210,8 +200,8 @@ class InferencePipeline:
             print("End-to-End推論パイプライン完了")
             print(f"{'='*70}")
             print(f"\n主要な出力:")
-            print(f"  骨格データ動画: {pose_video_path}")
-            if save_intermediate:
+            if save_output:
+                print(f"  骨格データ動画: {pose_video_path}")
                 print(f"  骨格データCSV: {pose_csv_path}")
             if scenes:
                 print(f"  プレーシーン動画: {play_scenes_video_path}")

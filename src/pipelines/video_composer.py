@@ -9,35 +9,25 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from tqdm import tqdm
 
+from src.pipelines.config import VideoCompositionConfig
 from src.pipelines.exceptions import VideoInputError, VideoProcessingError, ExportError
 
 
 class VideoComposer:
     """プレーシーン動画作成パイプライン"""
 
-    DEFAULT_CODEC = 'mp4v'
-    DEFAULT_OUTPUT_FPS = 30.0
-
-    def __init__(
-        self,
-        output_codec: str = DEFAULT_CODEC,
-        output_fps: Optional[float] = None,
-        add_scene_info: bool = True,
-        show_progress: bool = True
-    ):
+    def __init__(self, config: VideoCompositionConfig):
         """
         初期化
 
         Args:
-            output_codec: 出力動画のコーデック
-            output_fps: 出力動画のFPS（Noneの場合は元動画のFPSを使用）
-            add_scene_info: シーン情報をオーバーレイするか
-            show_progress: プログレスバーを表示するか
+            config: 動画作成の設定
         """
-        self.output_codec = output_codec
-        self.output_fps = output_fps
-        self.add_scene_info = add_scene_info
-        self.show_progress = show_progress
+        self.config = config
+        self.output_codec = config.output_codec
+        self.output_fps = config.output_fps
+        self.add_scene_info = config.add_scene_info
+        self.show_progress = config.show_progress
 
         print(f"VideoComposer初期化完了:")
         print(f"  コーデック: {self.output_codec}")

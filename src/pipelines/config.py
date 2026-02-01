@@ -171,6 +171,7 @@ class VideoCompositionConfig:
     output_codec: str = 'mp4v'
     output_fps: Optional[float] = None
     add_scene_info: bool = True
+    show_progress: bool = True
     max_scenes: Optional[int] = None
     min_scene_duration_for_highlights: Optional[int] = None
 
@@ -187,12 +188,11 @@ class VideoCompositionConfig:
 @dataclass
 class InferencePipelineConfig:
     """推論パイプライン全体の設定"""
-    pose_export: PlayerPoseConfig
+    pose_export: PlayerPoseExporterConfig
     scene_detection: PlaySceneDetectionConfig
     video_composition: VideoCompositionConfig
     show_progress: bool = True
-    save_intermediate: bool = True
-    save_graph: bool = True
+    save_output: bool = True
 
     @classmethod
     def create_default(
@@ -219,10 +219,11 @@ class InferencePipelineConfig:
             デフォルト設定のInferencePipelineConfig
         """
         return cls(
-            pose_export=PlayerPoseConfig.create_default(
+            pose_export=PlayerPoseExporterConfig.create_default(
                 table_model_path=table_model_path,
                 pose_model_path=pose_model_path,
-                device=device
+                device=device,
+                save_output=True
             ),
             scene_detection=PlaySceneDetectionConfig(
                 model_path=play_classifier_model_path,

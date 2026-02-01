@@ -8,7 +8,7 @@ import torch
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
 from tqdm import tqdm
 
 from src.models import PlayClassifierLSTM
@@ -17,39 +17,28 @@ from src.datasets import (
     CSVPoseSequenceDataset,
     MemoryPoseSequenceDataset,
 )
-
-
+from src.pipelines.config import PlaySceneDetectionConfig
 from src.pipelines.exceptions import DataInputError
 
 
 class PlaySceneDetector:
     """プレーシーン検出パイプライン"""
 
-    def __init__(
-        self,
-        model_path: str,
-        config_path: Optional[str] = None,
-        threshold: float = 0.5,
-        min_scene_duration: int = 10,
-        device: str = 'cuda'
-    ):
+    def __init__(self, config: PlaySceneDetectionConfig):
         """
         初期化
 
         Args:
-            model_path: 学習済みモデルのパス
-            config_path: モデル設定ファイルのパス（Noneの場合は自動推定）
-            threshold: プレー中判定の閾値
-            min_scene_duration: 最小シーン長（フレーム数）
-            device: 使用デバイス ('cuda' or 'cpu')
+            config: プレーシーン検出の設定
         """
-        self.model_path = Path(model_path)
-        self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        self.threshold = threshold
-        self.min_scene_duration = min_scene_duration
-        self.config_path = Path(config_path) if config_path is not None else None
+        self.config_obj = config
+        self.model_path = Path(config.model_path)
+        self.device = torch.device(config.device if torch.cuda.is_available() else 'cpu')
+        self.threshold = config.threshold
+        self.min_scene_duration = config.min_scene_duration
+        self.config_path = Path(config.config_path) if config.config_path is not None else None
 
-        self.config = self._load_config()
+        self.model_config = self._load_config()
         self.model = self._load_model()
 
         print(f"PlaySceneDetector初期化完了:")
@@ -94,10 +83,10 @@ class PlaySceneDetector:
         """学習済みモデルを読み込み"""
         model = PlayClassifierLSTM(
             input_size=34,  # 17 keypoints × 2 coordinates
-            hidden_size=self.config.get('hidden_size', 128),
-            num_layers=self.config.get('num_layers', 2),
-            dropout=self.config.get('dropout', 0.3),
-            use_attention=not self.config.get('no_attention', False)
+            hidden_size=self.model_config.get('hidden_size', 128),
+            num_layers=self.model_config.get('num_layers', 2),
+            dropout=self.model_config.get('dropout', 0.3),
+            use_attention=not self.model_config.get('no_attention', False)
         )
 
         # 重みの読み込み
@@ -144,7 +133,7 @@ class PlaySceneDetector:
         print(f"  frames: {frames.shape}")  # (num_frames,)
 
         # InMemoryPoseSequenceDatasetを作成
-        sequence_length = self.config.get('sequence_length', 30)
+        sequence_length = self.model_config.get('sequence_length', 30)
 
         dataset = MemoryPoseSequenceDataset(
             pose_data=pose_data,
@@ -188,7 +177,7 @@ class PlaySceneDetector:
         if not csv_path.exists():
             raise DataInputError(str(csv_path), "CSVファイルが存在しません")
 
-        sequence_length = self.config.get('sequence_length', 30)
+        sequence_length = self.model_config.get('sequence_length', 30)
 
         dataset = CSVPoseSequenceDataset(
             csv_path=str(csv_path),
