@@ -4,7 +4,9 @@
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
-
+# =====================================================
+# プレイヤー姿勢エクスポーター設定
+# =====================================================
 @dataclass
 class TableDetectionConfig:
     """卓球台検出の設定"""
@@ -146,6 +148,9 @@ class PlayerPoseExporterConfig:
             video_processing=VideoProcessingConfig()
         )
 
+# =====================================================
+# プレーシーン検出および動画作成設定
+# =====================================================
 @dataclass
 class PlaySceneDetectionConfig:
     """プレーシーン検出の設定"""
