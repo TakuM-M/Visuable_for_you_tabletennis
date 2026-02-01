@@ -13,7 +13,7 @@ from src.detection.player_classifier import PlayerClassifier
 from src.detection.tracking_exporter import TrackingExporter
 from src.visualization.player_classifier_visualizer import PlayerClassifierVisualizer
 
-from src.pipelines.config import PipelineConfig
+from src.pipelines.config import PlayerPoseExporterConfig
 from src.pipelines.exceptions import (
     TableDetectionError,
     VideoInputError,
@@ -28,7 +28,7 @@ class PlayerPoseExporter:
     DEFAULT_FALLBACK_TOTAL_FRAMES = 10000
     VIDEO_CODEC_FOURCC = 'mp4v'
 
-    def __init__(self, config: PipelineConfig):
+    def __init__(self, config: PlayerPoseExporterConfig):
         """
         Args:
             config: パイプライン設定

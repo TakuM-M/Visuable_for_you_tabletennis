@@ -21,6 +21,7 @@ class TableDetector:
         self,
         yolo_model_path: str = "models/table_detection/best.pt",
         cache_valid_frames: int = 1000,
+        device: str = "cpu",
     ):
         """
         卓球台検出器の初期化
@@ -28,18 +29,22 @@ class TableDetector:
         Args:
             yolo_model_path: YOLOモデルのパス
             cache_valid_frames: キャッシュ有効期間（フレーム数）
+            device: 使用デバイス（"cpu" or "cuda"）
         """
         self.yolo_model = None
         self.class_names = {}
         self.cache_valid_frames = cache_valid_frames
+        self.device = device
 
         if yolo_model_path is None:
             print("警告: YOLOモデルパスが指定されていません")
         else:
             try:
                 self.yolo_model = YOLO(yolo_model_path)
+                self.yolo_model.to(device)
                 self.class_names = self.yolo_model.names
                 print(f"YOLOモデルをロードしました: {yolo_model_path}")
+                print(f"デバイス: {device}")
                 print(f"検出可能なクラス: {list(self.class_names.values())}")
             except Exception as e:
                 print(f"警告: YOLOモデルのロードに失敗しました: {e}")
