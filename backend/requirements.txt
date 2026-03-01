@@ -1,0 +1,16 @@
+# API フレームワーク
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# データベース
+sqlalchemy==2.0.36
+alembic==1.13.3
+psycopg2-binary==2.9.10
+
+# バリデーション
+pydantic==2.9.2
+pydantic-settings==2.6.0
+
+# ユーティリティ
+python-dotenv==1.0.1
+python-multipart==0.0.12    # ファイルアップロード用

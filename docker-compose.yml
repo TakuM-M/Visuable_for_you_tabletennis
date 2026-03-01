@@ -1,132 +1,70 @@
-version: '3.8'
-
 services:
   # ========================================
-  # 開発環境（ローカルテスト用）
+  # PostgreSQL データベース
   # ========================================
-  dev:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: app
-    image: tabletennis-analyzer:latest
-    container_name: tabletennis-analyzer-dev
-
-    # GPU設定（NVIDIA Docker Runtime必要）
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-    # ボリュームマウント
-    volumes:
-      # プロジェクトコード（開発時はリアルタイム反映）
-      - .:/workspace
-      # データディレクトリ
-      - ./data:/workspace/data
-      # 出力ディレクトリ
-      - ./output:/workspace/output
-      # モデルキャッシュ（Ultralyticsなど）
-      - model-cache:/root/.cache
-
-    # ポート公開（Jupyter用）
-    ports:
-      - "8888:8888"
-
-    # 環境変数
+  postgres:
+    image: postgres:16
+    container_name: tabletennis-postgres
+    restart: unless-stopped
     environment:
-      - CUDA_VISIBLE_DEVICES=0
-      - PYTHONUNBUFFERED=1
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - tabletennis-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-    # 起動コマンド
-    command: /bin/bash
-
-    # インタラクティブモード
-    stdin_open: true
-    tty: true
-
-    # ネットワーク設定
+  # ========================================
+  # FastAPI バックエンド
+  # ========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: tabletennis-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app                     # ホットリロード用
+      - ./ml/models:/app/ml/models:ro      # MLモデルを読み取り専用でマウント
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
     networks:
       - tabletennis-net
 
   # ========================================
-  # Jupyter Notebook環境
+  # React フロントエンド
   # ========================================
-  jupyter:
+  frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile
-      target: app
-    image: tabletennis-analyzer:latest
-    container_name: tabletennis-analyzer-jupyter
-
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
+    container_name: tabletennis-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
     volumes:
-      - .:/workspace
-      - ./data:/workspace/data
-      - ./output:/workspace/output
-      - model-cache:/root/.cache
-
+      - ./frontend:/app                    # ホットリロード用
+      - /app/node_modules                  # node_modules はコンテナ内のものを使用
     ports:
-      - "8888:8888"
-
+      - "5173:5173"
     environment:
-      - CUDA_VISIBLE_DEVICES=0
-      - PYTHONUNBUFFERED=1
-
-    command: >
-      bash -c "pip install jupyter &&
-               jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''"
-
-    networks:
-      - tabletennis-net
-
-  # ========================================
-  # 推論実行環境（バッチ処理用）
-  # ========================================
-  inference:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: app
-    image: tabletennis-analyzer:latest
-    container_name: tabletennis-analyzer-inference
-
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-    volumes:
-      - .:/workspace
-      - ./data:/workspace/data
-      - ./output:/workspace/output
-      - model-cache:/root/.cache
-
-    environment:
-      - CUDA_VISIBLE_DEVICES=0
-      - PYTHONUNBUFFERED=1
-
-    # 推論実行コマンド（環境変数で制御）
-    command: >
-      bash -c "python scripts/run_inference_runpod.py
-               --input ${INPUT_VIDEO:-data/raw/sample_video_01_02.MOV}
-               --output ${OUTPUT_DIR:-output/predictions/sample_video_01_02}
-               --config ${CONFIG_FILE:-configs/crip_app_config.json}"
-
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
     networks:
       - tabletennis-net
 
@@ -134,7 +72,7 @@ services:
 # ボリューム定義
 # ========================================
 volumes:
-  model-cache:
+  postgres-data:
     driver: local
 
 # ========================================
