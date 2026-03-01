@@ -3,17 +3,24 @@
 # ========================================
 FROM python:3.12-slim AS deps
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# システムパッケージ（psycopg2のビルドに必要）
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# uv はシステム Python に直接インストール（コンテナ内で venv 不要）
+ENV UV_SYSTEM_PYTHON=1
+
+# 依存ファイルをコピー（uv.lock が存在すれば使用）
+COPY pyproject.toml uv.lock* ./
+
+# 本番依存のみインストール（dev グループを除外）
+RUN uv sync --no-cache --no-dev
 
 # ========================================
 # Stage 2: アプリケーション（開発用）
@@ -22,8 +29,10 @@ FROM deps AS development
 
 WORKDIR /app
 
-# アプリコードは docker-compose.yml のボリュームでマウントするため COPY 不要
-# uvicorn --reload でホットリロードを有効化
+# 開発時は dev グループも追加インストール
+RUN uv sync --no-cache
+
+# アプリコードは docker-compose.yml のボリュームでマウント
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 # ========================================

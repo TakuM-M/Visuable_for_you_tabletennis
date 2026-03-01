@@ -68,11 +68,43 @@ services:
     networks:
       - tabletennis-net
 
+  # ========================================
+  # ML 推論・学習（必要なときだけ起動）
+  # ========================================
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+      target: app
+    container_name: tabletennis-ml
+    volumes:
+      - ./ml:/workspace                    # コードのマウント
+      - model-cache:/root/.cache           # モデルキャッシュ
+    ports:
+      - "8888:8888"                        # Jupyter 用
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    profiles:
+      - ml                                 # 通常起動では除外（docker compose --profile ml up で起動）
+    networks:
+      - tabletennis-net
+
 # ========================================
 # ボリューム定義
 # ========================================
 volumes:
   postgres-data:
+    driver: local
+  model-cache:
     driver: local
 
 # ========================================
