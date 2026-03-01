@@ -135,12 +135,6 @@ python ml/src/main.py data/raw/your_video.mp4 -o output -v
 - [x] ML パイプラインの実装（卓球台検出・姿勢推定・LSTM分類）
 - [x] モノレポ構造への移行（`ml/`, `backend/`, `frontend/`）
 
-### 進行中
-
-- [ ] Web アプリの設計・実装（FastAPI バックエンド）
-- [ ] React フロントエンドの実装
-- [ ] ML 推論コードのバックエンドへの統合
-
 ## ライセンス
 
 このプロジェクトは開発中です。
