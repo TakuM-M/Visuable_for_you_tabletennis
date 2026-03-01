@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# 環境設定
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# macOS
+.DS_Store
+
+# データファイル（大容量）
+data/raw/*.MOV
+data/raw/*.mp4
+data/raw/*.avi
+output/
+
+# モデルファイル（大容量の場合）
+# models/*/best.pt
+# models/*/*.pth
+
+# ログファイル
+*.log
+logs/
+
+# テスト
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ドキュメント（ビルド成果物）
+docs/_build/

@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # 開発環境（ローカルテスト用）
+  # ========================================
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    image: tabletennis-analyzer:latest
+    container_name: tabletennis-analyzer-dev
+
+    # GPU設定（NVIDIA Docker Runtime必要）
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # ボリュームマウント
+    volumes:
+      # プロジェクトコード（開発時はリアルタイム反映）
+      - .:/workspace
+      # データディレクトリ
+      - ./data:/workspace/data
+      # 出力ディレクトリ
+      - ./output:/workspace/output
+      # モデルキャッシュ（Ultralyticsなど）
+      - model-cache:/root/.cache
+
+    # ポート公開（Jupyter用）
+    ports:
+      - "8888:8888"
+
+    # 環境変数
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+
+    # 起動コマンド
+    command: /bin/bash
+
+    # インタラクティブモード
+    stdin_open: true
+    tty: true
+
+    # ネットワーク設定
+    networks:
+      - tabletennis-net
+
+  # ========================================
+  # Jupyter Notebook環境
+  # ========================================
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    image: tabletennis-analyzer:latest
+    container_name: tabletennis-analyzer-jupyter
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data
+      - ./output:/workspace/output
+      - model-cache:/root/.cache
+
+    ports:
+      - "8888:8888"
+
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+
+    command: >
+      bash -c "pip install jupyter &&
+               jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''"
+
+    networks:
+      - tabletennis-net
+
+  # ========================================
+  # 推論実行環境（バッチ処理用）
+  # ========================================
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    image: tabletennis-analyzer:latest
+    container_name: tabletennis-analyzer-inference
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data
+      - ./output:/workspace/output
+      - model-cache:/root/.cache
+
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+
+    # 推論実行コマンド（環境変数で制御）
+    command: >
+      bash -c "python scripts/run_inference_runpod.py
+               --input ${INPUT_VIDEO:-data/raw/sample_video_01_02.MOV}
+               --output ${OUTPUT_DIR:-output/predictions/sample_video_01_02}
+               --config ${CONFIG_FILE:-configs/crip_app_config.json}"
+
+    networks:
+      - tabletennis-net
+
+# ========================================
+# ボリューム定義
+# ========================================
+volumes:
+  model-cache:
+    driver: local
+
+# ========================================
+# ネットワーク定義
+# ========================================
+networks:
+  tabletennis-net:
+    driver: bridge
