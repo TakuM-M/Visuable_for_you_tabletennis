@@ -4,6 +4,8 @@ import { getToken } from "./lib/auth";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import VideoListPage from "./pages/VideoListPage";
+import VideoDetailPage from "./pages/VideoDetailPage";
+
 
 const queryClient = new QueryClient();
 
@@ -27,6 +29,7 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route path="/videos/:id" element={<PrivateRoute><VideoDetailPage /></PrivateRoute>} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
