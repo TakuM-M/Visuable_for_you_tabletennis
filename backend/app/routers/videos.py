@@ -4,9 +4,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.session import get_db
+from app.models.user import User
 from app.repositories import video as video_repo
-from app.schemas.video import VideoCreate, VideoResponse
+from app.schemas.video import VideoResponse
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -18,8 +20,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 def upload_video(
     title: str = Form(...),
     file: UploadFile = File(...),
-    # TODO: 認証実装後は現在のログインユーザーから取得する
-    user_id: uuid.UUID = Form(...),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> VideoResponse:
     """動画アップロード"""
@@ -29,7 +30,7 @@ def upload_video(
 
     video = video_repo.create(
         db=db,
-        user_id=user_id,
+        user_id=current_user.id,
         title=title,
         storage_path=str(save_path),
     )
@@ -38,16 +39,19 @@ def upload_video(
 
 @router.get("", response_model=list[VideoResponse])
 def list_videos(
-    # TODO: 認証実装後は現在のログインユーザーから取得する
-    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[VideoResponse]:
-    """動画一覧取得"""
-    return video_repo.get_by_user_id(db, user_id)
+    """ログインユーザーの動画一覧取得"""
+    return video_repo.get_by_user_id(db, current_user.id)
 
 
 @router.get("/{video_id}", response_model=VideoResponse)
-def get_video(video_id: uuid.UUID, db: Session = Depends(get_db)) -> VideoResponse:
+def get_video(
+    video_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> VideoResponse:
     """動画詳細取得"""
     video = video_repo.get_by_id(db, video_id)
     if video is None:
