@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import clips, jobs, users, videos
+from app.routers import auth, clips, jobs, users, videos
 
 app = FastAPI(
     title="Visuable for You Table Tennis API",
@@ -15,6 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(videos.router)
 app.include_router(jobs.router)
