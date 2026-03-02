@@ -11,6 +11,7 @@ export default defineConfig({
       "/api": {
         target: "http://backend:8000",  // docker-compose のサービス名
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),  // /api を除去して転送
       },
     },
   },
