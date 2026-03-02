@@ -9,8 +9,10 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.job import JobStatus
 from app.models.user import User
+from app.models.video import VideoStatus
 from app.repositories import clip as clip_repo
 from app.repositories import job as job_repo
+from app.repositories import video as video_repo
 from app.schemas.job import JobResponse
 
 router = APIRouter(tags=["jobs"])
@@ -82,6 +84,8 @@ def complete_job(
         status=JobStatus.completed,
         completed_at=datetime.now(timezone.utc),
     )
+    
+    video_repo.update_status(db, job.video_id, VideoStatus.completed)
 
     print(f"ジョブ完了 job_id={job_id} clips={len(request.clips)}件")
     return {"message": "完了"}

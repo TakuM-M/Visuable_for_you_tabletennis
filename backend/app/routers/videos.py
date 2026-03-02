@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.models.video import VideoStatus
 from app.repositories import job as job_repo
 from app.repositories import video as video_repo
 from app.schemas.video import VideoResponse
@@ -60,6 +61,8 @@ def upload_video(
         title=title,
         storage_path=str(save_path),
     )
+    
+    video_repo.update_status(db, video.id, VideoStatus.queued)
 
     # Jobを作成してMLサービスに処理を依頼
     job = job_repo.create(db=db, video_id=video.id)
