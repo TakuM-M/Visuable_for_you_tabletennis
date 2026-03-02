@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.core.security import hash_password
 from app.db.session import get_db
+from app.models.user import User
 from app.repositories import user as user_repo
 from app.schemas.user import UserCreate, UserResponse
 
@@ -25,3 +27,9 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
         display_name=body.display_name,
     )
     return user
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
+    """ログイン中のユーザー情報を取得"""
+    return current_user
