@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir fastapi uvicorn httpx
+
+COPY mock_app.py .
+
+CMD ["uvicorn", "mock_app:app", "--host", "0.0.0.0", "--port", "8001"]
