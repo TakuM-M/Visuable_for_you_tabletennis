@@ -6,12 +6,12 @@
 erDiagram
     users {
         UUID id PK
-        VARCHAR email
+        VARCHAR email "UNIQUE"
         VARCHAR password_hash
         VARCHAR display_name
-        BOOLEAN email_verified
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
+        BOOLEAN email_verified "DEFAULT FALSE"
+        TIMESTAMPTZ created_at "DEFAULT now()"
+        TIMESTAMPTZ updated_at "DEFAULT now()"
     }
 
     videos {
@@ -19,20 +19,20 @@ erDiagram
         UUID user_id FK
         VARCHAR title
         VARCHAR storage_path
-        FLOAT duration
-        ENUM status
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ updated_at
+        FLOAT duration "nullable"
+        ENUM status "uploaded|queued|processing|completed|failed"
+        TIMESTAMPTZ created_at "DEFAULT now()"
+        TIMESTAMPTZ updated_at "DEFAULT now()"
     }
 
     jobs {
         UUID id PK
         UUID video_id FK
-        ENUM status
-        TIMESTAMPTZ started_at
-        TIMESTAMPTZ completed_at
-        TEXT error_message
-        TIMESTAMPTZ created_at
+        ENUM status "queued|processing|completed|failed"
+        TIMESTAMPTZ started_at "nullable"
+        TIMESTAMPTZ completed_at "nullable"
+        TEXT error_message "nullable"
+        TIMESTAMPTZ created_at "DEFAULT now()"
     }
 
     clips {
@@ -42,17 +42,17 @@ erDiagram
         FLOAT start_time
         FLOAT end_time
         VARCHAR storage_path
-        TIMESTAMPTZ created_at
+        TIMESTAMPTZ created_at "DEFAULT now()"
     }
 
     notification_logs {
         BIGSERIAL id PK
         UUID user_id FK
         UUID job_id FK
-        VARCHAR email
-        ENUM status
-        TIMESTAMPTZ sent_at
-        TIMESTAMPTZ created_at
+        VARCHAR email "送信時点のアドレス"
+        ENUM status "pending|sent|failed"
+        TIMESTAMPTZ sent_at "nullable"
+        TIMESTAMPTZ created_at "DEFAULT now()"
     }
 
     users ||--o{ videos : "投稿"
