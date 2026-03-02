@@ -13,7 +13,16 @@ export default function VideoListPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">動画一覧</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">動画一覧</h1>
+        <button
+          onClick={() => navigate("/videos/new")}
+          className="rounded bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
+        >
+          + 動画を追加
+        </button>
+      </div>
+
       {isLoading ? (
         <p>読み込み中...</p>
       ) : (
@@ -30,6 +39,7 @@ export default function VideoListPage() {
           ))}
         </ul>
       )}
+
       <button
         onClick={() => {
           removeToken();
