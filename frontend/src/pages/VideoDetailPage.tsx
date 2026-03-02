@@ -43,6 +43,17 @@ export default function VideoDetailPage() {
     },
   });
 
+  const videoStatusColor = (status: string) => {
+    switch (status) {
+      case "uploaded":   return "bg-blue-100 text-blue-600";
+      case "queued":    return "bg-yellow-100 text-yellow-600";
+      case "processing": return "bg-yellow-100 text-yellow-600";
+      case "completed":  return "bg-green-100 text-green-600";
+      case "failed":     return "bg-red-100 text-red-600";
+      default:          return "bg-gray-100 text-gray-600";
+    }
+  };
+
   const jobStatusColor = (status: string) => {
     switch (status) {
       case "processing": return "bg-yellow-100 text-yellow-600";
@@ -79,8 +90,12 @@ export default function VideoDetailPage() {
             <div className="rounded-lg border bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between">
                 <h1 className="text-2xl font-bold text-gray-800">{data.data.title}</h1>
-                <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                  {data.data.status}
+                <span className={`rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600 ${videoStatusColor(data.data.status)}`}>
+                  {data.data.status === "uploaded" && "アップロード済み"}
+                  {data.data.status === "queued" && "処理待ち"}
+                  {data.data.status === "processing" && "処理中..."}
+                  {data.data.status === "completed" && "処理完了"}
+                  {data.data.status === "failed" && "処理失敗"}
                 </span>
               </div>
               <p className="mt-2 text-sm text-gray-400">
