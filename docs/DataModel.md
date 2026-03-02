@@ -129,3 +129,30 @@ erDiagram
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
 > ユーザーがメールアドレスを変更した後でも送信履歴を追跡できるよう、送信時点のアドレスをスナップショットとして保持する。
+
+
+## 作成メモ
+1. PostgreSQL — データベース本体
+役割: データを実際に保存・管理するサーバー
+
+SQL（Structured Query Language）を使って、テーブルの作成・データの読み書きを行う。Pythonからは直接触らず、後述のSQLAlchemyを通じて操作する。
+
+2. psycopg2 — PostgreSQL ドライバ
+役割: PythonとPostgreSQLを接続する「橋渡し」
+
+PythonはそのままではPostgreSQLと通信できない。psycopg2がTCP接続の確立・SQLの送受信・型変換を担う。直接使うことはほぼなく、SQLAlchemyの内部で自動的に使われる。
+
+3. SQLAlchemy — ORM（Object-Relational Mapper）
+役割: テーブルをPythonクラスとして扱えるようにする
+
+生のSQLを書かずに、Pythonオブジェクトを操作するだけでデータの読み書きができる。
+
+4. Alembic — マイグレーション管理
+役割: テーブル定義の変更履歴を管理し、DBに安全に適用する
+
+SQLAlchemyのモデルクラスを変更しただけでは、PostgreSQL側のテーブルは変わらない。Alembicがモデルの差分を検出して「マイグレーションファイル（変更スクリプト）」を自動生成し、それをDBに適用することでテーブル構造を更新する。
+
+5. Pydantic Settings — 設定管理
+役割: 接続先DBのURLやパスワードを .env から安全に読み込む
+
+DBのホスト名・ユーザー名・パスワードをコードにハードコードするのは危険。Pydantic Settingsが .env ファイルを読み込み、型安全な設定オブジェクトとして提供する。PostgreSQL	データの永続化
