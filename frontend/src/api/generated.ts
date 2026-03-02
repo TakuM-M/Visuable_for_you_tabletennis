@@ -18,6 +18,11 @@ export interface BodyUploadVideoVideosPost {
   file: Blob;
 }
 
+export interface ClipData {
+  start_time: number;
+  end_time: number;
+}
+
 /**
  * 切り抜き動画レスポンス（クリップはMLサービスが生成するためCreateスキーマは不要）
  */
@@ -39,6 +44,11 @@ export interface ValidationError {
 
 export interface HTTPValidationError {
   detail?: ValidationError[];
+}
+
+export interface JobCompleteRequest {
+  job_id: string;
+  clips: ClipData[];
 }
 
 export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
@@ -116,6 +126,8 @@ export interface VideoResponse {
   created_at: string;
   updated_at: string;
 }
+
+export type CompleteJobInternalJobsJobIdCompletePost200 = { [key: string]: unknown };
 
 export type HealthHealthGet200 = { [key: string]: unknown };
 
@@ -522,6 +534,58 @@ export const listJobsByVideoVideosVideoIdJobsGet = async (videoId: string, optio
   
   const data: listJobsByVideoVideosVideoIdJobsGetResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listJobsByVideoVideosVideoIdJobsGetResponse
+}
+  
+
+
+/**
+ * MLサービスからの処理完了コールバック
+ * @summary Complete Job
+ */
+export type completeJobInternalJobsJobIdCompletePostResponse200 = {
+  data: CompleteJobInternalJobsJobIdCompletePost200
+  status: 200
+}
+
+export type completeJobInternalJobsJobIdCompletePostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type completeJobInternalJobsJobIdCompletePostResponseSuccess = (completeJobInternalJobsJobIdCompletePostResponse200) & {
+  headers: Headers;
+};
+export type completeJobInternalJobsJobIdCompletePostResponseError = (completeJobInternalJobsJobIdCompletePostResponse422) & {
+  headers: Headers;
+};
+
+export type completeJobInternalJobsJobIdCompletePostResponse = (completeJobInternalJobsJobIdCompletePostResponseSuccess | completeJobInternalJobsJobIdCompletePostResponseError)
+
+export const getCompleteJobInternalJobsJobIdCompletePostUrl = (jobId: string,) => {
+
+
+  
+
+  return `/api/internal/jobs/${jobId}/complete`
+}
+
+export const completeJobInternalJobsJobIdCompletePost = async (jobId: string,
+    jobCompleteRequest: JobCompleteRequest, options?: RequestInit): Promise<completeJobInternalJobsJobIdCompletePostResponse> => {
+  
+  const res = await fetch(getCompleteJobInternalJobsJobIdCompletePostUrl(jobId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      jobCompleteRequest,)
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: completeJobInternalJobsJobIdCompletePostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as completeJobInternalJobsJobIdCompletePostResponse
 }
   
 
