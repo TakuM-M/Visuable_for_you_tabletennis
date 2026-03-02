@@ -128,13 +128,6 @@ python ml/src/main.py data/raw/your_video.mp4 -o output -v
 | `04_predict_play_scenes.ipynb` | プレー区間の予測 |
 | `05_crip.ipynb` | 動画の切り抜き |
 
-## 開発状況
-
-### 完了
-
-- [x] ML パイプラインの実装（卓球台検出・姿勢推定・LSTM分類）
-- [x] モノレポ構造への移行（`ml/`, `backend/`, `frontend/`）
-
 ## ライセンス
 
 このプロジェクトは開発中です。
