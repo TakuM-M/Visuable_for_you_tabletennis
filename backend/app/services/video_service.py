@@ -64,12 +64,21 @@ def upload_video(
 
 
 def delete_video(db: Session, video_id: uuid.UUID) -> bool:
+    # ファイルパスを先に取得（DB削除前に）
+    video = video_repo.get_by_id(db, video_id)
+    if video is None:
+        return False
+    storage_path = Path(video.storage_path)
+    
     jobs = job_repo.get_by_video_id(db, video_id)
     for job in jobs:
         notification_log_repo.delete_by_job_id(db, job.id)
     clip_repo.delete_by_video_id(db, video_id)
     job_repo.delete_by_video_id(db, video_id)
     video_repo.delete(db, video_id)
+    
+    # ファイル削除（存在しなくてもエラーにしない）
+    storage_path.unlink(missing_ok=True)
     
     return True
 
