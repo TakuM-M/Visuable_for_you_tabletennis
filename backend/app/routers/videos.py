@@ -1,7 +1,8 @@
+import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -58,15 +59,57 @@ def get_video(
 @router.get("/{video_id}/output")
 def get_output_video(
     video_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
-) -> FileResponse:
-    """連結済み動画ファイルを返す（videoタグで直接再生するため認証なし）"""
+) -> StreamingResponse:
+    """連結済み動画ファイルを返す（Range リクエスト対応でシーク可能）"""
     video = video_repo.get_by_id(db, video_id)
     if video is None:
         raise HTTPException(status_code=404, detail="動画が見つかりません")
     if not video.output_path:
         raise HTTPException(status_code=404, detail="連結動画がまだ生成されていません")
-    return FileResponse(video.output_path, media_type="video/mp4")
+
+    file_size = os.path.getsize(video.output_path)
+    range_header = request.headers.get("Range")
+
+    if range_header:
+        # Range: bytes=0-999 のような形式をパース
+        range_value = range_header.strip().replace("bytes=", "")
+        start_str, _, end_str = range_value.partition("-")
+        start = int(start_str) if start_str else 0
+        end = int(end_str) if end_str else file_size - 1
+        end = min(end, file_size - 1)
+        chunk_size = end - start + 1
+
+        def iterfile():
+            with open(video.output_path, "rb") as f:
+                f.seek(start)
+                remaining = chunk_size
+                while remaining > 0:
+                    data = f.read(min(65536, remaining))
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(chunk_size),
+        }
+        return StreamingResponse(iterfile(), status_code=206, headers=headers, media_type="video/mp4")
+
+    # Range ヘッダーなし（最初のリクエスト）
+    def iterfile():
+        with open(video.output_path, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+    }
+    return StreamingResponse(iterfile(), headers=headers, media_type="video/mp4")
 
 
 @router.delete("/{video_id}", status_code=204)
