@@ -22,6 +22,7 @@ dependencies = [
     "python-dotenv==1.0.1",
     "python-multipart==0.0.12",
     "httpx==0.27.2",    # MLサービス呼び出し用
+    "resend==2.5.0",     # メール送信用
 ]
 
 [dependency-groups]

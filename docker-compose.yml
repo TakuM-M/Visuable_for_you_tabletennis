@@ -46,6 +46,9 @@ services:
       - DEBUG=${DEBUG:-false}
       - ML_SERVICE_URL=http://ml-mock:8001
       - BACKEND_INTERNAL_URL=http://backend:8000
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
     networks:
       - tabletennis-net
 
