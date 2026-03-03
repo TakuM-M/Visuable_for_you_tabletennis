@@ -100,6 +100,19 @@ export default function VideoDetailPage() {
               <p className="mt-2 text-sm text-gray-400">
                 {new Date(data.data.created_at).toLocaleDateString("ja-JP")}
               </p>
+
+              {/* 連結済み動画プレーヤー */}
+              {data.data.status === "completed" ? (
+                <div className="mt-4">
+                  <video
+                    controls
+                    className="w-full rounded"
+                    src={`http://localhost:8000/videos/${id}/output`}
+                  />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-gray-400">ML処理完了後に動画が表示されます</p>
+              )}
             </div>
           )}
 

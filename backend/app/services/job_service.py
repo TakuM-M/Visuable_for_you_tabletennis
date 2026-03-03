@@ -21,6 +21,7 @@ def complete_job(
     db: Session,
     job_id: uuid.UUID,
     clips: list[dict],   # {"start_time": float, "end_time": float} のリスト
+    output_path: str,    # FFmpegが生成した連結動画のパス
 ) -> None:
     job = job_repo.get_by_id(db, job_id)
     if job is None:
@@ -45,7 +46,8 @@ def complete_job(
         completed_at=datetime.now(timezone.utc),
     )
 
-    # 3. Videoをcompletedに更新
+    # 3. VideoにoutputPathを保存してcompletedに更新
+    video_repo.update_output_path(db, job.video_id, output_path)
     video = video_repo.update_status(db, job.video_id, VideoStatus.completed)
 
     # 4. メール送信

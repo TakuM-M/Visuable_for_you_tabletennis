@@ -49,6 +49,7 @@ export interface HTTPValidationError {
 export interface JobCompleteRequest {
   job_id: string;
   clips: ClipData[];
+  output_path: string;
 }
 
 export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
@@ -121,11 +122,16 @@ export interface VideoResponse {
   user_id: string;
   title: string;
   storage_path: string;
+  output_path: string | null;
   duration: number | null;
   status: VideoStatus;
   created_at: string;
   updated_at: string;
 }
+
+export type VerifyEmailAuthVerifyEmailGetParams = {
+token: string;
+};
 
 export type CompleteJobInternalJobsJobIdCompletePost200 = { [key: string]: unknown };
 
@@ -193,6 +199,62 @@ if(bodyLoginAuthLoginPost.client_secret !== undefined && bodyLoginAuthLoginPost.
   
   const data: loginAuthLoginPostResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as loginAuthLoginPostResponse
+}
+  
+
+
+/**
+ * @summary Verify Email
+ */
+export type verifyEmailAuthVerifyEmailGetResponse200 = {
+  data: unknown
+  status: 200
+}
+
+export type verifyEmailAuthVerifyEmailGetResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type verifyEmailAuthVerifyEmailGetResponseSuccess = (verifyEmailAuthVerifyEmailGetResponse200) & {
+  headers: Headers;
+};
+export type verifyEmailAuthVerifyEmailGetResponseError = (verifyEmailAuthVerifyEmailGetResponse422) & {
+  headers: Headers;
+};
+
+export type verifyEmailAuthVerifyEmailGetResponse = (verifyEmailAuthVerifyEmailGetResponseSuccess | verifyEmailAuthVerifyEmailGetResponseError)
+
+export const getVerifyEmailAuthVerifyEmailGetUrl = (params: VerifyEmailAuthVerifyEmailGetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/auth/verify-email?${stringifiedParams}` : `/api/auth/verify-email`
+}
+
+export const verifyEmailAuthVerifyEmailGet = async (params: VerifyEmailAuthVerifyEmailGetParams, options?: RequestInit): Promise<verifyEmailAuthVerifyEmailGetResponse> => {
+  
+  const res = await fetch(getVerifyEmailAuthVerifyEmailGetUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: verifyEmailAuthVerifyEmailGetResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as verifyEmailAuthVerifyEmailGetResponse
 }
   
 
@@ -484,6 +546,56 @@ export const deleteVideoVideosVideoIdDelete = async (videoId: string, options?: 
   
   const data: deleteVideoVideosVideoIdDeleteResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as deleteVideoVideosVideoIdDeleteResponse
+}
+  
+
+
+/**
+ * 連結済み動画ファイルを返す
+ * @summary Get Output Video
+ */
+export type getOutputVideoVideosVideoIdOutputGetResponse200 = {
+  data: unknown
+  status: 200
+}
+
+export type getOutputVideoVideosVideoIdOutputGetResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type getOutputVideoVideosVideoIdOutputGetResponseSuccess = (getOutputVideoVideosVideoIdOutputGetResponse200) & {
+  headers: Headers;
+};
+export type getOutputVideoVideosVideoIdOutputGetResponseError = (getOutputVideoVideosVideoIdOutputGetResponse422) & {
+  headers: Headers;
+};
+
+export type getOutputVideoVideosVideoIdOutputGetResponse = (getOutputVideoVideosVideoIdOutputGetResponseSuccess | getOutputVideoVideosVideoIdOutputGetResponseError)
+
+export const getGetOutputVideoVideosVideoIdOutputGetUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}/output`
+}
+
+export const getOutputVideoVideosVideoIdOutputGet = async (videoId: string, options?: RequestInit): Promise<getOutputVideoVideosVideoIdOutputGetResponse> => {
+  
+  const res = await fetch(getGetOutputVideoVideosVideoIdOutputGetUrl(videoId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: getOutputVideoVideosVideoIdOutputGetResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getOutputVideoVideosVideoIdOutputGetResponse
 }
   
 

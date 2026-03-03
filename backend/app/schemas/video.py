@@ -21,6 +21,7 @@ class VideoResponse(BaseModel):
     user_id: uuid.UUID
     title: str
     storage_path: str
+    output_path: str | None
     duration: float | None
     status: VideoStatus
     created_at: datetime
