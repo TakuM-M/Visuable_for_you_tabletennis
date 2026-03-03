@@ -69,17 +69,20 @@ def delete_video(db: Session, video_id: uuid.UUID) -> bool:
     if video is None:
         return False
     storage_path = Path(video.storage_path)
-    
+    output_path = Path(video.output_path) if video.output_path else None
+
     jobs = job_repo.get_by_video_id(db, video_id)
     for job in jobs:
         notification_log_repo.delete_by_job_id(db, job.id)
     clip_repo.delete_by_video_id(db, video_id)
     job_repo.delete_by_video_id(db, video_id)
     video_repo.delete(db, video_id)
-    
+
     # ファイル削除（存在しなくてもエラーにしない）
     storage_path.unlink(missing_ok=True)
-    
+    if output_path:
+        output_path.unlink(missing_ok=True)
+
     return True
 
     
