@@ -4,6 +4,7 @@ import {
   getVideoVideosVideoIdGet,
   listJobsByVideoVideosVideoIdJobsGet,
   listClipsByVideoVideosVideoIdClipsGet,
+  deleteVideoVideosVideoIdDelete,
 } from "../api/generated";
 import VideoStatusBadge from "../components/VideoStatusBadge";
 import { authHeaders } from "../lib/auth";
@@ -16,6 +17,16 @@ export default function VideoDetailPage() {
     queryKey: ["video", id],
     queryFn: () => getVideoVideosVideoIdGet(id!, { headers: authHeaders() }),
   });
+
+  const deleteVideo = async () => {
+    if (!window.confirm("本当にこの動画を削除しますか？")) return;
+    try {
+      await deleteVideoVideosVideoIdDelete(id!, { headers: authHeaders() });
+      navigate("/");
+    } catch (error) {
+      alert("動画の削除に失敗しました");
+    }
+  }
 
   const { data: jobsData } = useQuery({
     queryKey: ["jobs", id],
@@ -68,6 +79,10 @@ export default function VideoDetailPage() {
         className="mb-6 text-sm text-gray-500 hover:text-gray-700"
       >
         ← 一覧に戻る
+      </button>
+
+      <button onClick={deleteVideo} className="text-sm text-red-500 hover:text-red-700">
+        動画を削除
       </button>
 
       {isLoading ? (
