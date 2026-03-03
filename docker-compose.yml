@@ -38,6 +38,7 @@ services:
     volumes:
       - ./backend:/app                     # ホットリロード用
       - ./ml/models:/app/ml/models:ro      # MLモデルを読み取り専用でマウント
+      - uploads:/app/uploads               # ml-mockと動画ファイルを共有
     ports:
       - "8000:8000"
     environment:
@@ -83,6 +84,8 @@ services:
       dockerfile: Dockerfile.mock
     container_name: tabletennis-ml-mock
     restart: unless-stopped
+    volumes:
+      - uploads:/app/uploads               # backendと動画ファイルを共有
     ports:
       - "8001:8001"
     networks:
@@ -125,6 +128,8 @@ volumes:
   postgres-data:
     driver: local
   model-cache:
+    driver: local
+  uploads:
     driver: local
 
 # ========================================
