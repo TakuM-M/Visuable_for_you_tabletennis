@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { listVideosVideosGet } from "../api/generated";
 import { authHeaders, removeToken } from "../lib/auth";
+import VideoStatusBadge from "../components/VideoStatusBadge";
 
 export default function VideoListPage() {
   const navigate = useNavigate();
@@ -10,19 +11,6 @@ export default function VideoListPage() {
     queryKey: ["videos"],
     queryFn: () => listVideosVideosGet({ headers: authHeaders() }),
   });
-
-  const statusColors = (status: string) => {
-    switch (status) {
-      case "processing":
-        return "bg-yellow-100 text-yellow-600";
-      case "completed":
-        return "bg-green-100 text-green-600";
-      case "failed":
-        return "bg-red-100 text-red-600";
-      default:
-        return "bg-gray-100 text-gray-600";
-    }
-  };
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -48,9 +36,7 @@ export default function VideoListPage() {
             >
               <div className="flex items-center justify-between">
                 <p className="font-medium text-gray-800">{video.title}</p>
-                <span className={`rounded-full px-2 py-1 text-xs ${statusColors(video.status)}`}>
-                  {video.status}
-                </span>
+                <VideoStatusBadge status={video.status} />
               </div>
               <p className="mt-1 text-xs text-gray-400">
                 {new Date(video.created_at).toLocaleDateString("ja-JP")}
