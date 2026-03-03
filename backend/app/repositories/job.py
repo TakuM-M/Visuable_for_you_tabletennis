@@ -43,3 +43,11 @@ def update_status(
     db.commit()
     db.refresh(job)
     return job
+
+def delete_by_video_id(db: Session, video_id: uuid.UUID) -> int:
+    jobs = get_by_video_id(db, video_id)
+    count = len(jobs)
+    for job in jobs:
+        db.delete(job)
+    db.commit()
+    return count

@@ -439,6 +439,56 @@ export const getVideoVideosVideoIdGet = async (videoId: string, options?: Reques
 
 
 /**
+ * 動画削除
+ * @summary Delete Video
+ */
+export type deleteVideoVideosVideoIdDeleteResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteVideoVideosVideoIdDeleteResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type deleteVideoVideosVideoIdDeleteResponseSuccess = (deleteVideoVideosVideoIdDeleteResponse204) & {
+  headers: Headers;
+};
+export type deleteVideoVideosVideoIdDeleteResponseError = (deleteVideoVideosVideoIdDeleteResponse422) & {
+  headers: Headers;
+};
+
+export type deleteVideoVideosVideoIdDeleteResponse = (deleteVideoVideosVideoIdDeleteResponseSuccess | deleteVideoVideosVideoIdDeleteResponseError)
+
+export const getDeleteVideoVideosVideoIdDeleteUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}`
+}
+
+export const deleteVideoVideosVideoIdDelete = async (videoId: string, options?: RequestInit): Promise<deleteVideoVideosVideoIdDeleteResponse> => {
+  
+  const res = await fetch(getDeleteVideoVideosVideoIdDeleteUrl(videoId),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: deleteVideoVideosVideoIdDeleteResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as deleteVideoVideosVideoIdDeleteResponse
+}
+  
+
+
+/**
  * ジョブ詳細取得
  * @summary Get Job
  */

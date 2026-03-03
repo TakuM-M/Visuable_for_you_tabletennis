@@ -42,3 +42,11 @@ def update_status(
     db.commit()
     db.refresh(log)
     return log
+
+def delete_by_job_id(db: Session, job_id: uuid.UUID) -> int:
+    logs = get_by_job_id(db, job_id)
+    count = len(logs)
+    for log in logs:
+        db.delete(log)
+    db.commit()
+    return count

@@ -53,3 +53,16 @@ def get_video(
     if video is None:
         raise HTTPException(status_code=404, detail="動画が見つかりません")
     return video
+
+@router.delete("/{video_id}", status_code=204)
+def delete_video(
+    video_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """動画削除"""
+    video = video_repo.get_by_id(db, video_id)
+    if video is None:
+        raise HTTPException(status_code=404, detail="動画が見つかりません")
+    video_service.delete_video(db, video_id)
+    return None

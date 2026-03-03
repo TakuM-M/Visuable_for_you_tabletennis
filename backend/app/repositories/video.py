@@ -42,3 +42,11 @@ def update_status(
     db.commit()
     db.refresh(video)
     return video
+
+def delete(db: Session, video_id: uuid.UUID) -> bool:
+    video = get_by_id(db, video_id)
+    if video is None:
+        return False
+    db.delete(video)
+    db.commit()
+    return True

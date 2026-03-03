@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.models.video import Video, VideoStatus
 from app.repositories import job as job_repo
 from app.repositories import video as video_repo
+from app.repositories import clip as clip_repo
+from app.repositories import notification_log as notification_log_repo
 
 UPLOAD_DIR = Path("/app/uploads/videos")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -59,3 +61,16 @@ def upload_video(
     background_tasks.add_task(call_ml_service, str(save_path), str(job.id))
 
     return video
+
+
+def delete_video(db: Session, video_id: uuid.UUID) -> bool:
+    jobs = job_repo.get_by_video_id(db, video_id)
+    for job in jobs:
+        notification_log_repo.delete_by_job_id(db, job.id)
+    clip_repo.delete_by_video_id(db, video_id)
+    job_repo.delete_by_video_id(db, video_id)
+    video_repo.delete(db, video_id)
+    
+    return True
+
+    

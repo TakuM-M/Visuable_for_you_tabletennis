@@ -32,3 +32,11 @@ def get_by_video_id(db: Session, video_id: uuid.UUID) -> list[Clip]:
 
 def get_by_job_id(db: Session, job_id: uuid.UUID) -> list[Clip]:
     return db.query(Clip).filter(Clip.job_id == job_id).all()
+
+def delete_by_video_id(db: Session, video_id: uuid.UUID) -> int:
+    clips = get_by_video_id(db, video_id)
+    count = len(clips)
+    for clip in clips:
+        db.delete(clip)
+    db.commit()
+    return count
