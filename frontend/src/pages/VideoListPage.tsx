@@ -22,6 +22,13 @@ export default function VideoListPage() {
         >
           + 動画を追加
         </button>
+
+        <button
+          onClick={() => navigate("/profile")}
+          className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+        >
+          プロフィール編集
+        </button>
       </div>
 
       {isLoading ? (

@@ -103,6 +103,14 @@ export interface UserResponse {
   created_at: string;
 }
 
+/**
+ * ユーザー情報更新リクエスト
+ */
+export interface UserUpdate {
+  display_name?: string | null;
+  password?: string | null;
+}
+
 export type VideoStatus = typeof VideoStatus[keyof typeof VideoStatus];
 
 
@@ -354,6 +362,57 @@ export const getMeUsersMeGet = async ( options?: RequestInit): Promise<getMeUser
 
 
 /**
+ * ユーザー情報を更新
+ * @summary Update
+ */
+export type updateUsersMePatchResponse200 = {
+  data: UserResponse
+  status: 200
+}
+
+export type updateUsersMePatchResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type updateUsersMePatchResponseSuccess = (updateUsersMePatchResponse200) & {
+  headers: Headers;
+};
+export type updateUsersMePatchResponseError = (updateUsersMePatchResponse422) & {
+  headers: Headers;
+};
+
+export type updateUsersMePatchResponse = (updateUsersMePatchResponseSuccess | updateUsersMePatchResponseError)
+
+export const getUpdateUsersMePatchUrl = () => {
+
+
+  
+
+  return `/api/users/me`
+}
+
+export const updateUsersMePatch = async (userUpdate: UserUpdate, options?: RequestInit): Promise<updateUsersMePatchResponse> => {
+  
+  const res = await fetch(getUpdateUsersMePatchUrl(),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      userUpdate,)
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: updateUsersMePatchResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as updateUsersMePatchResponse
+}
+  
+
+
+/**
  * ログインユーザーの動画一覧取得
  * @summary List Videos
  */
@@ -551,7 +610,7 @@ export const deleteVideoVideosVideoIdDelete = async (videoId: string, options?: 
 
 
 /**
- * 連結済み動画ファイルを返す
+ * 連結済み動画ファイルを返す（videoタグで直接再生するため認証なし）
  * @summary Get Output Video
  */
 export type getOutputVideoVideosVideoIdOutputGetResponse200 = {

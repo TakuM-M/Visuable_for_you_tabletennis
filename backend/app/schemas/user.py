@@ -22,3 +22,9 @@ class UserResponse(BaseModel):
     display_name: str
     email_verified: bool
     created_at: datetime
+
+class UserUpdate(BaseModel):
+    """ユーザー情報更新リクエスト"""
+
+    display_name: str | None = None
+    password: str | None = None

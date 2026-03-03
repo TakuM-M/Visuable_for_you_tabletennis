@@ -34,3 +34,10 @@ def verify_email(db: Session, user_id: uuid.UUID) -> None:
     if user:
         user.email_verified = True
         db.commit()
+
+def update(db: Session, user_id: uuid.UUID, display_name: str, password_hash: str) -> None:
+    user = get_by_id(db, user_id)
+    if user:
+        user.display_name = display_name
+        user.password_hash = password_hash
+        db.commit()

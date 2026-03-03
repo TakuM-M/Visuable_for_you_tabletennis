@@ -6,7 +6,7 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories import user as user_repo
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services import auth_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -36,3 +36,21 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
 def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """ログイン中のユーザー情報を取得"""
     return current_user
+
+@router.patch("/me", response_model=UserResponse)
+def update(body: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> UserResponse:
+    """ユーザー情報を更新"""
+    if body.password:
+        password_hash = hash_password(body.password)
+    else:
+        password_hash = current_user.password_hash
+
+    user_repo.update(
+        db=db,
+        user_id=current_user.id,
+        display_name=body.display_name or current_user.display_name,
+        password_hash=password_hash,
+    )
+    
+    updated_user = user_repo.get_by_id(db, current_user.id)
+    return updated_user
