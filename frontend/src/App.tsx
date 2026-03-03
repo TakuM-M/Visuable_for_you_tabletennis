@@ -6,6 +6,7 @@ import RegisterPage from "./pages/RegisterPage";
 import VideoListPage from "./pages/VideoListPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
 import VideoUploadPage from "./pages/VideoUploadPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/videos/new" element={<PrivateRoute><VideoUploadPage /></PrivateRoute>} />
           <Route path="/videos/:id" element={<PrivateRoute><VideoDetailPage /></PrivateRoute>} />
         </Routes>

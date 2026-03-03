@@ -28,3 +28,9 @@ def get_by_id(db: Session, user_id: uuid.UUID) -> User | None:
 
 def get_by_email(db: Session, email: str) -> User | None:
     return db.query(User).filter(User.email == email).first()
+
+def verify_email(db: Session, user_id: uuid.UUID) -> None:
+    user = get_by_id(db, user_id)
+    if user:
+        user.email_verified = True
+        db.commit()

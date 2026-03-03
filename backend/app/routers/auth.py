@@ -6,19 +6,17 @@ from app.core.security import create_access_token, verify_password
 from app.db.session import get_db
 from app.repositories import user as user_repo
 from app.schemas.auth import TokenResponse
+from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    # OAuth2PasswordRequestForm はフォームデータで username と password を受け取る
-    # Swagger UI の Authorize ボタンはこの形式で送信する
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """ログイン（JWTトークンを発行する）"""
-    # OAuth2 の仕様では email を username フィールドで受け取る
     user = user_repo.get_by_email(db, form_data.username)
 
     if user is None or not verify_password(form_data.password, user.password_hash):
@@ -26,6 +24,20 @@ def login(
             status_code=401,
             detail="メールアドレスまたはパスワードが違います",
         )
+        
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="メールアドレスが認証されていません。メールを確認してください。",
+        )
 
     token = create_access_token(str(user.id))
     return TokenResponse(access_token=token)
+
+@router.get("/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    try:
+        auth_service.verify_email_token(token, db)
+        return {"message": "メール認証が完了しました"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="無効なトークンです")

@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.repositories import user as user_repo
 from app.schemas.user import UserCreate, UserResponse
+from app.services import auth_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -26,6 +27,8 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
         password_hash=hash_password(body.password),
         display_name=body.display_name,
     )
+    
+    auth_service.send_verification_email(user) 
     return user
 
 

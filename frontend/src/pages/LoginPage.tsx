@@ -16,8 +16,8 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
-  const [loginError, setLoginError] = useState(false);
 
   const {
     register,
@@ -32,15 +32,20 @@ export default function LoginPage() {
       if (res.status === 200) {
         setToken(res.data.access_token);
         navigate("/");
+      }
+    },
+    onError: (error: any) => {
+      const status = error?.response?.status;
+      if (status === 403) {
+        setErrorMessage("メール認証が完了していません。届いたメールを確認してください。");
       } else {
-        // 401: メールアドレスまたはパスワードが違う
-        setLoginError(true);
+        setErrorMessage("メールアドレスまたはパスワードが違います");
       }
     },
   });
 
   const onSubmit = (values: FormValues) => {
-    setLoginError(false);
+    setErrorMessage(null);
     mutation.mutate(values);
   };
 
@@ -78,9 +83,9 @@ export default function LoginPage() {
             )}
           </div>
 
-          {(loginError || mutation.isError) && (
+          {errorMessage && (
             <p className="text-xs text-red-500">
-              メールアドレスまたはパスワードが違います
+              {errorMessage}
             </p>
           )}
 
