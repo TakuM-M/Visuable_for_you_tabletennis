@@ -30,7 +30,7 @@ export default function RegisterPage() {
     onSuccess: (res) => {
       if (res.status === 201) {
         // 登録成功 → ログインページへ
-        navigate("/login");
+        navigate("/login", { state: { message: "確認メールを送信しました。メールを確認してからログインしてください。" } });
       } else {
         // 400: メールアドレスが既に使用されている
         setRegisterError("このメールアドレスは既に使用されています");

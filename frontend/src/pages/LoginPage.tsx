@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { loginAuthLoginPost } from "../api/generated";
 import { setToken } from "../lib/auth";
@@ -18,6 +18,8 @@ type FormValues = z.infer<typeof schema>;
 export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [successMessage, setSuccessMessage] = useState<string | null>(location.state?.message ?? null);
 
   const {
     register,
@@ -28,24 +30,24 @@ export default function LoginPage() {
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
       loginAuthLoginPost({ username: values.email, password: values.password }),
-    onSuccess: (res) => {
-      if (res.status === 200) {
-        setToken(res.data.access_token);
-        navigate("/");
-      }
-    },
-    onError: (error: any) => {
-      const status = error?.response?.status;
-      if (status === 403) {
-        setErrorMessage("メール認証が完了していません。届いたメールを確認してください。");
-      } else {
-        setErrorMessage("メールアドレスまたはパスワードが違います");
-      }
-    },
+        onSuccess: (res:any) => {
+          if (res.status === 200) {
+            setToken(res.data.access_token);
+            navigate("/");
+          } else if (res.status === 403) {
+            setErrorMessage("メール認証が完了していません。届いたメールを確認してください。");
+          } else {
+            setErrorMessage("メールアドレスまたはパスワードが違います");
+          }
+        },
+        onError: () => {
+          setErrorMessage("エラーが発生しました。もう一度お試しください。");
+        },
   });
 
   const onSubmit = (values: FormValues) => {
     setErrorMessage(null);
+    setSuccessMessage(null);  // ← 追加
     mutation.mutate(values);
   };
 
@@ -88,7 +90,9 @@ export default function LoginPage() {
               {errorMessage}
             </p>
           )}
-
+          {successMessage && (
+            <p className="text-xs text-green-600">{successMessage}</p>
+          )}
           <button
             type="submit"
             disabled={mutation.isPending}
