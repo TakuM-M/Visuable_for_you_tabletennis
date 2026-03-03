@@ -49,5 +49,34 @@ def complete_job(
     video = video_repo.update_status(db, job.video_id, VideoStatus.completed)
 
     # 4. メール送信
-    user = user_repo.get_by_id(db, job.video_id)  # ← ここは後で修正します
-    ...
+    if video is None:
+        return
+    user = user_repo.get_by_id(db, video.user_id)  # video.user_id でユーザーを取得
+    if user is None:
+        return
+
+    video_url = f"{FRONTEND_URL}/videos/{video.id}"
+
+    # 通知ログを pending で作成
+    log = notification_log_repo.create(
+        db=db,
+        user_id=user.id,
+        job_id=job_id,
+        email=user.email,
+    )
+
+    # メール送信
+    success = send_clip_completion_email(
+        to_email=user.email,
+        video_title=video.title,
+        clip_count=len(clips),
+        video_url=video_url,
+    )
+
+    # 送信結果に応じてログを更新
+    notification_log_repo.update_status(
+        db=db,
+        log_id=log.id,
+        status=NotificationStatus.sent if success else NotificationStatus.failed,
+        sent_at=datetime.now(timezone.utc) if success else None,
+    )
