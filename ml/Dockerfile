@@ -70,3 +70,17 @@ RUN chmod +x /workspace/scripts/*.py || true
 EXPOSE 8888
 
 CMD ["/bin/bash"]
+
+# ========================================
+# Stage 5: ML推論サービス（FastAPI）
+# ========================================
+FROM app AS service
+
+RUN pip install --no-cache-dir \
+    fastapi \
+    "uvicorn[standard]" \
+    httpx
+
+EXPOSE 8001
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]

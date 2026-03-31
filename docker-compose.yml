@@ -45,7 +45,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG:-false}
-      - ML_SERVICE_URL=http://ml-mock:8001
+      - ML_SERVICE_URL=http://ml-service:8001
       - BACKEND_INTERNAL_URL=http://backend:8000
       - RESEND_API_KEY=${RESEND_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
@@ -76,18 +76,22 @@ services:
       - tabletennis-net
 
   # ========================================
-  # 模擬MLサービス（ML開発完了まで使用）
+  # ML推論サービス（InferencePipeline を使用）
   # ========================================
-  ml-mock:
+  ml-service:
     build:
       context: ./ml
-      dockerfile: Dockerfile.mock
-    container_name: tabletennis-ml-mock
+      dockerfile: Dockerfile
+      target: service
+    container_name: tabletennis-ml-service
     restart: unless-stopped
     volumes:
       - uploads:/app/uploads               # backendと動画ファイルを共有
+      - ./ml/models:/workspace/models:ro   # モデルファイル（イメージには含めない）
     ports:
       - "8001:8001"
+    environment:
+      - ML_DEVICE=cpu
     networks:
       - tabletennis-net
 

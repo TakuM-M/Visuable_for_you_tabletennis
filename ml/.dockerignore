@@ -1,0 +1,13 @@
+# モデルファイル（大容量のためイメージに含めない。docker-compose でボリュームマウントする）
+models/
+
+# データファイル（学習・テスト用のためサービスには不要）
+data/
+
+# 開発用ファイル
+.venv/
+scripts/notebooks/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
