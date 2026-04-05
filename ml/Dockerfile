@@ -73,3 +73,18 @@ COPY . /workspace/
 EXPOSE 8001
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]
+
+# ========================================
+# Stage 6: RunPod Serverless ワーカー
+# ========================================
+FROM python-deps AS runpod-worker
+
+COPY . /workspace/
+
+# モデルはRunPod Network Volumeをマウントして使用する
+# 環境変数で各モデルパスを指定:
+#   TABLE_MODEL_PATH, POSE_MODEL_PATH,
+#   PLAY_CLASSIFIER_MODEL_PATH, PLAY_CLASSIFIER_CONFIG_PATH
+#   ML_DEVICE (default: cuda)
+
+CMD ["python", "-u", "runpod_handler.py"]

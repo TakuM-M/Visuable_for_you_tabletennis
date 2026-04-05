@@ -29,6 +29,8 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "httpx",
+    # RunPod Serverless ワーカー
+    "runpod>=1.7.0",
 ]
 
 [dependency-groups]
