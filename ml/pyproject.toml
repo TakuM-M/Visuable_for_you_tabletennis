@@ -1,0 +1,57 @@
+[project]
+name = "tabletennis-ml"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    # 動画処理
+    "opencv-python==4.10.0.84",
+    "opencv-contrib-python==4.10.0.84",
+    # 姿勢・動作検出
+    "mediapipe==0.10.14",
+    # 物体検出
+    "ultralytics>=8.0.0",
+    # 深層学習（torch は pytorch/pytorch Docker base image でも提供される）
+    "torch==2.1.0",
+    "torchvision==0.16.0",
+    "tensorboard>=2.13.0",
+    # 数値計算・データ処理
+    "numpy==1.26.4",
+    "scipy==1.13.0",
+    "pandas>=2.0.0",
+    "scikit-learn==1.5.0",
+    # 可視化
+    "matplotlib==3.9.0",
+    "pillow==10.3.0",
+    # ユーティリティ
+    "tqdm==4.66.4",
+    "python-dotenv==1.0.1",
+    # API サービス（ML推論サービス用）
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.2.1",
+    "pytest-cov==5.0.0",
+]
+
+# ─────────────────────────────────────────────────
+# PyTorch CUDA インデックス設定
+#
+# Linux（Docker）環境では CUDA 12.1 対応版を使用する。
+# macOS ローカル開発環境では PyPI デフォルト（CPU版）を使用する。
+# ─────────────────────────────────────────────────
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true  # torch / torchvision にのみ使用する
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+]

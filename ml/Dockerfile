@@ -9,6 +9,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# uv を取得（backend と同様）
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# base image の Python をそのまま使う（仮想環境を作らない）
+ENV UV_SYSTEM_PYTHON=1
+
 # ========================================
 # Stage 2: システム依存パッケージのインストール
 # ========================================
@@ -37,35 +43,21 @@ RUN apt-get update && apt-get install -y \
 # ========================================
 FROM system-deps AS python-deps
 
-RUN pip install --no-cache-dir --upgrade pip
+# 依存ファイルをコピー
+COPY pyproject.toml uv.lock* ./
 
-RUN pip install --no-cache-dir \
-    opencv-python==4.10.0.84 \
-    opencv-contrib-python==4.10.0.84
-
-RUN pip install --no-cache-dir ultralytics
-
-RUN pip install --no-cache-dir \
-    numpy==1.26.4 \
-    scipy==1.13.0 \
-    pandas>=2.0.0 \
-    matplotlib==3.9.0 \
-    pillow==10.3.0 \
-    tqdm==4.66.4
+# 本番依存のみインストール（dev グループを除外）
+# torch / torchvision は base image 提供のため uv がスキップする
+RUN uv sync --no-cache --no-dev
 
 # ========================================
-# Stage 4: アプリケーション（最終イメージ）
+# Stage 4: ML開発環境
 # ========================================
 FROM python-deps AS app
 
-# build context は ./ml なので ml/ 直下のファイルを参照
-COPY requirements.txt /workspace/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . /workspace/
 
-RUN chmod +x /workspace/scripts/*.sh || true
-RUN chmod +x /workspace/scripts/*.py || true
+RUN chmod +x /workspace/scripts/*.sh 2>/dev/null || true
 
 EXPOSE 8888
 
@@ -74,12 +66,9 @@ CMD ["/bin/bash"]
 # ========================================
 # Stage 5: ML推論サービス（FastAPI）
 # ========================================
-FROM app AS service
+FROM python-deps AS service
 
-RUN pip install --no-cache-dir \
-    fastapi \
-    "uvicorn[standard]" \
-    httpx
+COPY . /workspace/
 
 EXPOSE 8001
 
