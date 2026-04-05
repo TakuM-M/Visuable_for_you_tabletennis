@@ -45,11 +45,16 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG:-false}
-      - ML_SERVICE_URL=http://ml-service:8001
+      - ML_SERVICE_URL=http://ml-mock:8001
       - BACKEND_INTERNAL_URL=http://backend:8000
       - RESEND_API_KEY=${RESEND_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
+      # RunPod Serverless（USE_RUNPOD=true にすると RunPod に切り替わる）
+      - USE_RUNPOD=${USE_RUNPOD:-false}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-}
+      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID:-}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
     networks:
       - tabletennis-net
 
@@ -76,22 +81,21 @@ services:
       - tabletennis-net
 
   # ========================================
-  # ML推論サービス（InferencePipeline を使用）
+  # ML 模擬サービス（ローカル開発用 / タイムスタンプのみ返す）
   # ========================================
-  ml-service:
+  ml-mock:
     build:
       context: ./ml
       dockerfile: Dockerfile
       target: service
-    container_name: tabletennis-ml-service
+    container_name: tabletennis-ml-mock
     restart: unless-stopped
+    command: ["uvicorn", "mock_app:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
     volumes:
-      - uploads:/app/uploads               # backendと動画ファイルを共有
-      - ./ml/models:/workspace/models:ro   # モデルファイル（イメージには含めない）
+      - uploads:/app/uploads               # backendと動画ファイルを共有（/app/uploads/videos/... パスで参照）
+      - ./ml:/workspace                    # ホットリロード用
     ports:
       - "8001:8001"
-    environment:
-      - ML_DEVICE=cpu
     networks:
       - tabletennis-net
 

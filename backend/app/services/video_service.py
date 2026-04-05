@@ -17,24 +17,52 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://ml-mock:8001")
 BACKEND_INTERNAL_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "")
+RUNPOD_ENDPOINT_ID = os.getenv("RUNPOD_ENDPOINT_ID", "")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+USE_RUNPOD = os.getenv("USE_RUNPOD", "false").lower() == "true"
 
 
-def call_ml_service(video_path: str, job_id: str) -> None:
-    """MLサービスに処理を依頼する（バックグラウンドで実行）"""
+def call_ml_service(video_path: str, job_id: str, video_id: str) -> None:
+    """MLサービスに処理を依頼する（RunPod or ローカル Mock）"""
     callback_url = f"{BACKEND_INTERNAL_URL}/internal/jobs/{job_id}/complete"
-    try:
-        with httpx.Client(timeout=5.0) as client:
-            client.post(
-                f"{ML_SERVICE_URL}/process",
-                json={
-                    "job_id": job_id,
-                    "video_path": video_path,
-                    "callback_url": callback_url,
-                },
-            )
-        print(f"MLサービス呼び出し成功 job_id={job_id}")
-    except Exception as e:
-        print(f"MLサービス呼び出し失敗 job_id={job_id}: {e}")
+
+    if USE_RUNPOD:
+        video_download_url = (
+            f"{BACKEND_INTERNAL_URL}/internal/videos/{video_id}/raw"
+            f"?token={INTERNAL_API_KEY}"
+        )
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    f"https://api.runpod.io/v2/{RUNPOD_ENDPOINT_ID}/run",
+                    headers={"Authorization": f"Bearer {RUNPOD_API_KEY}"},
+                    json={
+                        "input": {
+                            "video_download_url": video_download_url,
+                            "job_id": job_id,
+                            "callback_url": callback_url,
+                        }
+                    },
+                )
+                response.raise_for_status()
+            print(f"RunPod ジョブ送信成功 job_id={job_id} runpod_id={response.json().get('id')}")
+        except Exception as e:
+            print(f"RunPod 呼び出し失敗 job_id={job_id}: {e}")
+    else:
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                client.post(
+                    f"{ML_SERVICE_URL}/process",
+                    json={
+                        "job_id": job_id,
+                        "video_path": video_path,
+                        "callback_url": callback_url,
+                    },
+                )
+            print(f"MLサービス呼び出し成功 job_id={job_id}")
+        except Exception as e:
+            print(f"MLサービス呼び出し失敗 job_id={job_id}: {e}")
 
 def upload_video(
     db: Session,
@@ -58,7 +86,7 @@ def upload_video(
     video_repo.update_status(db, video.id, VideoStatus.queued)
 
     job = job_repo.create(db=db, video_id=video.id)
-    background_tasks.add_task(call_ml_service, str(save_path), str(job.id))
+    background_tasks.add_task(call_ml_service, str(save_path), str(job.id), str(video.id))
 
     return video
 
