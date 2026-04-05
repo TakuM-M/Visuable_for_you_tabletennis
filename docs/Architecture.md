@@ -42,7 +42,7 @@
 | 技術 | 用途 |
 |------|------|
 | **Docker / Docker Compose** | コンテナ化とローカル開発環境 |
-| **uv** | Python パッケージマネージャー |
+| **uv** | Python パッケージマネージャー（backend・MLサービス共通） |
 | **npm** | Node.js パッケージマネージャー |
 | **ESLint** | JavaScriptリンター |
 | **pytest** | Pythonテストフレームワーク |
