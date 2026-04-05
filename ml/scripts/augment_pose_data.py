@@ -30,9 +30,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.traing.pose_augmentation import PoseAugmentationPipeline
-from src.traing.config import AugmentationPipelineConfig, AugmentationConfig
-from src.traing.exceptions import PipelineError
+from src.training.pose_augmentation import PoseAugmentationPipeline
+from src.training.config import AugmentationPipelineConfig, AugmentationConfig
+from src.training.exceptions import PipelineError
 
 
 def parse_args():

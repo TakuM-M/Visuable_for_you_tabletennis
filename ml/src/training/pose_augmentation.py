@@ -10,8 +10,8 @@ from typing import Dict, Any, List, Optional
 from tqdm import tqdm
 import json
 
-from src.traing.config import AugmentationPipelineConfig
-from src.traing.exceptions import (
+from src.training.config import AugmentationPipelineConfig
+from src.training.exceptions import (
     DataInputError,
     AugmentationError,
     ExportError

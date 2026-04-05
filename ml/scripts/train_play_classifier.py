@@ -38,15 +38,15 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.traing.training_pipeline import TrainingPipeline
-from src.traing.config import (
+from src.training.training_pipeline import TrainingPipeline
+from src.training.config import (
     TrainingPipelineConfig,
     ModelConfig,
     DatasetConfig,
     OptimizerConfig,
     TrainingConfig
 )
-from src.traing.exceptions import PipelineError
+from src.training.exceptions import PipelineError
 
 
 def parse_args():
