@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"    # ホスト側5432が使用中のため5433を使用
+      - "5433:5432"
     networks:
       - tabletennis-net
     healthcheck:
@@ -87,13 +87,12 @@ services:
     build:
       context: ./ml
       dockerfile: Dockerfile
-      target: service
+      target: mock
     container_name: tabletennis-ml-mock
     restart: unless-stopped
-    command: ["uvicorn", "mock_app:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
     volumes:
       - uploads:/app/uploads               # backendと動画ファイルを共有（/app/uploads/videos/... パスで参照）
-      - ./ml:/workspace                    # ホットリロード用
+      - ./ml/mock_app.py:/workspace/mock_app.py  # ホットリロード用（mock_app.py のみ）
     ports:
       - "8001:8001"
     networks:

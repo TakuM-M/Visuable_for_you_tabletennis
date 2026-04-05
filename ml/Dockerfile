@@ -75,7 +75,23 @@ EXPOSE 8001
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]
 
 # ========================================
-# Stage 6: RunPod Serverless ワーカー
+# Stage 6: Mock サービス（ローカル開発用・軽量）
+# ML 依存なし。fastapi/httpx のみ。
+# ========================================
+FROM python:3.10-slim AS mock
+
+WORKDIR /workspace
+
+RUN pip install --no-cache-dir fastapi uvicorn[standard] httpx
+
+COPY mock_app.py .
+
+EXPOSE 8001
+
+CMD ["uvicorn", "mock_app:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
+# ========================================
+# Stage 7: RunPod Serverless ワーカー
 # ========================================
 FROM python-deps AS runpod-worker
 
