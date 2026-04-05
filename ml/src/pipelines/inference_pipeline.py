@@ -10,12 +10,10 @@ import pandas as pd
 
 from src.pipelines.player_pose_exporter import PlayerPoseExporter
 from src.pipelines.play_scene_detector import PlaySceneDetector
-from src.pipelines.video_composer import VideoComposer
 from src.pipelines.config import (
     InferencePipelineConfig,
     PlayerPoseExporterConfig,
     PlaySceneDetectionConfig,
-    VideoCompositionConfig
 )
 from src.pipelines.exceptions import PipelineError
 
@@ -34,7 +32,6 @@ class InferencePipeline:
         self.show_progress = config.show_progress
         self.pose_exporter = PlayerPoseExporter(config.pose_export)
         self.scene_detector = PlaySceneDetector(config.scene_detection)
-        self.video_composer = VideoComposer(config.video_composition)
 
     @classmethod
     def create_default(
@@ -103,7 +100,6 @@ class InferencePipeline:
 
         pose_video_path = output_dir_path / f"{base_name}_poses.mp4"
         pose_csv_path = output_dir_path / f"{base_name}_poses.csv"
-        play_scenes_video_path = output_dir_path / f"{base_name}_play_scenes.mp4"
 
         try:
             print(f"\n{'='*70}")
@@ -116,10 +112,6 @@ class InferencePipeline:
                 csv_output=str(pose_csv_path) if save_output else None,
                 show_progress=self.show_progress
             )
-
-            # フレーム間隔を取得
-            frame_interval = pose_results.get('frame_interval', 1)
-            video_fps = pose_results.get('video_fps', 30.0)
 
             # Task2: プレーシーン検出
             print(f"\n{'='*70}")
@@ -152,26 +144,6 @@ class InferencePipeline:
                     fps=self.pose_exporter.config.video_processing.target_fps
                 )
 
-            # Task3: プレーシーン動画作成
-            print(f"\n{'='*70}")
-            print("Task3: プレーシーン動画作成")
-            print(f"{'='*70}\n")
-
-            if scenes:
-                video_stats = self.video_composer.compose_play_scenes(
-                    input_video_path=str(input_video),
-                    scenes=scenes,
-                    output_path=str(play_scenes_video_path),
-                    frame_interval=frame_interval
-                )
-            else:
-                print("警告: プレーシーンが検出されませんでした。動画は作成されません。")
-                video_stats = {
-                    'total_scenes': 0,
-                    'total_frames': 0,
-                    'duration_sec': 0.0
-                }
-
             # 統計情報をまとめる
             results = {
                 'input_video': str(input_video),
@@ -188,11 +160,9 @@ class InferencePipeline:
                     'threshold': self.scene_detector.threshold,
                     'min_scene_duration': self.scene_detector.min_scene_duration
                 },
-                'video_composition': video_stats,
                 'output_files': {
                     'pose_video': str(pose_video_path) if save_output else None,
                     'pose_csv': str(pose_csv_path) if save_output else None,
-                    'play_scenes_video': str(play_scenes_video_path) if scenes else None
                 }
             }
 
@@ -203,13 +173,9 @@ class InferencePipeline:
             if save_output:
                 print(f"  骨格データ動画: {pose_video_path}")
                 print(f"  骨格データCSV: {pose_csv_path}")
-            if scenes:
-                print(f"  プレーシーン動画: {play_scenes_video_path}")
             print(f"\n処理結果:")
             print(f"  検出シーン数: {len(scenes)}")
             print(f"  プレイヤー数: {len(pose_results['player_ids'])}")
-            if scenes:
-                print(f"  ハイライト時間: {video_stats['duration_sec']:.1f}秒")
             print(f"{'='*70}\n")
 
             return results

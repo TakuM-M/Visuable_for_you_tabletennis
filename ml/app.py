@@ -20,7 +20,6 @@ from src.pipelines.config import (
     InferencePipelineConfig,
     PlayerPoseExporterConfig,
     PlaySceneDetectionConfig,
-    VideoCompositionConfig,
 )
 
 app = FastAPI(title="ML Service")
@@ -63,7 +62,6 @@ def _build_pipeline() -> InferencePipeline:
             config_path=PLAY_CLASSIFIER_CONFIG_PATH,
             device=DEVICE,
         ),
-        video_composition=VideoCompositionConfig(),
     )
     pipeline = InferencePipeline(config)
     print("モデルロード完了")
@@ -98,7 +96,6 @@ async def _run_processing(job_id: str, video_path: str, callback_url: str) -> No
     """推論をバックグラウンドで実行してコールバックを送信"""
     output_dir = str(OUTPUT_DIR / job_id)
     clips = []
-    output_path = ""
 
     try:
         loop = asyncio.get_event_loop()
@@ -113,8 +110,7 @@ async def _run_processing(job_id: str, video_path: str, callback_url: str) -> No
             {"start_time": round(s / fps, 2), "end_time": round(e / fps, 2)}
             for s, e in scenes
         ]
-        output_path = results["output_files"].get("play_scenes_video") or ""
-        print(f"推論完了 job_id={job_id}, scenes={len(scenes)}, output={output_path}")
+        print(f"推論完了 job_id={job_id}, scenes={len(scenes)}")
 
     except Exception as e:
         import traceback
@@ -126,7 +122,7 @@ async def _run_processing(job_id: str, video_path: str, callback_url: str) -> No
         async with httpx.AsyncClient() as client:
             await client.post(
                 callback_url,
-                json={"job_id": job_id, "clips": clips, "output_path": output_path},
+                json={"job_id": job_id, "clips": clips},
                 timeout=10.0,
             )
     except Exception as e:

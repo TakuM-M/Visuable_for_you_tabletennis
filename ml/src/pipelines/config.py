@@ -201,7 +201,6 @@ class InferencePipelineConfig:
     """推論パイプライン全体の設定"""
     pose_export: PlayerPoseExporterConfig
     scene_detection: PlaySceneDetectionConfig
-    video_composition: VideoCompositionConfig
     show_progress: bool = True
     save_output: bool = True
 
@@ -242,5 +241,4 @@ class InferencePipelineConfig:
                 threshold=detection_threshold,
                 min_scene_duration=min_scene_duration
             ),
-            video_composition=VideoCompositionConfig()
         )

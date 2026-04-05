@@ -13,6 +13,7 @@ from app.repositories import notification_log as notification_log_repo
 from app.repositories import user as user_repo
 from app.repositories import video as video_repo
 from app.services.email_service import send_clip_completion_email
+from app.services.video_clip_service import clip_video
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
@@ -21,13 +22,25 @@ def complete_job(
     db: Session,
     job_id: uuid.UUID,
     clips: list[dict],   # {"start_time": float, "end_time": float} のリスト
-    output_path: str,    # FFmpegが生成した連結動画のパス
 ) -> None:
     job = job_repo.get_by_id(db, job_id)
     if job is None:
         return
 
-    # 1. クリップを保存
+    video = video_repo.get_by_id(db, job.video_id)
+    if video is None:
+        return
+
+    # 1. FFmpeg でシーンをカット・結合
+    output_path = f"/app/uploads/outputs/{job_id}/play_scenes.mp4"
+    if clips:
+        try:
+            clip_video(video.storage_path, clips, output_path)
+        except Exception as e:
+            print(f"FFmpegクリップ失敗 job_id={job_id}: {e}")
+            output_path = ""
+
+    # 2. クリップを保存
     for clip_data in clips:
         clip_repo.create(
             db=db,
@@ -38,7 +51,7 @@ def complete_job(
             storage_path="",
         )
 
-    # 2. Jobをcompletedに更新
+    # 3. Jobをcompletedに更新
     job_repo.update_status(
         db=db,
         job_id=job_id,
@@ -46,7 +59,7 @@ def complete_job(
         completed_at=datetime.now(timezone.utc),
     )
 
-    # 3. VideoにoutputPathを保存してcompletedに更新
+    # 4. VideoにoutputPathを保存してcompletedに更新
     video_repo.update_output_path(db, job.video_id, output_path)
     video = video_repo.update_status(db, job.video_id, VideoStatus.completed)
 

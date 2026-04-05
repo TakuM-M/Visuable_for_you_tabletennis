@@ -44,7 +44,6 @@ class ClipData(BaseModel):
 class JobCompleteRequest(BaseModel):
     job_id: str
     clips: list[ClipData]
-    output_path: str
 
 @router.post("/internal/jobs/{job_id}/complete")
 def complete_job(
@@ -54,6 +53,6 @@ def complete_job(
 ) -> dict:
     """MLサービスからの処理完了コールバック"""
     clips = [{"start_time": c.start_time, "end_time": c.end_time} for c in request.clips]
-    job_service.complete_job(db=db, job_id=job_id, clips=clips, output_path=request.output_path)
+    job_service.complete_job(db=db, job_id=job_id, clips=clips)
     print(f"ジョブ完了 job_id={job_id} clips={len(clips)}件")
     return {"message": "完了"}
