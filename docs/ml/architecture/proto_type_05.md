@@ -6,8 +6,8 @@
 - [x] ブラウザコンソールにエラーがない
 
 ## Phase 2: 本番サーバ構築
-- [ ] サーバ（VPS/クラウド）調達
-- [ ] Docker・docker-compose インストール
+- [-] サーバ（VPS/クラウド）調達
+- [-] Docker・docker-compose インストール
 - [ ] PostgreSQL コンテナ起動
 - [ ] Nginx + Let's Encrypt SSL 設定
 - [ ] Backend・Frontend コンテナ起動

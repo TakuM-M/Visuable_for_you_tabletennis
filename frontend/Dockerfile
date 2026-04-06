@@ -27,6 +27,10 @@ FROM deps AS builder
 
 WORKDIR /app
 
+# 本番ビルド時に API URL を注入（docker-compose.prod.yml の args で指定）
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=$VITE_API_URL
+
 COPY . .
 RUN npm run build
 
