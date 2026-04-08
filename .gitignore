@@ -10,7 +10,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -79,5 +78,5 @@ outputs/*.txt
 *.tmp
 temp/
 
-# Model files
-models/
+# Model files (ML weights only)
+ml/models/
