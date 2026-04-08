@@ -12,7 +12,7 @@ export default function VerifyEmailPage() {
       setStatus("error");
       return;
     }
-    fetch(`http://localhost:8000/auth/verify-email?token=${token}`)
+    fetch(`/api/auth/verify-email?token=${token}`)
       .then((res) => {
         if (res.ok) setStatus("success");
         else setStatus("error");

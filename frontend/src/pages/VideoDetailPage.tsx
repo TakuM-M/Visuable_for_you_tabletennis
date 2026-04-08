@@ -107,7 +107,7 @@ export default function VideoDetailPage() {
                   <video
                     controls
                     className="w-full rounded"
-                    src={`http://localhost:8000/videos/${id}/output`}
+                    src={`/api/videos/${id}/output`}
                   />
                 </div>
               ) : (
