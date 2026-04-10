@@ -35,7 +35,7 @@ def call_ml_service(video_path: str, job_id: str, video_id: str) -> None:
         try:
             with httpx.Client(timeout=30.0) as client:
                 response = client.post(
-                    f"https://api.runpod.io/v2/{RUNPOD_ENDPOINT_ID}/run",
+                    f"https://api.runpod.ai/v2/{RUNPOD_ENDPOINT_ID}/run",
                     headers={"Authorization": f"Bearer {RUNPOD_API_KEY}"},
                     json={
                         "input": {

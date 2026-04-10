@@ -8,10 +8,10 @@
 ## Phase 2: 本番サーバ構築
 - [-] サーバ（VPS/クラウド）調達
 - [-] Docker・docker-compose インストール
-- [ ] PostgreSQL コンテナ起動
-- [ ] Nginx + Let's Encrypt SSL 設定
-- [ ] Backend・Frontend コンテナ起動
-- [ ] https://your-domain.com にアクセス可能
+- [-] PostgreSQL コンテナ起動
+- [-] Nginx + Let's Encrypt SSL 設定
+- [-] Backend・Frontend コンテナ起動
+- [-] https://your-domain.com にアクセス可能
 
 ## Phase 3: RunPod 本格運用
 - [ ] Network Volume 作成・モデルアップロード
