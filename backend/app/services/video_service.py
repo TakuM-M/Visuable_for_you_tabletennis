@@ -24,6 +24,7 @@ USE_RUNPOD = os.getenv("USE_RUNPOD", "false").lower() == "true"
 
 
 def call_ml_service(video_path: str, job_id: str, video_id: str) -> None:
+    """MLサービスに処理を依頼する（RunPod or ローカル Mock）"""
     callback_url = f"{BACKEND_INTERNAL_URL}/internal/jobs/{job_id}/complete"
 
     if USE_RUNPOD:
