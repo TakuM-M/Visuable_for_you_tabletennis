@@ -9,8 +9,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# uv を取得（backend と同様）
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+# base image の Python をそのまま使う（仮想環境を作らない）
 ENV UV_SYSTEM_PYTHON=1
 
 # ========================================
@@ -41,9 +43,10 @@ RUN apt-get update && apt-get install -y \
 # ========================================
 FROM system-deps AS python-deps
 
+# 依存ファイルをコピー
 COPY pyproject.toml uv.lock* ./
 
-# 本番依存のみインストール（
+# 本番依存のみインストール（dev グループを除外）
 # torch / torchvision は base image 提供のため uv がスキップする
 RUN uv sync --no-cache --no-dev
 

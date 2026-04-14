@@ -14,9 +14,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# 仮想環境を /opt/venv に作成
+# → /app はボリュームマウントで上書きされるため、その外に置く
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# 依存ファイルをコピー（uv.lock が存在すれば使用）
 COPY pyproject.toml uv.lock* ./
 
 # 本番依存のみインストール（dev グループを除外）
