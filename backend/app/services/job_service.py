@@ -21,7 +21,7 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 def complete_job(
     db: Session,
     job_id: uuid.UUID,
-    clips: list[dict],   # {"start_time": float, "end_time": float} のリスト
+    clips: list[dict],
 ) -> None:
     job = job_repo.get_by_id(db, job_id)
     if job is None:
