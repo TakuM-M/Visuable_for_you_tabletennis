@@ -61,7 +61,7 @@ def handler(job: dict) -> dict:
         video_path = f"{tmpdir}/input.mp4"
         
         print(f"動画ダウンロード開始 job_id={job_id}")
-        with httpx.Client(verify=False, timeout=300.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             with client.stream("GET", video_url) as response:
                 response.raise_for_status()
                 with open(video_path, "wb") as f:
@@ -89,7 +89,6 @@ def handler(job: dict) -> dict:
             callback_url,
             json={"job_id": job_id, "clips": clips},
             timeout=10.0,
-            verify=False,
         )
         print(f"コールバック送信完了 job_id={job_id}")
     except Exception as e:
