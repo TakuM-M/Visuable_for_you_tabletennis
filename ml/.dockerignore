@@ -1,5 +1,14 @@
-# モデルファイル（大容量のためイメージに含めない。docker-compose でボリュームマウントする）
-models/
+# モデルファイル - runpod-worker に必要な4つのみイメージに含める
+# table_detection: best.pt のみ必要
+models/table_detection/best.torchscript.zip
+models/table_detection/Table_detection.md
+# pretrained: yolo11l-pose.pt のみ必要
+models/pretrained/yolo11m-pose.pt
+models/pretrained/yolo11s-pose.pt
+models/pretrained/yolo11n-pose.pt
+models/pretrained/yolo11n.pt
+# play_classifier: lstm_model.pth と lstm_config.json のみ必要
+models/play_classifier/lstm_20260129_092234/
 
 # データファイル（学習・テスト用のためサービスには不要）
 data/

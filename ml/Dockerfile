@@ -50,6 +50,10 @@ COPY pyproject.toml uv.lock* ./
 # torch / torchvision は base image 提供のため uv がスキップする
 RUN uv sync --no-cache --no-dev
 
+# uv sync は /workspace/.venv/ に依存をインストールするため
+# venv の bin を PATH の先頭に追加し、python コマンドが venv を指すようにする
+ENV PATH="/workspace/.venv/bin:$PATH"
+
 # ========================================
 # Stage 4: ML開発環境
 # ========================================

@@ -87,13 +87,14 @@ def handler(job: dict) -> dict:
     with tempfile.TemporaryDirectory() as tmpdir:
         video_path = f"{tmpdir}/input.mp4"
 
-        # backend から動画をダウンロード
+        # backend から動画をダウンロード（IP直指定のため SSL 検証スキップ）
         print(f"動画ダウンロード開始 job_id={job_id}")
-        with httpx.stream("GET", video_url, timeout=300.0) as response:
-            response.raise_for_status()
-            with open(video_path, "wb") as f:
-                for chunk in response.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
+        with httpx.Client(verify=False, timeout=300.0) as client:
+            with client.stream("GET", video_url) as response:
+                response.raise_for_status()
+                with open(video_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
         print(f"動画ダウンロード完了 job_id={job_id}")
 
         # 推論実行
@@ -118,6 +119,7 @@ def handler(job: dict) -> dict:
             callback_url,
             json={"job_id": job_id, "clips": clips},
             timeout=10.0,
+            verify=False,
         )
         print(f"コールバック送信完了 job_id={job_id}")
     except Exception as e:
