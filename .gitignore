@@ -70,6 +70,7 @@ outputs/*.txt
 # Environment variables
 .env
 .env.local
+.env.prod
 
 # Logs
 *.log
