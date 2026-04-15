@@ -10,13 +10,9 @@ import pandas as pd
 
 from src.pipelines.player_pose_exporter import PlayerPoseExporter
 from src.pipelines.play_scene_detector import PlaySceneDetector
-from src.pipelines.config import (
-    InferencePipelineConfig,
-    PlayerPoseExporterConfig,
-    PlaySceneDetectionConfig,
-)
+from src.pipelines.config import InferencePipelineConfig
 from src.pipelines.exceptions import PipelineError
-
+        
 
 class InferencePipeline:
     """End-to-End推論パイプライン"""
