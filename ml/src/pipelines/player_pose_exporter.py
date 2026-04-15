@@ -610,8 +610,9 @@ class PlayerPoseExporter:
     def _cleanup_resources(
         self,
         cap: cv2.VideoCapture,
-        video_writer: cv2.VideoWriter
+        video_writer: Optional[cv2.VideoWriter]
     ):
         """リソースのクリーンアップ"""
         cap.release()
-        video_writer.release()
+        if video_writer is not None:
+            video_writer.release()
