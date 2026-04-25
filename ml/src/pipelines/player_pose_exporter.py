@@ -1,6 +1,3 @@
-"""
-プレイヤー姿勢検出・エクスポートパイプライン
-"""
 import cv2
 from pathlib import Path
 from typing import Optional, Dict, Any, Set, Tuple
@@ -124,13 +121,11 @@ class PlayerPoseExporter:
             TableDetectionError: 卓球台を検出できない場合
             ExportError: CSV出力に失敗した場合
         """
-        # オプション引数のデフォルト値を設定から取得
         if target_fps is None:
             target_fps = self.config.video_processing.target_fps
         if show_progress is None:
             show_progress = self.config.video_processing.show_progress
 
-        # 動画の初期化
         cap, video_writer, video_info = self._initialize_video_processing(
             input_video, output_video, csv_output, target_fps
         )
@@ -389,15 +384,18 @@ class PlayerPoseExporter:
 
         try:
             while True:
-                ret, frame = cap.read()
-                if not ret:
+                if not cap.grab():
                     break
 
                 frame_count += 1
                 pbar.update(1)
 
-                # フレームスキップ判定
+                # フレームスキップ判定（デコードはスキップするフレームに対しては行わない）
                 if frame_count % video_info['frame_step'] != 0:
+                    continue
+
+                ret, frame = cap.retrieve()
+                if not ret:
                     continue
 
                 processed_count += 1
