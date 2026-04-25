@@ -3,7 +3,6 @@
 """
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
-
 # =====================================================
 # プレイヤー姿勢エクスポーター設定
 # =====================================================
@@ -201,8 +200,10 @@ class VideoCompositionConfig:
             raise ValueError("scene_buffer_before_sec must be non-negative")
         if self.scene_buffer_after_sec < 0.0:
             raise ValueError("scene_buffer_after_sec must be non-negative")
-
-
+        
+# =====================================================
+# 推論パイプライン全体の設定
+# =====================================================
 @dataclass
 class InferencePipelineConfig:
     """推論パイプライン全体の設定"""
