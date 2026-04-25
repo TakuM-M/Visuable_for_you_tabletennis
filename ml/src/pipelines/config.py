@@ -122,7 +122,7 @@ class PlayerPoseExporterConfig:
     player_classification: PlayerClassificationConfig
     tracking_export: TrackingExportConfig
     video_processing: VideoProcessingConfig = field(default_factory=VideoProcessingConfig)
-    save_output: bool = True
+    save_intermediate_files: bool = True
 
 # =====================================================
 # プレーシーン検出
@@ -186,4 +186,4 @@ class InferencePipelineConfig:
     pose_export: PlayerPoseExporterConfig
     scene_detection: PlaySceneDetectionConfig
     show_progress: bool = True
-    save_output: bool = True
+    save_intermediate_files: bool = True

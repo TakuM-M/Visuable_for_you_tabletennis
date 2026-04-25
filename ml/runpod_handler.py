@@ -80,7 +80,7 @@ def _build_pipeline_config() -> InferencePipelineConfig:
             show_progress=vp.get("show_progress", True),
             output_codec=vp.get("output_codec", "mp4v"),
         ),
-        save_output=pl.get("save_output", False),
+        save_intermediate_files=pl.get("save_intermediate_files", False),
     )
 
     scene_detection_config = PlaySceneDetectionConfig(
@@ -96,7 +96,7 @@ def _build_pipeline_config() -> InferencePipelineConfig:
         pose_export=pose_export_config,
         scene_detection=scene_detection_config,
         show_progress=pl.get("show_progress", True),
-        save_output=pl.get("save_output", False),
+        save_intermediate_files=pl.get("save_intermediate_files", False),
     )
 
 print(f"モデルロード開始 (device={DEVICE})")

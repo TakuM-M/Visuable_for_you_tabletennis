@@ -51,7 +51,7 @@ class InferencePipeline:
         if base_name is None:
             base_name = input_path.stem
 
-        save_output = self.config.save_output
+        save_intermediate_files = self.config.save_intermediate_files
         pose_video_path = output_dir_path / f"{base_name}_poses.mp4"
         pose_csv_path = output_dir_path / f"{base_name}_poses.csv"
 
@@ -62,8 +62,8 @@ class InferencePipeline:
 
             pose_results = self.pose_exporter.process_video(
                 input_video=str(input_video),
-                output_video=str(pose_video_path) if save_output else None,
-                csv_output=str(pose_csv_path) if save_output else None,
+                output_video=str(pose_video_path) if save_intermediate_files else None,
+                csv_output=str(pose_csv_path) if save_intermediate_files else None,
             )
 
             # Task2: プレーシーン検出
@@ -77,7 +77,7 @@ class InferencePipeline:
             )
 
             # 予測結果を保存
-            if save_output:
+            if save_intermediate_files:
                 self.scene_detector.save_results(
                     result_df=result_df,
                     scenes=scenes,
@@ -111,8 +111,8 @@ class InferencePipeline:
                     'min_scene_duration': self.scene_detector.min_scene_duration
                 },
                 'output_files': {
-                    'pose_video': str(pose_video_path) if save_output else None,
-                    'pose_csv': str(pose_csv_path) if save_output else None,
+                    'pose_video': str(pose_video_path) if save_intermediate_files else None,
+                    'pose_csv': str(pose_csv_path) if save_intermediate_files else None,
                 }
             }
 
@@ -120,7 +120,7 @@ class InferencePipeline:
             print("End-to-End推論パイプライン完了")
             print(f"{'='*70}")
             print(f"\n主要な出力:")
-            if save_output:
+            if save_intermediate_files:
                 print(f"  骨格データ動画: {pose_video_path}")
                 print(f"  骨格データCSV: {pose_csv_path}")
             print(f"\n処理結果:")

@@ -63,7 +63,7 @@ class PlayerPoseExporter:
         )
 
         self.visualizer = None
-        if config.save_output:
+        if config.save_intermediate_files:
             self.visualizer = PlayerClassifierVisualizer(
                 self.table_detector,
                 self.pose_tracker,
