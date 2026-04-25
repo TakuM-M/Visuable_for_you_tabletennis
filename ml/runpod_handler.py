@@ -20,9 +20,8 @@ from src.pipelines.config import (
     PlaySceneDetectionConfig,
 )
 
-# 設定ファイルの読み込み
-CONFIG_PATH = os.getenv("PIPELINE_CONFIG_PATH", "/workspace/configs/runpod_config.json")
 
+CONFIG_PATH = os.getenv("PIPELINE_CONFIG_PATH", "/workspace/configs/runpod_config.json")
 with open(CONFIG_PATH, "r") as f:
     config_dict = json.load(f)
 print(f"設定ファイル読み込み完了: {CONFIG_PATH}")
@@ -120,8 +119,8 @@ def handler(job: dict) -> dict:
     video_url: str = inp["video_download_url"]
     job_id: str = inp["job_id"]
     callback_url: str = inp["callback_url"]
-
     clips: list[dict] = []
+    
     with tempfile.TemporaryDirectory() as tmpdir:
         video_path = f"{tmpdir}/input.mp4"
 
@@ -134,7 +133,6 @@ def handler(job: dict) -> dict:
                         f.write(chunk)
         print(f"動画ダウンロード完了 job_id={job_id}")
 
-        # 推論実行
         results = _pipeline.process_video(
             input_video=video_path,
             output_dir=tmpdir,

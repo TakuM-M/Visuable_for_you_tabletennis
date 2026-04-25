@@ -75,44 +75,24 @@ class PlayerPoseExporter:
         input_video: str,
         output_video: str,
         csv_output: str,
-        target_fps: Optional[float] = None,
-        show_progress: Optional[bool] = None
     ) -> Dict[str, Any]:
-        """
-        動画からプレイヤーの姿勢を検出してCSVに出力
-
-        Args:
-            input_video: 入力動画パス
-            output_video: 出力動画パス
-            csv_output: CSV出力パス
-            target_fps: 処理FPS（Noneの場合は設定値を使用）
-            show_progress: プログレスバーを表示するか（Noneの場合は設定値を使用）
-
-        Returns:
-            処理結果の統計情報
-
-        Raises:
-            VideoInputError: 動画ファイルが開けない場合
-            TableDetectionError: 卓球台を検出できない場合
-            ExportError: CSV出力に失敗した場合
-        """
-        if target_fps is None:
-            target_fps = self.config.video_processing.target_fps
-        if show_progress is None:
-            show_progress = self.config.video_processing.show_progress
+        """動画を処理してプレイヤーの姿勢を検出し、結果をCSVにエクスポートする"""
+        
+        target_fps = self.config.video_processing.target_fps
+        show_progress = self.config.video_processing.show_progress
 
         cap, video_writer, video_info = self._initialize_video_processing(
-            input_video, output_video, csv_output, target_fps
+            input_video,
+            output_video,
+            csv_output,
+            target_fps
         )
 
         try:
-            # 卓球台検出
             table_info = self._detect_table_with_validation(cap)
 
-            # フレーム位置をリセット
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            # フレーム処理
             results = self._process_frames(
                 cap=cap,
                 video_writer=video_writer,
@@ -147,29 +127,14 @@ class PlayerPoseExporter:
         csv_output: str,
         target_fps: float
     ) -> Tuple[cv2.VideoCapture, cv2.VideoWriter, Dict[str, Any]]:
-        """
-        動画処理の初期化
-
-        Args:
-            input_video: 入力動画パス
-            output_video: 出力動画パス
-            csv_output: CSV出力パス
-            target_fps: 目標FPS
-
-        Returns:
-            (VideoCapture, VideoWriter, video_info)のタプル
-
-        Raises:
-            VideoInputError: 動画ファイルが開けない場合
-            VideoProcessingError: VideoWriterの初期化に失敗した場合
-        """
+        """初期化処理: 動画のオープン、情報取得、VideoWriterの初期化"""
+        
         print(f"\n動画ファイルを開いています: {input_video}...")
         cap = cv2.VideoCapture(input_video)
 
         if not cap.isOpened():
             raise VideoInputError(input_video, "ファイルが存在しないか、形式が不正です")
 
-        # 動画情報を取得
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -185,22 +150,16 @@ class PlayerPoseExporter:
             'target_fps': target_fps
         }
 
-        # 動画情報を表示
         self._print_video_info(video_info)
         
         video_writer = None
         if self.visualizer is not None:
             output_dir = Path(output_video).parent
             output_dir.mkdir(parents=True, exist_ok=True)
-
-            # VideoWriterの初期化
-            # 出力先ディレクトリが存在しない場合は警告なしに終了するため、事前にディレクトリを作成
             fourcc = cv2.VideoWriter_fourcc(*self.VIDEO_CODEC_FOURCC)
             video_writer = cv2.VideoWriter(output_video, fourcc, target_fps, (width, height))
-
             if not video_writer.isOpened():
                 raise VideoProcessingError(f"VideoWriterの初期化に失敗しました: {output_video}")
-
             print(f"出力動画パス: {output_video}")
             print(f"CSV出力パス: {csv_output}\n")
 
@@ -223,18 +182,7 @@ class PlayerPoseExporter:
         self,
         cap: cv2.VideoCapture
     ) -> TableInfo:
-        """
-        卓球台検出と検証
-
-        Args:
-            cap: ビデオキャプチャオブジェクト
-
-        Returns:
-            検出された卓球台情報
-
-        Raises:
-            TableDetectionError: 卓球台を検出できない場合
-        """
+        """卓球台検出と検証"""
         table_info = self._detect_table(
             cap,
             max_attempts=self.config.table_detection.max_detection_attempts,
@@ -365,7 +313,6 @@ class PlayerPoseExporter:
                 frame_count += 1
                 pbar.update(1)
 
-                # フレームスキップ判定（デコードはスキップするフレームに対しては行わない）
                 if frame_count % video_info['frame_step'] != 0:
                     continue
 
@@ -375,7 +322,6 @@ class PlayerPoseExporter:
 
                 processed_count += 1
 
-                # フレーム処理
                 player_ids = self._process_single_frame(
                     frame=frame,
                     frame_count=frame_count,
@@ -384,7 +330,6 @@ class PlayerPoseExporter:
                     player_ids=player_ids
                 )
 
-                # 結果描画と保存
                 if video_writer is not None and self.visualizer is not None:
                     display_frame = self._create_display_frame(
                         frame=frame,
@@ -439,11 +384,7 @@ class PlayerPoseExporter:
         Returns:
             更新されたプレイヤーIDセット
         """
-        # 姿勢検出とトラッキング
-        if table_info:
-            persons = self.pose_tracker.track_frame_with_table_filter(frame, table_info)
-        else:
-            persons = self.pose_tracker.track_frame(frame)
+        persons = self.pose_tracker.track_frame_with_table_filter(frame, table_info)
 
         # プレイヤー分類器を更新
         if table_info and persons:

@@ -1,6 +1,3 @@
-"""
-卓球台検出モジュール
-"""
 import numpy as np
 from typing import Optional, Tuple, List
 
@@ -12,8 +9,7 @@ from ultralytics import YOLO
 class TableDetector:
     """
     卓球台検出クラス
-
-    - Ping Pong Table (卓球台)
+    Tracking_Class: Ping Pong Table (卓球台)
     """
     TABLE_CLASS_NAME = "Ping Pong Table"
 
@@ -23,14 +19,6 @@ class TableDetector:
         cache_valid_frames: int = 1000,
         device: str = "cpu",
     ):
-        """
-        卓球台検出器の初期化
-
-        Args:
-            yolo_model_path: YOLOモデルのパス
-            cache_valid_frames: キャッシュ有効期間（フレーム数）
-            device: 使用デバイス（"cpu" or "cuda"）
-        """
         self.yolo_model = None
         self.class_names = {}
         self.cache_valid_frames = cache_valid_frames

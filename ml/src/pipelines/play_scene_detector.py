@@ -1,8 +1,3 @@
-"""
-プレーシーン検出パイプライン
-
-LSTMモデルを使用して骨格データからプレー中のシーンを検出する
-"""
 import json
 import torch
 import numpy as np
@@ -24,7 +19,7 @@ from src.pipelines.exceptions import DataInputError
 
 
 class PlaySceneDetector:
-    """プレーシーン検出パイプライン"""
+    """LSTMモデルを利用したプレーシーン検出パイプライン"""
 
     def __init__(self, config: PlaySceneDetectionConfig):
         """

@@ -56,7 +56,47 @@ class YOLOPose_Tracker:
         print(f"  入力画像サイズ: {self.imgsz}")
         print(f"  FP16推論: {self.half}")
 
-    def track_frame(
+    def track_frame_with_table_filter(
+        self,
+        frame: np.ndarray,
+        table_info,
+        persist: bool = True
+    ) -> List[PersonTrack]:
+        """
+        卓球台フィルタリングを適用した人物トラッキング
+
+        卓球台から遠い人物は検出から除外し、
+        一度でも卓球台領域に入った人物は継続的にトラッキングします。
+
+        Args:
+            frame: 入力フレーム（BGR形式）
+            table_info: 卓球台情報（TableInfo）
+            persist: トラッキングIDを維持するか
+
+        Returns:
+            フィルタリングされた人物のリスト
+        """
+        all_persons = self._track_frame(frame, persist=persist)
+
+        if table_info is None:
+            return all_persons
+
+        filtered_persons = []
+        for person in all_persons:
+            track_id = person.track_id
+            distance = self._calculate_table_distance(person, table_info)
+
+            # 卓球台に近い場合、このtrack_idを記憶
+            if distance < self.table_distance_threshold:
+                self.validated_track_ids.add(track_id)
+
+            # 一度でも卓球台領域に入ったIDか、または現在卓球台に近い場合のみ追加
+            if track_id in self.validated_track_ids or distance < self.table_distance_threshold:
+                filtered_persons.append(person)
+
+        return filtered_persons
+    
+    def _track_frame(
         self,
         frame: np.ndarray,
         persist: bool = True
@@ -122,46 +162,6 @@ class YOLOPose_Tracker:
             ))
 
         return persons
-
-    def track_frame_with_table_filter(
-        self,
-        frame: np.ndarray,
-        table_info,
-        persist: bool = True
-    ) -> List[PersonTrack]:
-        """
-        卓球台フィルタリングを適用した人物トラッキング
-
-        卓球台から遠い人物は検出から除外し、
-        一度でも卓球台領域に入った人物は継続的にトラッキングします。
-
-        Args:
-            frame: 入力フレーム（BGR形式）
-            table_info: 卓球台情報（TableInfo）
-            persist: トラッキングIDを維持するか
-
-        Returns:
-            フィルタリングされた人物のリスト
-        """
-        all_persons = self.track_frame(frame, persist=persist)
-
-        if table_info is None:
-            return all_persons
-
-        filtered_persons = []
-        for person in all_persons:
-            track_id = person.track_id
-            distance = self._calculate_table_distance(person, table_info)
-
-            # 卓球台に近い場合、このtrack_idを記憶
-            if distance < self.table_distance_threshold:
-                self.validated_track_ids.add(track_id)
-
-            # 一度でも卓球台領域に入ったIDか、または現在卓球台に近い場合のみ追加
-            if track_id in self.validated_track_ids or distance < self.table_distance_threshold:
-                filtered_persons.append(person)
-
-        return filtered_persons
 
     def _calculate_table_distance(
         self,
