@@ -32,7 +32,7 @@ yt-dlp -o "tabletennis_video.mp4" "URL"
 ```bash
 # 1080p MP4形式で、タイトル付きで保存
 yt-dlp -f "best[height<=1080][ext=mp4]" \
-       -o "raw_videos/%(title)s_%(id)s.%(ext)s" \
+       -o "raw_02_training/%(title)s_%(id)s.%(ext)s" \
        "動画URL"
 ```
 
