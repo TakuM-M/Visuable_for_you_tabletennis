@@ -70,33 +70,6 @@ class PlayerPoseExporter:
                 self.player_classifier
             )
 
-    @classmethod
-    def create_default(
-        cls,
-        table_model_path: str,
-        pose_model_path: str,
-        device: str = 'cuda',
-        save_output: bool = True
-    ) -> 'PlayerPoseExporter':
-        """
-        デフォルト設定でPlayerPoseExporterを作成
-
-        Args:
-            table_model_path: 卓球台検出モデルのパス
-            pose_model_path: 姿勢推定モデルのパス
-            device: 使用デバイス
-
-        Returns:
-            デフォルト設定のPlayerPoseExporter
-        """
-        config = PlayerPoseExporterConfig.create_default(
-            table_model_path=table_model_path,
-            pose_model_path=pose_model_path,
-            device=device,
-            save_output=save_output
-        )
-        return cls(config)
-
     def process_video(
         self,
         input_video: str,

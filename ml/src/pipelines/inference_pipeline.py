@@ -1,8 +1,3 @@
-"""
-End-to-End推論パイプライン
-
-動画から骨格データ抽出→プレーシーン検出→ハイライト動画作成までを統合
-"""
 from pathlib import Path
 from typing import Dict, Any, Optional
 import matplotlib.pyplot as plt
@@ -29,40 +24,6 @@ class InferencePipeline:
         self.pose_exporter = PlayerPoseExporter(config.pose_export)
         self.scene_detector = PlaySceneDetector(config.scene_detection)
 
-    @classmethod
-    def create_default(
-        cls,
-        table_model_path: str,
-        pose_model_path: str,
-        play_classifier_model_path: str,
-        device: str = 'cuda',
-        detection_threshold: float = 0.5,
-        min_scene_duration: int = 10
-    ) -> 'InferencePipeline':
-        """
-        デフォルト設定でInferencePipelineを作成
-
-        Args:
-            table_model_path: 卓球台検出モデルのパス
-            pose_model_path: 姿勢推定モデルのパス
-            play_classifier_model_path: プレー検知モデルのパス
-            device: 使用デバイス
-            detection_threshold: プレー中判定の閾値
-            min_scene_duration: 最小シーン長（フレーム数）
-
-        Returns:
-            デフォルト設定のInferencePipeline
-        """
-        config = InferencePipelineConfig.create_default(
-            table_model_path=table_model_path,
-            pose_model_path=pose_model_path,
-            play_classifier_model_path=play_classifier_model_path,
-            device=device,
-            detection_threshold=detection_threshold,
-            min_scene_duration=min_scene_duration
-        )
-
-        return cls(config=config)
 
     def process_video(
         self,
@@ -91,9 +52,7 @@ class InferencePipeline:
         if base_name is None:
             base_name = input_path.stem
 
-        # configから設定を取得
         save_output = self.config.save_output
-
         pose_video_path = output_dir_path / f"{base_name}_poses.mp4"
         pose_csv_path = output_dir_path / f"{base_name}_poses.csv"
 

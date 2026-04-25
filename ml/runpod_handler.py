@@ -27,14 +27,12 @@ with open(CONFIG_PATH, "r") as f:
     config_dict = json.load(f)
 print(f"設定ファイル読み込み完了: {CONFIG_PATH}")
 
-# 環境変数によるモデルパスの上書き（Network Volume対応）
 models = config_dict["models"]
 TABLE_MODEL_PATH = os.getenv("TABLE_MODEL_PATH", models["table_detection"])
 POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", models["pose_estimation"])
 PLAY_CLASSIFIER_MODEL_PATH = os.getenv("PLAY_CLASSIFIER_MODEL_PATH", models["play_classifier"])
 PLAY_CLASSIFIER_CONFIG_PATH = os.getenv("PLAY_CLASSIFIER_CONFIG_PATH", models.get("play_classifier_config"))
 DEVICE = os.getenv("ML_DEVICE", config_dict.get("device", "cuda"))
-
 
 def _build_pipeline_config() -> InferencePipelineConfig:
     """JSON設定からInferencePipelineConfigを構築"""

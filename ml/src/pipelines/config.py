@@ -116,7 +116,7 @@ class VideoProcessingConfig:
 
 @dataclass
 class PlayerPoseExporterConfig:
-    """パイプライン全体の設定"""
+    """プレイヤー姿勢エクスポーターの設定"""
     table_detection: TableDetectionConfig
     pose_tracking: PoseTrackingConfig
     player_classification: PlayerClassificationConfig
@@ -124,35 +124,8 @@ class PlayerPoseExporterConfig:
     video_processing: VideoProcessingConfig = field(default_factory=VideoProcessingConfig)
     save_output: bool = True
 
-    @classmethod
-    def create_default(
-        cls,
-        table_model_path: str,
-        pose_model_path: str,
-        device: str = 'cuda',
-        save_output: bool = True
-    ) -> 'PlayerPoseExporterConfig':
-        """
-        デフォルト設定でPlayerPoseExporterConfigを作成
-
-        Args:
-            table_model_path: 卓球台検出モデルのパス
-            pose_model_path: 姿勢推定モデルのパス
-            device: 使用デバイス ('cuda', 'cpu', 'mps')
-            save_output: 出力保存を有効にするか
-        Returns:
-            デフォルト設定のPlayerPoseExporterConfig
-        """
-        return cls(
-            table_detection=TableDetectionConfig(model_path=table_model_path, device=device),
-            pose_tracking=PoseTrackingConfig(model_path=pose_model_path, device=device),
-            player_classification=PlayerClassificationConfig(),
-            tracking_export=TrackingExportConfig(),
-            video_processing=VideoProcessingConfig()
-        )
-
 # =====================================================
-# プレーシーン検出および動画作成設定
+# プレーシーン検出
 # =====================================================
 @dataclass
 class PlaySceneDetectionConfig:
@@ -175,6 +148,9 @@ class PlaySceneDetectionConfig:
         if self.batch_size < 1:
             raise ValueError("batch_size must be at least 1")
 
+# =====================================================
+# 動画作成設定
+# =====================================================
 
 @dataclass
 class VideoCompositionConfig:
@@ -211,42 +187,3 @@ class InferencePipelineConfig:
     scene_detection: PlaySceneDetectionConfig
     show_progress: bool = True
     save_output: bool = True
-
-    @classmethod
-    def create_default(
-        cls,
-        table_model_path: str,
-        pose_model_path: str,
-        play_classifier_model_path: str,
-        device: str = 'cuda',
-        detection_threshold: float = 0.5,
-        min_scene_duration: int = 10
-    ) -> 'InferencePipelineConfig':
-        """
-        デフォルト設定でInferencePipelineConfigを作成
-
-        Args:
-            table_model_path: 卓球台検出モデルのパス
-            pose_model_path: 姿勢推定モデルのパス
-            play_classifier_model_path: プレー検知モデルのパス
-            device: 使用デバイス
-            detection_threshold: プレー中判定の閾値
-            min_scene_duration: 最小シーン長（フレーム数）
-
-        Returns:
-            デフォルト設定のInferencePipelineConfig
-        """
-        return cls(
-            pose_export=PlayerPoseExporterConfig.create_default(
-                table_model_path=table_model_path,
-                pose_model_path=pose_model_path,
-                device=device,
-                save_output=True
-            ),
-            scene_detection=PlaySceneDetectionConfig(
-                model_path=play_classifier_model_path,
-                device=device,
-                threshold=detection_threshold,
-                min_scene_duration=min_scene_duration
-            ),
-        )
