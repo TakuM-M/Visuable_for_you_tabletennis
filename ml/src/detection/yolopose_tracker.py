@@ -1,6 +1,3 @@
-"""
-YOLOv11-Pose を用いた人物トラッキングモジュール
-"""
 import cv2
 import numpy as np
 from typing import List, Set
@@ -20,6 +17,8 @@ class YOLOPose_Tracker:
         iou_threshold: float = 0.7,
         table_distance_threshold: float = 0.2,
         device: str = "cpu",
+        imgsz: int = 640,
+        half: bool = False,
     ):
         """
         YOLOトラッカーの初期化
@@ -30,12 +29,16 @@ class YOLOPose_Tracker:
             iou_threshold: NMS（Non-Maximum Suppression）のIoU閾値
             table_distance_threshold: 卓球台との正規化距離の閾値（これ以下の距離にいる人物のみトラッキング）
             device: 使用デバイス（"cpu" or "cuda"）
+            imgsz: YOLO推論時の入力画像サイズ（デフォルト: 640）
+            half: FP16推論を有効にするか（CUDA環境でのみ有効）
         """
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.table_distance_threshold = table_distance_threshold
         self.device = device
+        self.imgsz = imgsz
+        self.half = half and device == "cuda"
 
         # 卓球台領域に一度でも入ったtrack_idを記憶
         self.validated_track_ids: Set[int] = set()
@@ -50,6 +53,8 @@ class YOLOPose_Tracker:
         print(f"  デバイス: {device}")
         print(f"  信頼度閾値: {conf_threshold}")
         print(f"  卓球台距離閾値: {table_distance_threshold}")
+        print(f"  入力画像サイズ: {self.imgsz}")
+        print(f"  FP16推論: {self.half}")
 
     def track_frame(
         self,
@@ -70,6 +75,8 @@ class YOLOPose_Tracker:
             frame,
             conf=self.conf_threshold,
             iou=self.iou_threshold,
+            imgsz=self.imgsz,
+            half=self.half,
             persist=persist,
             verbose=False
         )

@@ -37,6 +37,8 @@ class PoseTrackingConfig:
     table_distance_threshold: float = 0.2
     min_keypoint_confidence: float = 0.3
     device: str = 'cuda'
+    imgsz: int = 640
+    half: bool = False
 
     def __post_init__(self):
         """バリデーション"""
@@ -50,6 +52,8 @@ class PoseTrackingConfig:
             raise ValueError("min_keypoint_confidence must be between 0.0 and 1.0")
         if self.device not in ['cuda', 'cpu', 'mps']:
             raise ValueError(f"Unsupported device: {self.device}")
+        if self.imgsz < 32:
+            raise ValueError("imgsz must be at least 32")
 
 
 @dataclass
@@ -159,6 +163,7 @@ class PlaySceneDetectionConfig:
     device: str = 'cuda'
     threshold: float = 0.5
     min_scene_duration: int = 10
+    batch_size: int = 64
 
     def __post_init__(self):
         """バリデーション"""
@@ -168,6 +173,8 @@ class PlaySceneDetectionConfig:
             raise ValueError("threshold must be between 0.0 and 1.0")
         if self.min_scene_duration < 1:
             raise ValueError("min_scene_duration must be at least 1")
+        if self.batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
 
 
 @dataclass

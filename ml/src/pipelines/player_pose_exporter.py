@@ -43,6 +43,8 @@ class PlayerPoseExporter:
             iou_threshold=config.pose_tracking.iou_threshold,
             table_distance_threshold=config.pose_tracking.table_distance_threshold,
             device=config.pose_tracking.device,
+            imgsz=config.pose_tracking.imgsz,
+            half=config.pose_tracking.half,
         )
         self.player_classifier = PlayerClassifier(
             near_table_threshold=config.player_classification.near_table_threshold,

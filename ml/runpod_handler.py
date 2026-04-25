@@ -61,6 +61,8 @@ def _build_pipeline_config() -> InferencePipelineConfig:
             iou_threshold=pt.get("iou_threshold", 0.7),
             table_distance_threshold=pt.get("table_distance_threshold", 0.2),
             min_keypoint_confidence=pt.get("min_keypoint_confidence", 0.3),
+            imgsz=pt.get("imgsz", 640),
+            half=pt.get("half", False),
         ),
         player_classification=PlayerClassificationConfig(
             near_table_threshold=pc.get("near_table_threshold", 0.1),
@@ -90,6 +92,7 @@ def _build_pipeline_config() -> InferencePipelineConfig:
         device=DEVICE,
         threshold=sd.get("threshold", 0.5),
         min_scene_duration=sd.get("min_scene_duration", 10),
+        batch_size=sd.get("batch_size", 64),
     )
 
     return InferencePipelineConfig(
@@ -99,11 +102,9 @@ def _build_pipeline_config() -> InferencePipelineConfig:
         save_output=pl.get("save_output", False),
     )
 
-
 print(f"モデルロード開始 (device={DEVICE})")
 _pipeline = InferencePipeline(_build_pipeline_config())
 print("モデルロード完了")
-
 
 def handler(job: dict) -> dict:
     """

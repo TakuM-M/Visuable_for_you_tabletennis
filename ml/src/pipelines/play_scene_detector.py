@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.models import PlayClassifierLSTM
@@ -17,6 +18,7 @@ from src.datasets import (
     CSVPoseSequenceDataset,
     MemoryPoseSequenceDataset,
 )
+from src.datasets.base_dataset import collate_fn
 from src.pipelines.config import PlaySceneDetectionConfig
 from src.pipelines.exceptions import DataInputError
 
@@ -36,6 +38,7 @@ class PlaySceneDetector:
         self.device = torch.device(config.device if torch.cuda.is_available() else 'cpu')
         self.threshold = config.threshold
         self.min_scene_duration = config.min_scene_duration
+        self.batch_size = config.batch_size
         self.config_path = Path(config.config_path) if config.config_path is not None else None
 
         self.model_config = self._load_config()
@@ -201,7 +204,7 @@ class PlaySceneDetector:
         show_progress: bool = True
     ) -> pd.DataFrame:
         """
-        データセットに対して予測を実行
+        データセットに対してバッチ予測を実行
 
         Args:
             dataset: データセット
@@ -210,33 +213,50 @@ class PlaySceneDetector:
         Returns:
             予測結果のDataFrame
         """
-        print(f"\n予測開始 (閾値: {self.threshold})...")
+        print(f"\n予測開始 (閾値: {self.threshold}, バッチサイズ: {self.batch_size})...")
+
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            collate_fn=collate_fn,
+            num_workers=0,
+        )
 
         frame_probs = {}  # {frame_num: [probs]}
 
         with torch.no_grad():
-            iterator = tqdm(dataset, desc="予測中") if show_progress else dataset
+            iterator = tqdm(dataloader, desc="予測中") if show_progress else dataloader
 
-            for features, _, metadata in iterator:
-                # バッチ次元を追加
-                features = features.unsqueeze(0).to(self.device)
+            for features_batch, _, metadata_batch in iterator:
+                # features_batch: (batch, seq, features)
+                features_batch = features_batch.to(self.device)
 
-                # 予測
-                outputs = self.model(features)  # (1, seq, 1)
-                probs = outputs.squeeze().cpu().numpy()
+                # バッチ予測
+                outputs = self.model(features_batch)  # (batch, seq, 1)
+                probs_batch = outputs.squeeze(-1).cpu().numpy()  # (batch, seq)
+
+                # 1次元になった場合（batch=1かつseq=1）の対応
+                if probs_batch.ndim == 0:
+                    probs_batch = probs_batch.reshape(1, 1)
+                elif probs_batch.ndim == 1:
+                    # batch=1の場合: (seq,) → (1, seq)
+                    if len(metadata_batch) == 1:
+                        probs_batch = probs_batch.reshape(1, -1)
+                    # seq=1の場合: (batch,) → (batch, 1)
+                    else:
+                        probs_batch = probs_batch.reshape(-1, 1)
 
                 # フレームごとに確率を記録
-                start_frame = metadata['start_frame']
+                for batch_idx, metadata in enumerate(metadata_batch):
+                    start_frame = metadata['start_frame']
+                    probs = probs_batch[batch_idx]
 
-                # probsがスカラーの場合（sequence_length=1）の対応
-                if np.isscalar(probs):
-                    probs = [probs]
-
-                for i, prob in enumerate(probs):
-                    frame_num = start_frame + i
-                    if frame_num not in frame_probs:
-                        frame_probs[frame_num] = []
-                    frame_probs[frame_num].append(prob)
+                    for i, prob in enumerate(probs):
+                        frame_num = start_frame + i
+                        if frame_num not in frame_probs:
+                            frame_probs[frame_num] = []
+                        frame_probs[frame_num].append(float(prob))
 
         # 各フレームの確率を平均
         predictions = []
