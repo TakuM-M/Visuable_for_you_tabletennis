@@ -17,7 +17,7 @@ class PlayClassifierLSTM(nn.Module):
 
     def __init__(
         self,
-        input_size: int = 34,  # 17 keypoints × 2 coordinates
+        input_size: int = 34,  # 17 keypoints(骨格) × 2 coordinates(x, y) = 34次元
         hidden_size: int = 128,
         num_layers: int = 2,
         dropout: float = 0.3,
@@ -28,7 +28,7 @@ class PlayClassifierLSTM(nn.Module):
         初期化
 
         Args:
-            input_size: 入力特徴量の次元数（デフォルト: 34 = 17キーポイント×2座標）
+            input_size: 入力特徴量の次元数
             hidden_size: LSTM隠れ層のサイズ
             num_layers: LSTMの層数
             dropout: ドロップアウト率
@@ -43,7 +43,6 @@ class PlayClassifierLSTM(nn.Module):
         self.bidirectional = bidirectional
         self.use_attention = use_attention
 
-        # 双方向の場合は出力サイズが2倍になる
         self.num_directions = 2 if bidirectional else 1
         self.lstm_output_size = hidden_size * self.num_directions
 
@@ -105,7 +104,6 @@ class PlayClassifierLSTM(nn.Module):
 
         # 可変長シーケンスの場合はpack_padded_sequenceを使用
         if lengths is not None:
-            # lengthsをCPUに移動してからpack
             lengths_cpu = lengths.cpu()
             x = nn.utils.rnn.pack_padded_sequence(
                 x, lengths_cpu, batch_first=True, enforce_sorted=False
@@ -122,7 +120,6 @@ class PlayClassifierLSTM(nn.Module):
 
         # Attention機構（オプション）
         if self.use_attention:
-            # Attention重みを計算
             attention_weights = self.attention(lstm_out)  # (batch, seq, 1)
             attention_weights = torch.softmax(attention_weights, dim=1)
 

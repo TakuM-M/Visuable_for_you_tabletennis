@@ -284,7 +284,7 @@ class TrainingPipeline:
         )
 
     def _setup_criterion(self):
-        """損失関数の設定（クラス不均衡対応）"""
+        """損失関数の設定"""
         # 訓練データからpos_weightを自動計算
         pos_weight = self._compute_pos_weight()
         if pos_weight is not None:

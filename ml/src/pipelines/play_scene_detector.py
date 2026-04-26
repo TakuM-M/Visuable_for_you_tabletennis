@@ -268,7 +268,7 @@ class PlaySceneDetector:
         sorted_frames = sorted(frame_probs.keys())
         avg_probs = np.array([np.mean(frame_probs[f]) for f in sorted_frames])
 
-        # メディアンフィルタによる���ムージング
+        # メディアンフィルタによるスムージング（オプション）
         if self.smoothing_window > 1 and len(avg_probs) > self.smoothing_window:
             avg_probs = median_filter(avg_probs, size=self.smoothing_window)
             print(f"  スムージング適用: メディアンフィルタ (window={self.smoothing_window})")
