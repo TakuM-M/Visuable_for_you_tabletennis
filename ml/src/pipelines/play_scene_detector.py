@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 from torch.utils.data import DataLoader
+from scipy.ndimage import median_filter
 from tqdm import tqdm
 
 from src.models import PlayClassifierLSTM
@@ -34,6 +35,7 @@ class PlaySceneDetector:
         self.threshold = config.threshold
         self.min_scene_duration = config.min_scene_duration
         self.batch_size = config.batch_size
+        self.smoothing_window = config.smoothing_window
         self.config_path = Path(config.config_path) if config.config_path is not None else None
 
         self.model_config = self._load_config()
@@ -57,7 +59,8 @@ class PlaySceneDetector:
                 'num_layers': 2,
                 'dropout': 0.3,
                 'no_attention': False,
-                'sequence_length': 30
+                'sequence_length': 30,
+                'use_motion_features': False
             }
 
         with open(self.config_path, 'r') as f:
@@ -72,15 +75,19 @@ class PlaySceneDetector:
                 'num_layers': model_config.get('num_layers', 2),
                 'dropout': model_config.get('dropout', 0.3),
                 'no_attention': not use_attention,
-                'sequence_length': config.get('dataset', {}).get('sequence_length', 30)
+                'sequence_length': config.get('dataset', {}).get('sequence_length', 30),
+                'use_motion_features': config.get('dataset', {}).get('use_motion_features', False)
             }
 
         return config
 
     def _load_model(self) -> PlayClassifierLSTM:
         """学習済みモデルを読み込み"""
+        use_motion = self.model_config.get('use_motion_features', False)
+        input_size = 102 if use_motion else 34  # 座標34 + 速度34 + 加速度34
+
         model = PlayClassifierLSTM(
-            input_size=34,  # 17 keypoints × 2 coordinates
+            input_size=input_size,
             hidden_size=self.model_config.get('hidden_size', 128),
             num_layers=self.model_config.get('num_layers', 2),
             dropout=self.model_config.get('dropout', 0.3),
@@ -133,12 +140,14 @@ class PlaySceneDetector:
         # InMemoryPoseSequenceDatasetを作成
         sequence_length = self.model_config.get('sequence_length', 30)
 
+        use_motion = self.model_config.get('use_motion_features', False)
         dataset = MemoryPoseSequenceDataset(
             pose_data=pose_data,
             frames=frames,
             sequence_length=sequence_length,
             stride=1,
-            keypoint_features=None
+            keypoint_features=None,
+            use_motion_features=use_motion
         )
 
         print(f"\nInMemoryPoseSequenceDataset作成完了:")
@@ -177,12 +186,14 @@ class PlaySceneDetector:
 
         sequence_length = self.model_config.get('sequence_length', 30)
 
+        use_motion = self.model_config.get('use_motion_features', False)
         dataset = CSVPoseSequenceDataset(
             csv_path=str(csv_path),
             label_path=None,
             sequence_length=sequence_length,
             stride=1,
-            keypoint_features=None
+            keypoint_features=None,
+            use_motion_features=use_motion
         )
         
         # 予測実行
@@ -227,9 +238,9 @@ class PlaySceneDetector:
                 # features_batch: (batch, seq, features)
                 features_batch = features_batch.to(self.device)
 
-                # バッチ予測
-                outputs = self.model(features_batch)  # (batch, seq, 1)
-                probs_batch = outputs.squeeze(-1).cpu().numpy()  # (batch, seq)
+                # バッチ予測（logits → sigmoid で確率化）
+                logits = self.model(features_batch)  # (batch, seq, 1)
+                probs_batch = torch.sigmoid(logits).squeeze(-1).cpu().numpy()  # (batch, seq)
 
                 # 1次元になった場合（batch=1かつseq=1）の対応
                 if probs_batch.ndim == 0:
@@ -254,13 +265,21 @@ class PlaySceneDetector:
                         frame_probs[frame_num].append(float(prob))
 
         # 各フレームの確率を平均
+        sorted_frames = sorted(frame_probs.keys())
+        avg_probs = np.array([np.mean(frame_probs[f]) for f in sorted_frames])
+
+        # メディアンフィルタによる���ムージング
+        if self.smoothing_window > 1 and len(avg_probs) > self.smoothing_window:
+            avg_probs = median_filter(avg_probs, size=self.smoothing_window)
+            print(f"  スムージング適用: メディアンフィルタ (window={self.smoothing_window})")
+
         predictions = []
-        for frame_num in sorted(frame_probs.keys()):
-            avg_prob = np.mean(frame_probs[frame_num])
-            prediction = 1 if avg_prob >= self.threshold else 0
+        for i, frame_num in enumerate(sorted_frames):
+            prob = float(avg_probs[i])
+            prediction = 1 if prob >= self.threshold else 0
             predictions.append({
                 'frame': frame_num,
-                'probability': avg_prob,
+                'probability': prob,
                 'prediction': prediction,
                 'num_predictions': len(frame_probs[frame_num])
             })

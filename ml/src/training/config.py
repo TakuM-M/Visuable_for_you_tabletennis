@@ -47,6 +47,7 @@ class DatasetConfig:
     stride: int = 5
     batch_size: int = 32
     num_workers: int = 4
+    use_motion_features: bool = False  # 速度・加速度特徴量を追加するか（34→102次元）
 
     def __post_init__(self):
         """バリデーション"""
@@ -66,7 +67,7 @@ class DatasetConfig:
 class OptimizerConfig:
     """最適化器の設定"""
     learning_rate: float = 1e-3
-    weight_decay: float = 0.0
+    weight_decay: float = 1e-4
     scheduler_patience: int = 5
     scheduler_factor: float = 0.5
     scheduler_min_lr: float = 1e-6

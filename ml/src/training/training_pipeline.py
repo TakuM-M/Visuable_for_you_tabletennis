@@ -1,8 +1,3 @@
-"""
-プレー検知モデル学習パイプライン
-
-既存の学習コードをパイプライン化し、設定ベースで簡単に学習を実行できるようにする
-"""
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -57,35 +52,7 @@ class TrainingPipeline:
         self.best_val_loss = float('inf')
         self.best_val_f1 = 0.0
         self.early_stopping_counter = 0
-
-    @classmethod
-    def create_default(
-        cls,
-        train_data_dirs: list,
-        val_data_dirs: Optional[list] = None,
-        output_dir: str = 'output/training',
-        device: str = 'cuda'
-    ) -> 'TrainingPipeline':
-        """
-        デフォルト設定でTrainingPipelineを作成
-
-        Args:
-            train_data_dirs: 訓練用動画データディレクトリのリスト
-            val_data_dirs: 検証用動画データディレクトリのリスト
-            output_dir: 出力ディレクトリ
-            device: 使用デバイス
-
-        Returns:
-            デフォルト設定のTrainingPipeline
-        """
-        config = TrainingPipelineConfig.create_default(
-            train_data_dirs=train_data_dirs,
-            val_data_dirs=val_data_dirs,
-            output_dir=output_dir,
-            device=device
-        )
-        return cls(config)
-
+        
     def run(self) -> Dict[str, Any]:
         """
         学習パイプラインを実行
@@ -176,14 +143,15 @@ class TrainingPipeline:
                 'cnn_channels': self.config.model.cnn_channels
             },
             'dataset': {
-                'train_csv': self.config.dataset.train_csv,
-                'train_labels': self.config.dataset.train_labels,
-                'val_csv': self.config.dataset.val_csv,
-                'val_labels': self.config.dataset.val_labels,
+                'train_data_dirs': self.config.dataset.train_data_dirs,
+                'val_data_dirs': self.config.dataset.val_data_dirs,
+                'csv_filename': self.config.dataset.csv_filename,
+                'label_filename': self.config.dataset.label_filename,
                 'sequence_length': self.config.dataset.sequence_length,
                 'stride': self.config.dataset.stride,
                 'batch_size': self.config.dataset.batch_size,
-                'num_workers': self.config.dataset.num_workers
+                'num_workers': self.config.dataset.num_workers,
+                'use_motion_features': self.config.dataset.use_motion_features
             },
             'optimizer': {
                 'learning_rate': self.config.optimizer.learning_rate,
@@ -216,7 +184,8 @@ class TrainingPipeline:
                 csv_filename=self.config.dataset.csv_filename,
                 label_filename=self.config.dataset.label_filename,
                 sequence_length=self.config.dataset.sequence_length,
-                stride=self.config.dataset.stride
+                stride=self.config.dataset.stride,
+                use_motion_features=self.config.dataset.use_motion_features
             )
             print(f"  訓練データ: {len(train_dataset)} シーケンス")
         except Exception as e:
@@ -242,7 +211,8 @@ class TrainingPipeline:
                     csv_filename=self.config.dataset.csv_filename,
                     label_filename=self.config.dataset.label_filename,
                     sequence_length=self.config.dataset.sequence_length,
-                    stride=self.config.dataset.stride
+                    stride=self.config.dataset.stride,
+                    use_motion_features=self.config.dataset.use_motion_features
                 )
                 print(f"  検証データ: {len(val_dataset)} シーケンス")
 
@@ -267,11 +237,14 @@ class TrainingPipeline:
 
     def _setup_model(self):
         """モデルの作成"""
-        print("モデル作成中...")
+        print("モデル作成���...")
+
+        # 特徴量次元: 座標のみ=34, 速度・加速度追加=102
+        input_size = 102 if self.config.dataset.use_motion_features else 34
 
         if self.config.model.model_type == 'lstm':
             self.model = PlayClassifierLSTM(
-                input_size=34,  # 17 keypoints × 2
+                input_size=input_size,
                 hidden_size=self.config.model.hidden_size,
                 num_layers=self.config.model.num_layers,
                 dropout=self.config.model.dropout,
@@ -279,7 +252,7 @@ class TrainingPipeline:
             )
         elif self.config.model.model_type == 'cnn_lstm':
             self.model = PlayClassifierCNNLSTM(
-                input_size=34,
+                input_size=input_size,
                 cnn_channels=self.config.model.cnn_channels,
                 hidden_size=self.config.model.hidden_size,
                 num_layers=self.config.model.num_layers,
@@ -311,8 +284,32 @@ class TrainingPipeline:
         )
 
     def _setup_criterion(self):
-        """損失関数の設定"""
-        self.criterion = nn.BCELoss()
+        """損失関数の設定（クラス不均衡対応）"""
+        # 訓練データからpos_weightを自動計算
+        pos_weight = self._compute_pos_weight()
+        if pos_weight is not None:
+            print(f"  pos_weight: {pos_weight:.2f}")
+            self.criterion = nn.BCEWithLogitsLoss(
+                pos_weight=torch.tensor([pos_weight], device=self.device)
+            )
+        else:
+            self.criterion = nn.BCEWithLogitsLoss()
+
+    def _compute_pos_weight(self) -> float:
+        """訓練データのクラス不均衡からpos_weightを計算"""
+        total_positive = 0
+        total_negative = 0
+        for _, labels, _ in self.train_loader:
+            total_positive += (labels == 1).sum().item()
+            total_negative += (labels == 0).sum().item()
+
+        if total_positive == 0:
+            print("  警告: 正例が見つかりません。pos_weight=1.0を使用")
+            return None
+
+        pos_weight = total_negative / total_positive
+        print(f"  クラス分布: positive={total_positive}, negative={total_negative}")
+        return pos_weight
 
     def _setup_tensorboard(self):
         """TensorBoardの設定"""
@@ -407,9 +404,10 @@ class TrainingPipeline:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
 
-            # 統計
+            # 統計（logitsにsigmoidを適用して確率化）
             total_loss += loss.item()
-            preds = (outputs > 0.5).float().cpu().detach().numpy()
+            probs = torch.sigmoid(outputs)
+            preds = (probs > 0.5).float().cpu().detach().numpy()
             labels_np = labels.cpu().detach().numpy()
             all_preds.append(preds.flatten())
             all_labels.append(labels_np.flatten())
@@ -447,8 +445,9 @@ class TrainingPipeline:
                 loss = self.criterion(outputs, labels)
                 total_loss += loss.item()
 
-                # 統計
-                preds = (outputs > 0.5).float().cpu().numpy()
+                # 統計（logitsにsigmoidを適用して確率化）
+                probs = torch.sigmoid(outputs)
+                preds = (probs > 0.5).float().cpu().numpy()
                 labels_np = labels.cpu().numpy()
                 all_preds.append(preds.flatten())
                 all_labels.append(labels_np.flatten())

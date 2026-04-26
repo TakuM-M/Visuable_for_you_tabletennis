@@ -1,10 +1,6 @@
-"""
-プレー検知用LSTMモデル
-"""
 import torch
 import torch.nn as nn
 from typing import Tuple, Optional
-
 
 class PlayClassifierLSTM(nn.Module):
     """
@@ -72,7 +68,7 @@ class PlayClassifierLSTM(nn.Module):
                 nn.Linear(hidden_size, 1)
             )
 
-        # 分類器
+        # 分類器（logits出力 — Sigmoid は損失関数側で適用）
         self.classifier = nn.Sequential(
             nn.Linear(self.lstm_output_size, hidden_size),
             nn.ReLU(),
@@ -81,7 +77,6 @@ class PlayClassifierLSTM(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(64, 1),
-            nn.Sigmoid()  # 出力は0~1の確率
         )
 
     def forward(
@@ -97,7 +92,8 @@ class PlayClassifierLSTM(nn.Module):
             lengths: 各シーケンスの実際の長さ (batch,) - パディング対応用
 
         Returns:
-            out: プレー中の確率 (batch, sequence_length, 1)
+            out: logits (batch, sequence_length, 1)
+                 確率に変換するにはtorch.sigmoid()を適用
         """
         batch_size, seq_len, _ = x.shape
 
@@ -135,7 +131,7 @@ class PlayClassifierLSTM(nn.Module):
         else:
             attended = lstm_out
 
-        # 各フレームごとに分類
+        # 各フレームごとに分類（logits出力）
         out = self.classifier(attended)  # (batch, seq, 1)
 
         return out
@@ -158,8 +154,8 @@ class PlayClassifierLSTM(nn.Module):
         """
         self.eval()
         with torch.no_grad():
-            out = self.forward(x)  # (batch, seq, 1)
-            probs = out.squeeze(-1)  # (batch, seq)
+            logits = self.forward(x)  # (batch, seq, 1)
+            probs = torch.sigmoid(logits).squeeze(-1)  # (batch, seq)
             preds = (probs >= threshold).long()
         return probs, preds
 
@@ -195,166 +191,3 @@ class PlayClassifierLSTM(nn.Module):
             attention_weights = torch.softmax(attention_weights, dim=1)
 
         return attention_weights
-
-
-class PlayClassifierCNNLSTM(nn.Module):
-    """
-    CNN+LSTMハイブリッドモデル（高度版）
-
-    CNNで局所的な動作パターンを抽出してからLSTMで時系列を処理
-    より高精度が期待できるが、学習に時間がかかる
-    """
-
-    def __init__(
-        self,
-        input_size: int = 34,
-        cnn_channels: int = 64,
-        hidden_size: int = 128,
-        num_layers: int = 2,
-        dropout: float = 0.3
-    ):
-        """
-        初期化
-
-        Args:
-            input_size: 入力特徴量の次元数
-            cnn_channels: CNNのチャネル数
-            hidden_size: LSTM隠れ層のサイズ
-            num_layers: LSTMの層数
-            dropout: ドロップアウト率
-        """
-        super(PlayClassifierCNNLSTM, self).__init__()
-
-        self.input_size = input_size
-
-        # 1D CNN層（局所的なパターン抽出）
-        self.conv_layers = nn.Sequential(
-            # 入力: (batch, input_size, seq_len)
-            nn.Conv1d(input_size, cnn_channels, kernel_size=3, padding=1),
-            nn.BatchNorm1d(cnn_channels),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-
-            nn.Conv1d(cnn_channels, cnn_channels, kernel_size=3, padding=1),
-            nn.BatchNorm1d(cnn_channels),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-        )
-
-        # LSTM層（時系列パターン抽出）
-        self.lstm = nn.LSTM(
-            input_size=cnn_channels,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout if num_layers > 1 else 0,
-            bidirectional=True
-        )
-
-        # 分類器
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_size * 2, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        順伝播
-
-        Args:
-            x: 入力テンソル (batch, sequence_length, input_size)
-
-        Returns:
-            out: プレー中の確率 (batch, sequence_length, 1)
-        """
-        batch_size, seq_len, _ = x.shape
-
-        # CNN用に次元を入れ替え: (batch, seq, features) -> (batch, features, seq)
-        x = x.transpose(1, 2)
-
-        # CNN層
-        x = self.conv_layers(x)
-
-        # LSTM用に次元を戻す: (batch, features, seq) -> (batch, seq, features)
-        x = x.transpose(1, 2)
-
-        # LSTM層
-        lstm_out, _ = self.lstm(x)
-
-        # 分類
-        out = self.classifier(lstm_out)
-
-        return out
-
-    def predict(
-        self,
-        x: torch.Tensor,
-        threshold: float = 0.5
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """推論用メソッド"""
-        self.eval()
-        with torch.no_grad():
-            out = self.forward(x)
-            probs = out.squeeze(-1)
-            preds = (probs >= threshold).long()
-        return probs, preds
-
-
-def test_model():
-    """モデルのテスト"""
-    print("PlayClassifierLSTM モデルテスト")
-    print("=" * 60)
-
-    # ダミーデータ
-    batch_size = 4
-    seq_length = 30  # 30フレーム分
-    input_size = 34  # 17キーポイント×2座標
-
-    dummy_input = torch.randn(batch_size, seq_length, input_size)
-
-    # モデル1: 基本LSTM
-    print("\n1. 基本LSTMモデル")
-    model1 = PlayClassifierLSTM(
-        input_size=input_size,
-        hidden_size=128,
-        num_layers=2,
-        use_attention=True
-    )
-
-    output1 = model1(dummy_input)
-    print(f"  入力サイズ: {dummy_input.shape}")
-    print(f"  出力サイズ: {output1.shape}")
-    print(f"  パラメータ数: {sum(p.numel() for p in model1.parameters()):,}")
-
-    # 推論テスト
-    probs, preds = model1.predict(dummy_input, threshold=0.5)
-    print(f"  確率: {probs.shape}")
-    print(f"  予測: {preds.shape}")
-
-    # Attention重み
-    attention = model1.get_attention_weights(dummy_input)
-    if attention is not None:
-        print(f"  Attention重み: {attention.shape}")
-
-    # モデル2: CNN+LSTM
-    print("\n2. CNN+LSTMモデル")
-    model2 = PlayClassifierCNNLSTM(
-        input_size=input_size,
-        cnn_channels=64,
-        hidden_size=128
-    )
-
-    output2 = model2(dummy_input)
-    print(f"  入力サイズ: {dummy_input.shape}")
-    print(f"  出力サイズ: {output2.shape}")
-    print(f"  パラメータ数: {sum(p.numel() for p in model2.parameters()):,}")
-
-    print("\n" + "=" * 60)
-    print("テスト完了")
-
-
-if __name__ == "__main__":
-    test_model()

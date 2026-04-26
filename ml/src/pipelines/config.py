@@ -136,6 +136,7 @@ class PlaySceneDetectionConfig:
     threshold: float = 0.5
     min_scene_duration: int = 10
     batch_size: int = 64
+    smoothing_window: int = 5  # メディアンフィルタのウィンドウサイズ（0で無効化）
 
     def __post_init__(self):
         """バリデーション"""
@@ -147,6 +148,8 @@ class PlaySceneDetectionConfig:
             raise ValueError("min_scene_duration must be at least 1")
         if self.batch_size < 1:
             raise ValueError("batch_size must be at least 1")
+        if self.smoothing_window < 0:
+            raise ValueError("smoothing_window must be non-negative")
 
 # =====================================================
 # 動画作成設定
