@@ -11,7 +11,7 @@ from src.detection.tracking_exporter import TrackingExporter
 from src.visualization.player_classifier_visualizer import PlayerClassifierVisualizer
 
 from src.pipelines.config import PlayerPoseExporterConfig
-from src.pipelines.exceptions import (
+from src.core.exceptions import (
     TableDetectionError,
     VideoInputError,
     VideoProcessingError,

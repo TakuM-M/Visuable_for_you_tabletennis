@@ -15,7 +15,7 @@ from tqdm import tqdm
 from src.models.play_classifier_lstm import PlayClassifierLSTM
 from src.datasets import MultiCSVPoseDataset, collate_fn, OnlineAugmentor, OnlineAugmentationConfig
 from src.training.config import TrainingPipelineConfig
-from src.training.exceptions import DataInputError, ExportError
+from src.core.exceptions import DataInputError, ExportError
 
 
 class TrainingPipeline:

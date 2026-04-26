@@ -12,7 +12,7 @@ from .config import (
     AugmentationConfig,
     AugmentationPipelineConfig,
 )
-from .exceptions import (
+from src.core.exceptions import (
     PipelineError,
     TableDetectionError,
     VideoProcessingError,

@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 from src.pipelines.config import InferencePipelineConfig
 from src.pipelines.player_pose_exporter import PlayerPoseExporter
 from src.pipelines.play_scene_detector import PlaySceneDetector
-from src.pipelines.exceptions import PipelineError
+from src.core.exceptions import PipelineError
 from src.visualization.result_visualizer import save_prediction_graph
         
 

@@ -16,7 +16,7 @@ from src.datasets import (
 )
 from src.datasets.base_dataset import collate_fn
 from src.pipelines.config import PlaySceneDetectionConfig
-from src.pipelines.exceptions import DataInputError
+from src.core.exceptions import DataInputError
 
 
 class PlaySceneDetector:

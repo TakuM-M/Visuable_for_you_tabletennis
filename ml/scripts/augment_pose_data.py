@@ -32,7 +32,7 @@ sys.path.insert(0, str(project_root))
 
 from src.training.pose_augmentation import PoseAugmentationPipeline
 from src.training.config import AugmentationPipelineConfig, AugmentationConfig
-from src.training.exceptions import PipelineError
+from src.core.exceptions import PipelineError
 
 
 def parse_args():

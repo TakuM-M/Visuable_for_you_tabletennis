@@ -1,7 +1,7 @@
 """
 コアモジュール
 
-検出・トラッキング・データ処理で共通利用するデータクラスと定数
+検出・トラッキング・データ処理で共通利用するデータクラス・定数・例外
 """
 from .data_classes import (
     CameraAngle,
@@ -10,11 +10,29 @@ from .data_classes import (
     PersonTrack,
     KEYPOINT_NAMES
 )
+from .exceptions import (
+    PipelineError,
+    TableDetectionError,
+    VideoProcessingError,
+    VideoInputError,
+    ExportError,
+    DataInputError,
+    AugmentationError,
+    TrainingError,
+)
 
 __all__ = [
     'CameraAngle',
     'TableInfo',
     'PlayerCandidate',
     'PersonTrack',
-    'KEYPOINT_NAMES'
+    'KEYPOINT_NAMES',
+    'PipelineError',
+    'TableDetectionError',
+    'VideoProcessingError',
+    'VideoInputError',
+    'ExportError',
+    'DataInputError',
+    'AugmentationError',
+    'TrainingError',
 ]

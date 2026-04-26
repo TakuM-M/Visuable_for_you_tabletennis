@@ -15,7 +15,7 @@ from .config import (
     VideoCompositionConfig,
     InferencePipelineConfig
 )
-from .exceptions import (
+from src.core.exceptions import (
     PipelineError,
     TableDetectionError,
     VideoInputError,

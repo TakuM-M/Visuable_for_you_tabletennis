@@ -11,7 +11,7 @@ from tqdm import tqdm
 import json
 
 from src.training.config import AugmentationPipelineConfig
-from src.training.exceptions import (
+from src.core.exceptions import (
     DataInputError,
     AugmentationError,
     ExportError

@@ -46,7 +46,7 @@ from src.training.config import (
     OptimizerConfig,
     TrainingConfig
 )
-from src.training.exceptions import PipelineError
+from src.core.exceptions import PipelineError
 
 
 def parse_args():
