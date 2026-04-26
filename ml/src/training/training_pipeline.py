@@ -12,8 +12,8 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from tqdm import tqdm
 
-from src.models.play_classifier_lstm import PlayClassifierLSTM, PlayClassifierCNNLSTM
-from src.datasets import MultiCSVPoseDataset, collate_fn
+from src.models.play_classifier_lstm import PlayClassifierLSTM
+from src.datasets import MultiCSVPoseDataset, collate_fn, OnlineAugmentor, OnlineAugmentationConfig
 from src.training.config import TrainingPipelineConfig
 from src.training.exceptions import DataInputError, ExportError
 
@@ -151,7 +151,8 @@ class TrainingPipeline:
                 'stride': self.config.dataset.stride,
                 'batch_size': self.config.dataset.batch_size,
                 'num_workers': self.config.dataset.num_workers,
-                'use_motion_features': self.config.dataset.use_motion_features
+                'use_motion_features': self.config.dataset.use_motion_features,
+                'use_augmentation': self.config.dataset.use_augmentation
             },
             'optimizer': {
                 'learning_rate': self.config.optimizer.learning_rate,
@@ -174,8 +175,15 @@ class TrainingPipeline:
         print(f"設定保存: {config_path}\n")
 
     def _setup_dataloaders(self):
-        """データローダーの作成（複数CSV対応）"""
+        """データローダーの作成（複数CSV対応・オンライン拡張）"""
         print("データセット読み込み中...")
+
+        # オンラインデータ拡張（訓練データにのみ適用）
+        augmentor = None
+        if self.config.dataset.use_augmentation:
+            aug_config = OnlineAugmentationConfig()
+            augmentor = OnlineAugmentor(aug_config)
+            print(f"  オンラインデータ拡張: 有効")
 
         # 訓練データ（複数CSV）
         try:
@@ -185,7 +193,8 @@ class TrainingPipeline:
                 label_filename=self.config.dataset.label_filename,
                 sequence_length=self.config.dataset.sequence_length,
                 stride=self.config.dataset.stride,
-                use_motion_features=self.config.dataset.use_motion_features
+                use_motion_features=self.config.dataset.use_motion_features,
+                augmentor=augmentor
             )
             print(f"  訓練データ: {len(train_dataset)} シーケンス")
         except Exception as e:
@@ -203,7 +212,7 @@ class TrainingPipeline:
             pin_memory=True if self.config.training.device == 'cuda' else False
         )
 
-        # 検証データ（複数CSV）
+        # 検証データ（複数CSV、拡張なし）
         if self.config.dataset.val_data_dirs and len(self.config.dataset.val_data_dirs) > 0:
             try:
                 val_dataset = MultiCSVPoseDataset.from_directories(
@@ -212,7 +221,8 @@ class TrainingPipeline:
                     label_filename=self.config.dataset.label_filename,
                     sequence_length=self.config.dataset.sequence_length,
                     stride=self.config.dataset.stride,
-                    use_motion_features=self.config.dataset.use_motion_features
+                    use_motion_features=self.config.dataset.use_motion_features,
+                    augmentor=None  # 検証データには拡張を適用しない
                 )
                 print(f"  検証データ: {len(val_dataset)} シーケンス")
 

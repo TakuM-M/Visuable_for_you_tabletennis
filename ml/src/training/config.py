@@ -49,6 +49,9 @@ class DatasetConfig:
     num_workers: int = 4
     use_motion_features: bool = False  # 速度・加速度特徴量を追加するか（34→102次元）
 
+    # オンラインデータ拡張（訓練時のみ）
+    use_augmentation: bool = False
+
     def __post_init__(self):
         """バリデーション"""
         if not self.train_data_dirs or len(self.train_data_dirs) == 0:

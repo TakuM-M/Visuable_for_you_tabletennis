@@ -24,7 +24,8 @@ class BasePoseSequenceDataset(Dataset, ABC):
         sequence_length: int = 30,
         stride: int = 1,
         keypoint_features: Optional[List[str]] = None,
-        use_motion_features: bool = False
+        use_motion_features: bool = False,
+        augmentor=None
     ):
         """
         骨格シーケンスデータセットの基底クラスを初期化
@@ -34,6 +35,7 @@ class BasePoseSequenceDataset(Dataset, ABC):
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
             use_motion_features: 速度・加速度特徴量を追加するか（34→102次元）
+            augmentor: オンラインデータ拡張（OnlineAugmentorインスタンス、訓練時のみ使用）
 
         Note:
             入力データは既に正規化されていることを想定
@@ -43,6 +45,7 @@ class BasePoseSequenceDataset(Dataset, ABC):
         self.sequence_length = sequence_length
         self.stride = stride
         self.use_motion_features = use_motion_features
+        self.augmentor = augmentor
 
         # 使用するキーポイントを決定
         if keypoint_features is None:
@@ -141,6 +144,10 @@ class BasePoseSequenceDataset(Dataset, ABC):
         features = self.features[start_idx:end_idx]
         labels = self.labels[start_idx:end_idx]
         frames = self.frames[start_idx:end_idx]
+
+        # オンラインデータ拡張（訓練時のみ）
+        if self.augmentor is not None:
+            features = self.augmentor(features)
 
         # テンソルに変換
         features_tensor = torch.from_numpy(features)

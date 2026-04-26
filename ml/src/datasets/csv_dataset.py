@@ -25,7 +25,8 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
         sequence_length: int = 30,
         stride: int = 1,
         keypoint_features: Optional[List[str]] = None,
-        use_motion_features: bool = False
+        use_motion_features: bool = False,
+        augmentor=None
     ):
         """
         CSV骨格シーケンスデータセットを初期化
@@ -38,6 +39,7 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
             use_motion_features: 速度・加速度特徴量を追加するか（34→102次元）
+            augmentor: オンラインデータ拡張（訓練時のみ使用）
 
         Note:
             CSVデータは既に正規化されていることを想定
@@ -50,7 +52,8 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length=sequence_length,
             stride=stride,
             keypoint_features=keypoint_features,
-            use_motion_features=use_motion_features
+            use_motion_features=use_motion_features,
+            augmentor=augmentor
         )
 
         # データを読み込み
