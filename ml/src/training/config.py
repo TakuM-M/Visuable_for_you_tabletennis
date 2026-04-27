@@ -37,10 +37,6 @@ class DatasetConfig:
     stride: int = 5
     batch_size: int = 32
     num_workers: int = 4
-    use_motion_features: bool = False  # 速度・加速度特徴量を追加するか（34→102次元）
-
-    # オンラインデータ拡張（訓練時のみ）
-    use_augmentation: bool = False
 
     def __post_init__(self):
         """バリデーション"""

@@ -59,7 +59,6 @@ class PlaySceneDetector:
                 'num_layers': 2,
                 'dropout': 0.3,
                 'sequence_length': 30,
-                'use_motion_features': False
             }
 
         with open(self.config_path, 'r') as f:
@@ -73,18 +72,14 @@ class PlaySceneDetector:
                 'num_layers': model_config.get('num_layers', 2),
                 'dropout': model_config.get('dropout', 0.3),
                 'sequence_length': config.get('dataset', {}).get('sequence_length', 30),
-                'use_motion_features': config.get('dataset', {}).get('use_motion_features', False)
             }
 
         return config
 
     def _load_model(self) -> PlayClassifierLSTM:
         """学習済みモデルを読み込み"""
-        use_motion = self.model_config.get('use_motion_features', False)
-        input_size = 102 if use_motion else 34  # 座標34 + 速度34 + 加速度34
-
         model = PlayClassifierLSTM(
-            input_size=input_size,
+            input_size=102,  # 座標34 + 速度34 + 加速度34
             hidden_size=self.model_config.get('hidden_size', 128),
             num_layers=self.model_config.get('num_layers', 2),
             dropout=self.model_config.get('dropout', 0.3),
