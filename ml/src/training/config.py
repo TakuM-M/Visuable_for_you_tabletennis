@@ -1,6 +1,3 @@
-"""
-パイプライン設定用のデータクラス
-"""
 from dataclasses import dataclass, field
 from typing import Optional
 

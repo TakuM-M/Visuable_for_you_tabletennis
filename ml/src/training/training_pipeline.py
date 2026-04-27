@@ -210,7 +210,7 @@ class TrainingPipeline:
             pin_memory=True if self.config.training.device == 'cuda' else False
         )
 
-        # 検証データ（複数CSV、拡張なし）
+        # 検証データ（複数CSV, 拡張なし）
         if self.config.dataset.val_data_dirs and len(self.config.dataset.val_data_dirs) > 0:
             try:
                 val_dataset = MultiCSVPoseDataset.from_directories(
@@ -220,7 +220,7 @@ class TrainingPipeline:
                     sequence_length=self.config.dataset.sequence_length,
                     stride=self.config.dataset.stride,
                     use_motion_features=self.config.dataset.use_motion_features,
-                    augmentor=None  # 検証データには拡張を適用しない
+                    augmentor=None 
                 )
                 print(f"  検証データ: {len(val_dataset)} シーケンス")
 
