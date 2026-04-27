@@ -58,7 +58,6 @@ class PlaySceneDetector:
                 'hidden_size': 128,
                 'num_layers': 2,
                 'dropout': 0.3,
-                'no_attention': False,
                 'sequence_length': 30,
                 'use_motion_features': False
             }
@@ -68,13 +67,11 @@ class PlaySceneDetector:
 
         if 'model' in config:
             model_config = config['model']
-            use_attention = model_config.get('use_attention', True)
             return {
                 'model_type': model_config.get('model_type', 'lstm'),
                 'hidden_size': model_config.get('hidden_size', 128),
                 'num_layers': model_config.get('num_layers', 2),
                 'dropout': model_config.get('dropout', 0.3),
-                'no_attention': not use_attention,
                 'sequence_length': config.get('dataset', {}).get('sequence_length', 30),
                 'use_motion_features': config.get('dataset', {}).get('use_motion_features', False)
             }
@@ -91,7 +88,6 @@ class PlaySceneDetector:
             hidden_size=self.model_config.get('hidden_size', 128),
             num_layers=self.model_config.get('num_layers', 2),
             dropout=self.model_config.get('dropout', 0.3),
-            use_attention=not self.model_config.get('no_attention', False)
         )
 
         # 重みの読み込み

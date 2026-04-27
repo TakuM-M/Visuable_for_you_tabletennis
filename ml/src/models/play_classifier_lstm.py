@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 class PlayClassifierLSTM(nn.Module):
     """
@@ -21,8 +21,6 @@ class PlayClassifierLSTM(nn.Module):
         hidden_size: int = 128,
         num_layers: int = 2,
         dropout: float = 0.3,
-        bidirectional: bool = True,
-        use_attention: bool = True
     ):
         """
         初期化
@@ -32,40 +30,34 @@ class PlayClassifierLSTM(nn.Module):
             hidden_size: LSTM隠れ層のサイズ
             num_layers: LSTMの層数
             dropout: ドロップアウト率
-            bidirectional: 双方向LSTMを使用するか
-            use_attention: Attention機構を使用するか
         """
         super(PlayClassifierLSTM, self).__init__()
 
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.bidirectional = bidirectional
-        self.use_attention = use_attention
 
-        self.num_directions = 2 if bidirectional else 1
-        self.lstm_output_size = hidden_size * self.num_directions
+        self.lstm_output_size = hidden_size * 2  # 双方向
 
         # 入力層（特徴量の前処理）
         self.input_bn = nn.BatchNorm1d(input_size)
 
-        # LSTM層
+        # LSTM層（双方向固定）
         self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0,
-            bidirectional=bidirectional
+            bidirectional=True
         )
 
-        # Attention機構（オプション）
-        if use_attention:
-            self.attention = nn.Sequential(
-                nn.Linear(self.lstm_output_size, hidden_size),
-                nn.Tanh(),
-                nn.Linear(hidden_size, 1)
-            )
+        # Attention機構
+        self.attention = nn.Sequential(
+            nn.Linear(self.lstm_output_size, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1)
+        )
 
         # 分類器（logits出力 — Sigmoid は損失関数側で適用）
         self.classifier = nn.Sequential(
@@ -118,15 +110,10 @@ class PlayClassifierLSTM(nn.Module):
                 lstm_out, batch_first=True, total_length=seq_len
             )
 
-        # Attention機構（オプション）
-        if self.use_attention:
-            attention_weights = self.attention(lstm_out)  # (batch, seq, 1)
-            attention_weights = torch.softmax(attention_weights, dim=1)
-
-            # Attentionを適用（要素ごとの重み付け）
-            attended = lstm_out * attention_weights
-        else:
-            attended = lstm_out
+        # Attention機構
+        attention_weights = self.attention(lstm_out)  # (batch, seq, 1)
+        attention_weights = torch.softmax(attention_weights, dim=1)
+        attended = lstm_out * attention_weights
 
         # 各フレームごとに分類（logits出力）
         out = self.classifier(attended)  # (batch, seq, 1)
@@ -159,7 +146,7 @@ class PlayClassifierLSTM(nn.Module):
     def get_attention_weights(
         self,
         x: torch.Tensor
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor:
         """
         Attention重みを取得（可視化用）
 
@@ -168,22 +155,15 @@ class PlayClassifierLSTM(nn.Module):
 
         Returns:
             attention_weights: Attention重み (batch, sequence_length, 1)
-                               use_attention=Falseの場合はNone
         """
-        if not self.use_attention:
-            return None
-
         self.eval()
         with torch.no_grad():
-            # 入力の正規化
             x_transposed = x.transpose(1, 2)
             x_normalized = self.input_bn(x_transposed)
             x = x_normalized.transpose(1, 2)
 
-            # LSTM
             lstm_out, _ = self.lstm(x)
 
-            # Attention重み
             attention_weights = self.attention(lstm_out)
             attention_weights = torch.softmax(attention_weights, dim=1)
 

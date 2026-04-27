@@ -138,7 +138,6 @@ class TrainingPipeline:
                 'hidden_size': self.config.model.hidden_size,
                 'num_layers': self.config.model.num_layers,
                 'dropout': self.config.model.dropout,
-                'use_attention': self.config.model.use_attention,
             },
             'dataset': {
                 'train_data_dirs': self.config.dataset.train_data_dirs,
@@ -255,7 +254,6 @@ class TrainingPipeline:
             hidden_size=self.config.model.hidden_size,
             num_layers=self.config.model.num_layers,
             dropout=self.config.model.dropout,
-            use_attention=self.config.model.use_attention
         )
         self.model = self.model.to(self.device)
 
