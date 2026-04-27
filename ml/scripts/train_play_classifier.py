@@ -2,7 +2,7 @@
 """
 プレー検知モデル訓練スクリプト
 
-正規化された骨格データから、プレーシーンを検知するLSTM/CNN-LSTMモデルを訓練します。
+正規化された骨格データから、プレーシーンを検知するLSTMモデルを訓練します。
 
 Usage:
     # デフォルト設定で訓練
@@ -10,24 +10,15 @@ Usage:
         --train-dirs data/video1 data/video2 \
         --val-dirs data/val_video1
 
-    # LSTMモデルをカスタム設定で訓練
+    # カスタム設定で訓練
     python scripts/train_play_classifier.py \
         --train-dirs data/train \
         --val-dirs data/val \
-        --model-type lstm \
         --hidden-size 256 \
         --num-layers 3 \
         --epochs 100 \
         --batch-size 64 \
         --lr 0.001
-
-    # CNN-LSTMモデルを訓練
-    python scripts/train_play_classifier.py \
-        --train-dirs data/train \
-        --val-dirs data/val \
-        --model-type cnn_lstm \
-        --cnn-channels 128 \
-        --hidden-size 256
 """
 
 import argparse
@@ -56,31 +47,21 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # デフォルト設定で訓練（LSTMモデル）
+  # デフォルト設定で訓練
   python scripts/train_play_classifier.py \\
       --train-dirs data/video1 data/video2 \\
       --val-dirs data/val_video1
 
-  # カスタム設定でLSTMモデルを訓練
+  # カスタム設定で訓練
   python scripts/train_play_classifier.py \\
       --train-dirs data/train \\
       --val-dirs data/val \\
-      --model-type lstm \\
       --hidden-size 256 \\
       --num-layers 3 \\
       --epochs 100 \\
       --batch-size 64 \\
       --lr 0.001 \\
       --device cuda
-
-  # CNN-LSTMモデルを訓練
-  python scripts/train_play_classifier.py \\
-      --train-dirs data/train \\
-      --val-dirs data/val \\
-      --model-type cnn_lstm \\
-      --cnn-channels 128 \\
-      --hidden-size 256 \\
-      --device mps
         """
     )
 
@@ -140,13 +121,6 @@ Examples:
     # モデル設定
     model_group = parser.add_argument_group('モデル設定')
     model_group.add_argument(
-        '--model-type',
-        type=str,
-        choices=['lstm', 'cnn_lstm'],
-        default='lstm',
-        help='モデルタイプ (デフォルト: lstm)'
-    )
-    model_group.add_argument(
         '--hidden-size',
         type=int,
         default=128,
@@ -156,7 +130,7 @@ Examples:
         '--num-layers',
         type=int,
         default=2,
-        help='LSTM/CNN-LSTMのレイヤー数 (デフォルト: 2)'
+        help='LSTMのレイヤー数 (デフォルト: 2)'
     )
     model_group.add_argument(
         '--dropout',
@@ -168,19 +142,13 @@ Examples:
         '--use-attention',
         action='store_true',
         default=True,
-        help='Attentionを使用（LSTMのみ） (デフォルト: True)'
+        help='Attentionを使用 (デフォルト: True)'
     )
     model_group.add_argument(
         '--no-attention',
         dest='use_attention',
         action='store_false',
         help='Attentionを使用しない'
-    )
-    model_group.add_argument(
-        '--cnn-channels',
-        type=int,
-        default=64,
-        help='CNNのチャンネル数（CNN-LSTMのみ） (デフォルト: 64)'
     )
 
     # 最適化設定
@@ -266,12 +234,10 @@ def main():
 
     # 設定を作成
     model_config = ModelConfig(
-        model_type=args.model_type,
         hidden_size=args.hidden_size,
         num_layers=args.num_layers,
         dropout=args.dropout,
         use_attention=args.use_attention,
-        cnn_channels=args.cnn_channels
     )
 
     dataset_config = DatasetConfig(

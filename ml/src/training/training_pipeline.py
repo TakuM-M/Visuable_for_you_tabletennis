@@ -135,12 +135,10 @@ class TrainingPipeline:
         """設定をJSONで保存"""
         config_dict = {
             'model': {
-                'model_type': self.config.model.model_type,
                 'hidden_size': self.config.model.hidden_size,
                 'num_layers': self.config.model.num_layers,
                 'dropout': self.config.model.dropout,
                 'use_attention': self.config.model.use_attention,
-                'cnn_channels': self.config.model.cnn_channels
             },
             'dataset': {
                 'train_data_dirs': self.config.dataset.train_data_dirs,
@@ -247,34 +245,21 @@ class TrainingPipeline:
 
     def _setup_model(self):
         """モデルの作成"""
-        print("モデル作成���...")
+        print("モデル作成中...")
 
         # 特徴量次元: 座標のみ=34, 速度・加速度追加=102
         input_size = 102 if self.config.dataset.use_motion_features else 34
 
-        if self.config.model.model_type == 'lstm':
-            self.model = PlayClassifierLSTM(
-                input_size=input_size,
-                hidden_size=self.config.model.hidden_size,
-                num_layers=self.config.model.num_layers,
-                dropout=self.config.model.dropout,
-                use_attention=self.config.model.use_attention
-            )
-        elif self.config.model.model_type == 'cnn_lstm':
-            self.model = PlayClassifierCNNLSTM(
-                input_size=input_size,
-                cnn_channels=self.config.model.cnn_channels,
-                hidden_size=self.config.model.hidden_size,
-                num_layers=self.config.model.num_layers,
-                dropout=self.config.model.dropout
-            )
-        else:
-            raise ValueError(f"Unsupported model type: {self.config.model.model_type}")
-
+        self.model = PlayClassifierLSTM(
+            input_size=input_size,
+            hidden_size=self.config.model.hidden_size,
+            num_layers=self.config.model.num_layers,
+            dropout=self.config.model.dropout,
+            use_attention=self.config.model.use_attention
+        )
         self.model = self.model.to(self.device)
 
         num_params = sum(p.numel() for p in self.model.parameters())
-        print(f"  モデルタイプ: {self.config.model.model_type}")
         print(f"  パラメータ数: {num_params:,}\n")
 
     def _setup_optimizer(self):
