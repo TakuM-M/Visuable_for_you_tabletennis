@@ -2,7 +2,7 @@
 パイプライン設定用のデータクラス
 """
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Optional
 
 # =====================================================
 # モデル訓練パイプライン設定
@@ -148,116 +148,4 @@ class TrainingPipelineConfig:
             optimizer=OptimizerConfig(),
             training=TrainingConfig(device=device),
             output_dir=output_dir
-        )
-        
-# =====================================================
-# データ拡張パイプライン設定
-# =====================================================
-@dataclass
-class AugmentationConfig:
-    """データ拡張の設定"""
-
-    # 左右反転
-    horizontal_flip: bool = False
-    horizontal_flip_prob: float = 0.5
-
-    # ガウシアンノイズ
-    add_noise: bool = False
-    noise_std: float = 0.02
-
-    # 回転
-    rotation: bool = False
-    rotation_range: float = 15.0
-
-    # スケーリング
-    scaling: bool = False
-    scale_range: Tuple[float, float] = (0.9, 1.1)
-
-    # 関節ドロップアウト
-    keypoint_dropout: bool = False
-    dropout_prob: float = 0.1
-
-    # 時間的ジッター（系列データ用）
-    temporal_jitter: bool = False
-    jitter_std: float = 0.5
-
-    # 時間スケーリング（系列データ用）
-    temporal_scaling: bool = False
-    temporal_scale_range: Tuple[float, float] = (0.8, 1.2)
-
-    # ランダムシード
-    random_seed: Optional[int] = None
-
-    def __post_init__(self):
-        """バリデーション"""
-        if not 0.0 <= self.horizontal_flip_prob <= 1.0:
-            raise ValueError("horizontal_flip_prob must be between 0.0 and 1.0")
-        if self.noise_std < 0:
-            raise ValueError("noise_std must be non-negative")
-        if self.rotation_range < 0:
-            raise ValueError("rotation_range must be non-negative")
-        if len(self.scale_range) != 2 or self.scale_range[0] > self.scale_range[1]:
-            raise ValueError("scale_range must be (min, max) with min <= max")
-        if not 0.0 <= self.dropout_prob <= 1.0:
-            raise ValueError("dropout_prob must be between 0.0 and 1.0")
-        if self.jitter_std < 0:
-            raise ValueError("jitter_std must be non-negative")
-        if len(self.temporal_scale_range) != 2 or self.temporal_scale_range[0] > self.temporal_scale_range[1]:
-            raise ValueError("temporal_scale_range must be (min, max) with min <= max")
-
-
-@dataclass
-class AugmentationPipelineConfig:
-    """データ拡張パイプラインの設定"""
-
-    # データ拡張設定
-    augmentation: AugmentationConfig
-
-    # 拡張実行設定
-    augmentation_factor: int = 5  # 元データの何倍に増やすか
-    preserve_original: bool = True  # 元データも出力に含めるか
-
-    # シーケンス処理設定
-    is_sequence: bool = False  # 時系列データとして処理するか
-    sequence_length: Optional[int] = None  # シーケンスの長さ（Noneの場合は全データ）
-
-    # 出力設定
-    save_metadata: bool = True  # 拡張メタデータを保存するか
-    show_progress: bool = True  # プログレスバーを表示するか
-
-    def __post_init__(self):
-        """バリデーション"""
-        if self.augmentation_factor < 1:
-            raise ValueError("augmentation_factor must be at least 1")
-        if self.sequence_length is not None and self.sequence_length < 1:
-            raise ValueError("sequence_length must be at least 1")
-
-    @classmethod
-    def create_default(
-        cls,
-        augmentation_factor: int = 5,
-        random_seed: Optional[int] = None
-    ) -> 'AugmentationPipelineConfig':
-        """
-        デフォルト設定でAugmentationPipelineConfigを作成
-
-        Args:
-            augmentation_factor: データを何倍に拡張するか
-            random_seed: ランダムシード
-
-        Returns:
-            デフォルト設定のAugmentationPipelineConfig
-        """
-        augmentation = AugmentationConfig(
-            horizontal_flip=True,
-            horizontal_flip_prob=0.5,
-            add_noise=True,
-            noise_std=0.02,
-            rotation=True,
-            rotation_range=15.0,
-            random_seed=random_seed
-        )
-        return cls(
-            augmentation=augmentation,
-            augmentation_factor=augmentation_factor
         )

@@ -1,7 +1,6 @@
 """
 学習パイプラインモジュール
 """
-from .pose_augmentation import PoseAugmentationPipeline
 from .training_pipeline import TrainingPipeline
 from .config import (
     ModelConfig,
@@ -9,8 +8,6 @@ from .config import (
     OptimizerConfig,
     TrainingConfig,
     TrainingPipelineConfig,
-    AugmentationConfig,
-    AugmentationPipelineConfig,
 )
 from src.core.exceptions import (
     PipelineError,
@@ -25,7 +22,6 @@ from src.core.exceptions import (
 
 __all__ = [
     # Pipelines
-    'PoseAugmentationPipeline',
     'TrainingPipeline',
     # Configs
     'ModelConfig',
@@ -33,8 +29,6 @@ __all__ = [
     'OptimizerConfig',
     'TrainingConfig',
     'TrainingPipelineConfig',
-    'AugmentationConfig',
-    'AugmentationPipelineConfig',
     # Exceptions
     'PipelineError',
     'TableDetectionError',
