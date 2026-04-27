@@ -29,7 +29,7 @@ class DatasetConfig:
     val_data_dirs: Optional[list] = None
 
     # CSVファイル名
-    csv_filename: str = 'original_pose_data.csv'
+    csv_filename: str = 'player_pose_data.csv'
     label_filename: str = 'play_labels.csv'
 
     # データセット設定
