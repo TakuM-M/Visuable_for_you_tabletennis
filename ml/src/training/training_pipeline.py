@@ -174,7 +174,6 @@ class TrainingPipeline:
         """データローダーの作成（複数CSV対応・オンライン拡張）"""
         print("データセット読み込み中...")
 
-        # オンラインデータ拡張（訓練データにのみ適用）
         aug_config = OnlineAugmentationConfig()
         augmentor = OnlineAugmentor(aug_config)
 
