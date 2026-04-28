@@ -66,6 +66,12 @@ def main():
         default=1.0,
         help='表示速度の倍率（2なら半分速度、0.5なら2倍速）'
     )
+    parser.add_argument(
+        '--target-fps',
+        type=float,
+        default=15.0,
+        help='アノテーション対象のFPS（デフォルト: 15.0、ポーズ抽出と同じ値にする）'
+    )
 
     args = parser.parse_args()
 
@@ -73,7 +79,8 @@ def main():
         maker = LabelMaker(
             video_path=args.video,
             output_path=args.output,
-            fps_divisor=args.fps_divisor
+            fps_divisor=args.fps_divisor,
+            target_fps=args.target_fps,
         )
         maker.run()
     except KeyboardInterrupt:
