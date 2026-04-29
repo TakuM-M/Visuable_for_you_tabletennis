@@ -52,7 +52,6 @@ class PlaySceneDetector:
         """モデル設定を読み込み"""
         if not self.config_path.exists():
             print(f"警告: 設定ファイルが見つかりません: {self.config_path}")
-            print("デフォルト設定を使用します")
             return {
                 'model_type': 'lstm',
                 'hidden_size': 128,
@@ -66,12 +65,13 @@ class PlaySceneDetector:
 
         if 'model' in config:
             model_config = config['model']
+            dataset_config = config.get('dataset', {})
             return {
                 'model_type': model_config.get('model_type', 'lstm'),
                 'hidden_size': model_config.get('hidden_size', 128),
                 'num_layers': model_config.get('num_layers', 2),
                 'dropout': model_config.get('dropout', 0.3),
-                'sequence_length': config.get('dataset', {}).get('sequence_length', 30),
+                'sequence_length': dataset_config.get('sequence_length', 30),
             }
 
         return config
@@ -131,14 +131,12 @@ class PlaySceneDetector:
         # InMemoryPoseSequenceDatasetを作成
         sequence_length = self.model_config.get('sequence_length', 30)
 
-        use_motion = self.model_config.get('use_motion_features', False)
         dataset = MemoryPoseSequenceDataset(
             pose_data=pose_data,
             frames=frames,
             sequence_length=sequence_length,
             stride=1,
             keypoint_features=None,
-            use_motion_features=use_motion
         )
 
         print(f"\nInMemoryPoseSequenceDataset作成完了:")
@@ -177,14 +175,12 @@ class PlaySceneDetector:
 
         sequence_length = self.model_config.get('sequence_length', 30)
 
-        use_motion = self.model_config.get('use_motion_features', False)
         dataset = CSVPoseSequenceDataset(
             csv_path=str(csv_path),
             label_path=None,
             sequence_length=sequence_length,
             stride=1,
             keypoint_features=None,
-            use_motion_features=use_motion
         )
         
         # 予測実行

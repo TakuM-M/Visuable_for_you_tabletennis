@@ -24,7 +24,6 @@ class BasePoseSequenceDataset(Dataset, ABC):
         sequence_length: int = 30,
         stride: int = 1,
         keypoint_features: Optional[List[str]] = None,
-        use_motion_features: bool = False,
         augmentor=None
     ):
         """
@@ -34,7 +33,6 @@ class BasePoseSequenceDataset(Dataset, ABC):
             sequence_length: シーケンス長（フレーム数）
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
-            use_motion_features: 速度・加速度特徴量を追加するか（34→102次元）
             augmentor: オンラインデータ拡張（OnlineAugmentorインスタンス、訓練時のみ使用）
 
         Note:
@@ -44,7 +42,6 @@ class BasePoseSequenceDataset(Dataset, ABC):
         super().__init__()
         self.sequence_length = sequence_length
         self.stride = stride
-        self.use_motion_features = use_motion_features
         self.augmentor = augmentor
 
         # 使用するキーポイントを決定
@@ -93,9 +90,7 @@ class BasePoseSequenceDataset(Dataset, ABC):
     @abstractmethod
     def _load_data(self):
         """
-        データを読み込む（サブクラスで実装）
-
-        self.features, self.labels, self.framesを設定する必要がある
+        データを読み込む, サブクラスで実装
         """
         pass
 

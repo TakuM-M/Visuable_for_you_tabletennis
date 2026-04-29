@@ -1,9 +1,3 @@
-"""
-メモリベースの骨格シーケンスデータセット
-
-メモリ上の骨格シーケンスデータ(numpy配列)から直接読み込む
-推論やリアルタイム処理で使用
-"""
 import numpy as np
 from typing import Optional, List
 
@@ -12,10 +6,7 @@ from src.datasets.base_dataset import BasePoseSequenceDataset
 
 class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
     """
-    メモリベースの骨格シーケンスデータセット
-
-    メモリ上の骨格データから直接データセットを作成
-    CSV I/Oをスキップ
+    メモリベースの骨格シーケンスデータセット, CSV I/Oをスキップ
     """
 
     def __init__(
@@ -26,7 +17,6 @@ class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
         sequence_length: int = 30,
         stride: int = 1,
         keypoint_features: Optional[List[str]] = None,
-        use_motion_features: bool = False
     ):
         """
         メモリ骨格シーケンスデータセットを初期化
@@ -39,7 +29,6 @@ class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length: シーケンス長（フレーム数）
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
-            use_motion_features: 速度・加速度特徴量を追加するか（34→102次元）
 
         Note:
             入力pose_dataは既に正規化されていることを想定
@@ -53,15 +42,11 @@ class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length=sequence_length,
             stride=stride,
             keypoint_features=keypoint_features,
-            use_motion_features=use_motion_features
         )
 
         # データを読み込み
         self._load_data()
-
-        # 速度・加速度特徴量を追加
-        if self.use_motion_features:
-            self._compute_motion_features()
+        self._compute_motion_features()
 
         # シーケンスインデックスを作成
         self.sequence_indices = self._create_sequence_indices()

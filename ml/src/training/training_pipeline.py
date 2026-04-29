@@ -148,7 +148,6 @@ class TrainingPipeline:
                 'stride': self.config.dataset.stride,
                 'batch_size': self.config.dataset.batch_size,
                 'num_workers': self.config.dataset.num_workers,
-                'use_motion_features': True
             },
             'optimizer': {
                 'learning_rate': self.config.optimizer.learning_rate,
@@ -185,7 +184,6 @@ class TrainingPipeline:
                 label_filename=self.config.dataset.label_filename,
                 sequence_length=self.config.dataset.sequence_length,
                 stride=self.config.dataset.stride,
-                use_motion_features=True,
                 augmentor=augmentor
             )
             print(f"  訓練データ: {len(train_dataset)} シーケンス")
@@ -213,7 +211,6 @@ class TrainingPipeline:
                     label_filename=self.config.dataset.label_filename,
                     sequence_length=self.config.dataset.sequence_length,
                     stride=self.config.dataset.stride,
-                    use_motion_features=True,
                     augmentor=None
                 )
                 print(f"  検証データ: {len(val_dataset)} シーケンス")

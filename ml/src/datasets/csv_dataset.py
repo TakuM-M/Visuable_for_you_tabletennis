@@ -25,7 +25,6 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
         sequence_length: int = 30,
         stride: int = 1,
         keypoint_features: Optional[List[str]] = None,
-        use_motion_features: bool = False,
         augmentor=None
     ):
         """
@@ -38,7 +37,6 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length: シーケンス長（フレーム数）
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
-            use_motion_features: 速度・加速度特徴量を追加するか（34→102次元）
             augmentor: オンラインデータ拡張（訓練時のみ使用）
 
         Note:
@@ -52,16 +50,12 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length=sequence_length,
             stride=stride,
             keypoint_features=keypoint_features,
-            use_motion_features=use_motion_features,
             augmentor=augmentor
         )
 
         # データを読み込み
         self._load_data()
-
-        # 速度・加速度特徴量を追加
-        if self.use_motion_features:
-            self._compute_motion_features()
+        self._compute_motion_features()
 
         # シーケンスインデックスを作成
         self.sequence_indices = self._create_sequence_indices()
