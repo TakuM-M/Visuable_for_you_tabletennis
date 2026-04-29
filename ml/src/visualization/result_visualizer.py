@@ -30,7 +30,7 @@ def save_prediction_graph(
     # 予測確率をプロット
     plt.subplot(2, 1, 1)
     plt.plot(result_df['frame'], result_df['probability'], linewidth=1, alpha=0.7, color='blue')
-    plt.axhline(y=threshold, color='red', linestyle='--', label=f'閾値 ({threshold})')
+    plt.axhline(y=threshold, color='red', linestyle='--', label=f'Threshold ({threshold})')
     plt.fill_between(
         result_df['frame'],
         0,
@@ -38,11 +38,11 @@ def save_prediction_graph(
         where=(result_df['probability'] >= threshold),
         alpha=0.3,
         color='green',
-        label='プレー中'
+        label='Playing'
     )
-    plt.xlabel('フレーム番号')
-    plt.ylabel('プレー中確率')
-    plt.title('プレーシーン予測結果 - 確率')
+    plt.xlabel('Frame')
+    plt.ylabel('Play Probability')
+    plt.title('Play Scene Prediction - Probability')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.ylim(-0.05, 1.05)
@@ -63,12 +63,12 @@ def save_prediction_graph(
         plt.axvline(x=start, color='red', linestyle=':', alpha=0.5, linewidth=1)
         plt.axvline(x=end, color='red', linestyle=':', alpha=0.5, linewidth=1)
 
-    plt.xlabel('フレーム番号')
-    plt.ylabel('予測ラベル (0: 非プレー, 1: プレー)')
-    plt.title(f'プレーシーン予測結果 - 分類 (検出シーン数: {len(scenes)})')
+    plt.xlabel('Frame')
+    plt.ylabel('Prediction (0: Not Playing, 1: Playing)')
+    plt.title(f'Play Scene Prediction - Classification (Detected Scenes: {len(scenes)})')
     plt.grid(True, alpha=0.3)
     plt.ylim(-0.1, 1.1)
-    plt.yticks([0, 1], ['非プレー', 'プレー'])
+    plt.yticks([0, 1], ['Not Playing', 'Playing'])
 
     plt.tight_layout()
 
