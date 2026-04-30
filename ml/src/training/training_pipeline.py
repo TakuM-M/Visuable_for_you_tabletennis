@@ -394,15 +394,18 @@ class TrainingPipeline:
             outputs = self.model(features)
             outputs = outputs.squeeze(-1)
 
-            # 損失計算
-            loss = self.criterion(outputs, labels)
+            # ラベルスムージング（過学習抑制：損失計算用のみ）
+            smoothed_labels = labels * 0.9 + 0.05
+
+            # 損失計算（smoothedラベルで計算）
+            loss = self.criterion(outputs, smoothed_labels)
 
             # 逆伝播
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
 
-            # 統計（logitsにsigmoidを適用して確率化）
+            # 統計（元のラベルでメトリクス計算）
             total_loss += loss.item()
             probs = torch.sigmoid(outputs)
             preds = (probs > 0.5).float().cpu().detach().numpy()

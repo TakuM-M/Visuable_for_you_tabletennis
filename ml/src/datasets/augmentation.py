@@ -55,8 +55,8 @@ class OnlineAugmentationConfig:
     dropout_prob: float = 0.05
 
     # 時間マスク（連続フレームをマスク）
-    temporal_mask: bool = False
-    temporal_mask_max_frames: int = 3
+    temporal_mask: bool = True
+    temporal_mask_max_frames: int = 5
 
     def __post_init__(self):
         if not 0.0 <= self.horizontal_flip_prob <= 1.0:

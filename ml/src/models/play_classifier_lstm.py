@@ -52,16 +52,17 @@ class PlayClassifierLSTM(nn.Module):
             bidirectional=True
         )
 
-        # Attention機構
+        # Attention機構（シーケンス全体のコンテキストを生成）
         self.attention = nn.Sequential(
             nn.Linear(self.lstm_output_size, hidden_size),
             nn.Tanh(),
             nn.Linear(hidden_size, 1)
         )
 
-        # 分類器（logits出力 — Sigmoid は損失関数側で適用）
+        # 分類器（LSTM出力 + Attentionコンテキストを結合して分類）
+        # 入力: lstm_output(256) + context(256) = 512
         self.classifier = nn.Sequential(
-            nn.Linear(self.lstm_output_size, hidden_size),
+            nn.Linear(self.lstm_output_size * 2, hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_size, 64),
@@ -110,13 +111,15 @@ class PlayClassifierLSTM(nn.Module):
                 lstm_out, batch_first=True, total_length=seq_len
             )
 
-        # Attention機構
+        # Attention機構: シーケンス全体のコンテキストベクトルを生成
         attention_weights = self.attention(lstm_out)  # (batch, seq, 1)
         attention_weights = torch.softmax(attention_weights, dim=1)
-        attended = lstm_out * attention_weights
+        context = torch.sum(lstm_out * attention_weights, dim=1, keepdim=True)  # (batch, 1, hidden*2)
+        context = context.expand_as(lstm_out)  # (batch, seq, hidden*2)
 
-        # 各フレームごとに分類（logits出力）
-        out = self.classifier(attended)  # (batch, seq, 1)
+        # LSTM出力とコンテキストを結合して各フレームごとに分類
+        enriched = torch.cat([lstm_out, context], dim=-1)  # (batch, seq, hidden*4)
+        out = self.classifier(enriched)  # (batch, seq, 1)
 
         return out
 
@@ -145,24 +148,39 @@ class PlayClassifierLSTM(nn.Module):
 
     def get_attention_weights(
         self,
-        x: torch.Tensor
+        x: torch.Tensor,
+        lengths: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
         Attention重みを取得（可視化用）
 
         Args:
             x: 入力テンソル (batch, sequence_length, input_size)
+            lengths: 各シーケンスの実際の長さ (batch,) - パディング対応用
 
         Returns:
             attention_weights: Attention重み (batch, sequence_length, 1)
         """
         self.eval()
         with torch.no_grad():
+            batch_size, seq_len, _ = x.shape
+
             x_transposed = x.transpose(1, 2)
             x_normalized = self.input_bn(x_transposed)
             x = x_normalized.transpose(1, 2)
 
+            if lengths is not None:
+                lengths_cpu = lengths.cpu()
+                x = nn.utils.rnn.pack_padded_sequence(
+                    x, lengths_cpu, batch_first=True, enforce_sorted=False
+                )
+
             lstm_out, _ = self.lstm(x)
+
+            if lengths is not None:
+                lstm_out, _ = nn.utils.rnn.pad_packed_sequence(
+                    lstm_out, batch_first=True, total_length=seq_len
+                )
 
             attention_weights = self.attention(lstm_out)
             attention_weights = torch.softmax(attention_weights, dim=1)

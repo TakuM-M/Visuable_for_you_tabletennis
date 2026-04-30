@@ -9,7 +9,7 @@ class ModelConfig:
     """モデルの設定"""
     hidden_size: int = 128
     num_layers: int = 2
-    dropout: float = 0.3
+    dropout: float = 0.4
 
     def __post_init__(self):
         """バリデーション"""

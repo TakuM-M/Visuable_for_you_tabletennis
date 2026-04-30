@@ -109,6 +109,9 @@ class PlaySceneDetector:
         """
         TrackingExporterから骨格データを取得してプレーシーンを検出
 
+        各トラッキングIDごとに独立して推論し、フレームごとに最大確率を
+        採用してマージする。これにより複数プレイヤーのデータ混在を防ぐ。
+
         Args:
             exporter: TrackingExporterインスタンス（正規化済み）
             show_progress: プログレスバーを表示するか
@@ -118,39 +121,79 @@ class PlaySceneDetector:
             - result_df: 予測結果のDataFrame
             - scenes: 検出されたシーン [(start_frame, end_frame), ...]
         """
-        # 骨格データを取得
-        pose_data, frames = exporter.get_pose_data_for_dataset()
-
-        if len(pose_data) == 0:
-            raise DataInputError("exporter", "有効な骨格データがありません")
-
-        print(f"\nデータ形状:")
-        print(f"  pose_data: {pose_data.shape}")  # (num_frames, 34)
-        print(f"  frames: {frames.shape}")  # (num_frames,)
-
-        # InMemoryPoseSequenceDatasetを作成
         sequence_length = self.model_config.get('sequence_length', 30)
+        track_ids = exporter.get_all_track_ids()
 
-        dataset = MemoryPoseSequenceDataset(
-            pose_data=pose_data,
-            frames=frames,
-            sequence_length=sequence_length,
-            stride=1,
-            keypoint_features=None,
-        )
+        print(f"\n検出されたトラッキングID: {track_ids}")
 
-        print(f"\nInMemoryPoseSequenceDataset作成完了:")
-        print(f"  総フレーム数: {len(pose_data)}")
-        print(f"  シーケンス数: {len(dataset)}")
-        print(f"  シーケンス長: {sequence_length}フレーム")
+        all_result_dfs = []
 
-        # 予測実行
-        result_df = self._predict(dataset, show_progress)
+        for tid in track_ids:
+            pose_data, frames = exporter.get_pose_data_for_dataset(track_id=tid)
+
+            if len(pose_data) < sequence_length:
+                print(f"  track_id={tid}: フレーム数不足 ({len(pose_data)} < {sequence_length})、スキップ")
+                continue
+
+            print(f"\n  track_id={tid}:")
+            print(f"    pose_data: {pose_data.shape}")
+            print(f"    frames: {frames.shape}")
+
+            dataset = MemoryPoseSequenceDataset(
+                pose_data=pose_data,
+                frames=frames,
+                sequence_length=sequence_length,
+                stride=1,
+                keypoint_features=None,
+            )
+
+            print(f"    シーケンス数: {len(dataset)}")
+
+            result_df = self._predict(dataset, show_progress)
+            all_result_dfs.append(result_df)
+
+        if not all_result_dfs:
+            raise DataInputError("exporter", "有効な骨格データがありません（全track_idがフレーム数不足）")
+
+        # フレームごとに最大確率を採用してマージ
+        result_df = self._merge_track_results(all_result_dfs)
 
         # シーン検出
         scenes = self._extract_scenes(result_df)
 
         return result_df, scenes
+
+    def _merge_track_results(
+        self,
+        result_dfs: List[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """
+        複数トラックの予測結果をマージ（フレームごとに最大確率を採用）
+
+        Args:
+            result_dfs: 各トラックの予測結果DataFrameリスト
+
+        Returns:
+            マージされた予測結果DataFrame
+        """
+        if len(result_dfs) == 1:
+            return result_dfs[0]
+
+        # 全結果を結合し、フレームごとに最大確率を採用
+        combined = pd.concat(result_dfs, ignore_index=True)
+        merged = combined.groupby('frame').agg({
+            'probability': 'max',
+            'num_predictions': 'sum'
+        }).reset_index()
+
+        merged['prediction'] = (merged['probability'] >= self.threshold).astype(int)
+        merged = merged.sort_values('frame').reset_index(drop=True)
+
+        print(f"\nトラックマージ完了:")
+        print(f"  マージ元トラック数: {len(result_dfs)}")
+        print(f"  マージ後フレーム数: {len(merged)}")
+
+        return merged
 
     def detect_from_csv(
         self,
@@ -284,13 +327,15 @@ class PlaySceneDetector:
 
     def _extract_scenes(
         self,
-        result_df: pd.DataFrame
+        result_df: pd.DataFrame,
+        merge_gap: int = 15
     ) -> List[Tuple[int, int]]:
         """
-        連続したプレー区間を抽出
+        連続したプレー区間を抽出し、近接シーンをマージ
 
         Args:
             result_df: 予測結果のDataFrame
+            merge_gap: この間隔（フレーム数）以内の隣接シーンをマージする
 
         Returns:
             [(start_frame, end_frame), ...] のリスト
@@ -318,9 +363,13 @@ class PlaySceneDetector:
         if in_scene and result_df['frame'].iloc[-1] - scene_start >= self.min_scene_duration:
             scenes.append((scene_start, result_df['frame'].iloc[-1]))
 
+        # 近接シーンをマージ（短い中断を跨いで結合）
+        scenes = self._merge_close_scenes(scenes, merge_gap)
+
         print(f"\nシーン検出結果:")
         print(f"  検出シーン数: {len(scenes)}")
         print(f"  最小シーン長: {self.min_scene_duration}フレーム")
+        print(f"  マージ間隔: {merge_gap}フレーム")
 
         if scenes:
             print(f"\n主要シーン（最初の10シーン）:")
@@ -329,6 +378,33 @@ class PlaySceneDetector:
                 print(f"  シーン{i}: フレーム {start}-{end} ({duration_frames}フレーム)")
 
         return scenes
+
+    def _merge_close_scenes(
+        self,
+        scenes: List[Tuple[int, int]],
+        max_gap: int
+    ) -> List[Tuple[int, int]]:
+        """
+        間隔がmax_gap以内の隣接シーンをマージ
+
+        Args:
+            scenes: シーンリスト [(start, end), ...]
+            max_gap: マージするフレーム間隔の上限
+
+        Returns:
+            マージ後のシーンリスト
+        """
+        if len(scenes) <= 1:
+            return scenes
+
+        merged = [scenes[0]]
+        for start, end in scenes[1:]:
+            prev_start, prev_end = merged[-1]
+            if start - prev_end <= max_gap:
+                merged[-1] = (prev_start, end)
+            else:
+                merged.append((start, end))
+        return merged
 
     def save_results(
         self,
