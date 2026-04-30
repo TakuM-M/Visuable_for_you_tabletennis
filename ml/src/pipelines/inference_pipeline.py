@@ -76,14 +76,15 @@ class InferencePipeline:
                 show_progress=self.show_progress
             )
 
-            # 予測結果を保存
+            # 予測結果を保存（元動画のFPSで時間変換）
+            video_fps = pose_results.get('video_fps', self.pose_exporter.config.video_processing.target_fps)
             if save_intermediate_files:
                 self.scene_detector.save_results(
                     result_df=result_df,
                     scenes=scenes,
                     output_dir=str(output_dir_path),
                     base_name=base_name,
-                    fps=self.pose_exporter.config.video_processing.target_fps
+                    fps=video_fps
                 )
                 save_prediction_graph(
                     result_df=result_df,
@@ -91,7 +92,7 @@ class InferencePipeline:
                     output_dir=output_dir_path,
                     base_name=base_name,
                     threshold=self.scene_detector.threshold,
-                    fps=self.pose_exporter.config.video_processing.target_fps
+                    fps=video_fps
                 )
 
             # 統計情報をまとめる
@@ -102,7 +103,8 @@ class InferencePipeline:
                     'pose_video': str(pose_video_path),
                     'pose_csv': str(pose_csv_path),
                     'processed_frames': pose_results['processed_frames'],
-                    'player_ids': pose_results['player_ids']
+                    'player_ids': pose_results['player_ids'],
+                    'video_fps': pose_results.get('video_fps'),
                 },
                 'scene_detection': {
                     'total_scenes': len(scenes),

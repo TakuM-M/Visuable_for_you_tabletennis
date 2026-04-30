@@ -139,10 +139,11 @@ def handler(job: dict) -> dict:
             base_name="video",
         )
 
-    fps = _pipeline.pose_exporter.config.video_processing.target_fps
+    # フレーム番号は元動画の実フレーム番号のため、元動画のFPSで割る
+    video_fps = results["pose_export"]["video_fps"]
     scenes = results["scene_detection"]["scenes"]
     clips = [
-        {"start_time": round(s / fps, 2), "end_time": round(e / fps, 2)}
+        {"start_time": round(s / video_fps, 2), "end_time": round(e / video_fps, 2)}
         for s, e in scenes
     ]
     print(f"推論完了 job_id={job_id}, scenes={len(scenes)}")
