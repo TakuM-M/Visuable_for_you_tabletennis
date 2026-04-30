@@ -44,14 +44,19 @@ class TrainingPipeline:
             'train_loss': [],
             'train_acc': [],
             'train_f1': [],
+            'train_precision': [],
+            'train_recall': [],
             'val_loss': [],
             'val_acc': [],
-            'val_f1': []
+            'val_f1': [],
+            'val_precision': [],
+            'val_recall': []
         }
 
         self.best_val_loss = float('inf')
         self.best_val_f1 = 0.0
         self.early_stopping_counter = 0
+        self.pos_weight_value = None
         
     def run(self) -> Dict[str, Any]:
         """
@@ -71,11 +76,11 @@ class TrainingPipeline:
         # 初期化
         self._setup_device()
         self._setup_output_dir()
-        self._save_config()
         self._setup_dataloaders()
         self._setup_model()
         self._setup_optimizer()
         self._setup_criterion()
+        self._save_config()
         self._setup_tensorboard()
 
         # 学習情報を表示
@@ -160,7 +165,8 @@ class TrainingPipeline:
                 'epochs': self.config.training.epochs,
                 'save_every': self.config.training.save_every,
                 'device': self.config.training.device,
-                'early_stopping_patience': self.config.training.early_stopping_patience
+                'early_stopping_patience': self.config.training.early_stopping_patience,
+                'pos_weight': self.pos_weight_value
             }
         }
 
@@ -270,6 +276,7 @@ class TrainingPipeline:
         """損失関数の設定"""
         # 訓練データからpos_weightを自動計算
         pos_weight = self._compute_pos_weight()
+        self.pos_weight_value = pos_weight
         if pos_weight is not None:
             print(f"  pos_weight: {pos_weight:.2f}")
             self.criterion = nn.BCEWithLogitsLoss(
@@ -279,7 +286,9 @@ class TrainingPipeline:
             self.criterion = nn.BCEWithLogitsLoss()
 
     def _compute_pos_weight(self) -> float:
-        """訓練データのクラス不均衡からpos_weightを計算"""
+        """訓練データのクラス不均衡からpos_weightを計算（上限1.5）"""
+        MAX_POS_WEIGHT = 1.5
+
         total_positive = 0
         total_negative = 0
         for _, labels, _ in self.train_loader:
@@ -290,8 +299,10 @@ class TrainingPipeline:
             print("  警告: 正例が見つかりません。pos_weight=1.0を使用")
             return None
 
-        pos_weight = total_negative / total_positive
+        raw_pos_weight = total_negative / total_positive
+        pos_weight = min(raw_pos_weight, MAX_POS_WEIGHT)
         print(f"  クラス分布: positive={total_positive}, negative={total_negative}")
+        print(f"  raw pos_weight: {raw_pos_weight:.2f} -> capped: {pos_weight:.2f}")
         return pos_weight
 
     def _setup_tensorboard(self):
@@ -323,6 +334,8 @@ class TrainingPipeline:
             self.history['train_loss'].append(train_metrics['loss'])
             self.history['train_acc'].append(train_metrics['accuracy'])
             self.history['train_f1'].append(train_metrics['f1'])
+            self.history['train_precision'].append(train_metrics['precision'])
+            self.history['train_recall'].append(train_metrics['recall'])
 
             # 検証
             val_metrics = {}
@@ -331,6 +344,8 @@ class TrainingPipeline:
                 self.history['val_loss'].append(val_metrics['loss'])
                 self.history['val_acc'].append(val_metrics['accuracy'])
                 self.history['val_f1'].append(val_metrics['f1'])
+                self.history['val_precision'].append(val_metrics['precision'])
+                self.history['val_recall'].append(val_metrics['recall'])
 
                 # スケジューラ更新
                 self.scheduler.step(val_metrics['loss'])
@@ -476,11 +491,15 @@ class TrainingPipeline:
         print(f"\nEpoch {epoch}/{self.config.training.epochs}")
         print(f"  Train - Loss: {train_metrics['loss']:.4f}, "
               f"Acc: {train_metrics['accuracy']:.4f}, "
-              f"F1: {train_metrics['f1']:.4f}")
+              f"F1: {train_metrics['f1']:.4f}, "
+              f"Prec: {train_metrics['precision']:.4f}, "
+              f"Rec: {train_metrics['recall']:.4f}")
         if val_metrics:
             print(f"  Val   - Loss: {val_metrics['loss']:.4f}, "
                   f"Acc: {val_metrics['accuracy']:.4f}, "
-                  f"F1: {val_metrics['f1']:.4f}")
+                  f"F1: {val_metrics['f1']:.4f}, "
+                  f"Prec: {val_metrics['precision']:.4f}, "
+                  f"Rec: {val_metrics['recall']:.4f}")
 
     def _log_to_tensorboard(
         self,
@@ -492,11 +511,15 @@ class TrainingPipeline:
         self.writer.add_scalar('Loss/train', train_metrics['loss'], epoch)
         self.writer.add_scalar('Accuracy/train', train_metrics['accuracy'], epoch)
         self.writer.add_scalar('F1/train', train_metrics['f1'], epoch)
+        self.writer.add_scalar('Precision/train', train_metrics['precision'], epoch)
+        self.writer.add_scalar('Recall/train', train_metrics['recall'], epoch)
 
         if val_metrics:
             self.writer.add_scalar('Loss/val', val_metrics['loss'], epoch)
             self.writer.add_scalar('Accuracy/val', val_metrics['accuracy'], epoch)
             self.writer.add_scalar('F1/val', val_metrics['f1'], epoch)
+            self.writer.add_scalar('Precision/val', val_metrics['precision'], epoch)
+            self.writer.add_scalar('Recall/val', val_metrics['recall'], epoch)
 
     def _is_best_model(self, val_metrics: Dict[str, float]) -> bool:
         """ベストモデルかどうか判定"""
