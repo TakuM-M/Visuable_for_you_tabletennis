@@ -81,3 +81,7 @@ temp/
 
 # Model files (ML weights only)
 ml/models/
+
+# documentation
+docs/ml/
+docs/others/
