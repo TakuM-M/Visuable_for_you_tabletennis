@@ -1,9 +1,3 @@
-"""
-メモリベースの骨格シーケンスデータセット
-
-メモリ上の骨格シーケンスデータ(numpy配列)から直接読み込む
-推論やリアルタイム処理で使用
-"""
 import numpy as np
 from typing import Optional, List
 
@@ -12,10 +6,7 @@ from src.datasets.base_dataset import BasePoseSequenceDataset
 
 class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
     """
-    メモリベースの骨格シーケンスデータセット
-
-    メモリ上の骨格データから直接データセットを作成
-    CSV I/Oをスキップ
+    メモリベースの骨格シーケンスデータセット, CSV I/Oをスキップ
     """
 
     def __init__(
@@ -25,7 +16,7 @@ class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
         labels: Optional[np.ndarray] = None,
         sequence_length: int = 30,
         stride: int = 1,
-        keypoint_features: Optional[List[str]] = None
+        keypoint_features: Optional[List[str]] = None,
     ):
         """
         メモリ骨格シーケンスデータセットを初期化
@@ -50,11 +41,12 @@ class MemoryPoseSequenceDataset(BasePoseSequenceDataset):
         super().__init__(
             sequence_length=sequence_length,
             stride=stride,
-            keypoint_features=keypoint_features
+            keypoint_features=keypoint_features,
         )
 
         # データを読み込み
         self._load_data()
+        self._compute_motion_features()
 
         # シーケンスインデックスを作成
         self.sequence_indices = self._create_sequence_indices()

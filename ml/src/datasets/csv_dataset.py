@@ -24,7 +24,8 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
         label_path: Optional[str] = None,
         sequence_length: int = 30,
         stride: int = 1,
-        keypoint_features: Optional[List[str]] = None
+        keypoint_features: Optional[List[str]] = None,
+        augmentor=None
     ):
         """
         CSV骨格シーケンスデータセットを初期化
@@ -36,6 +37,7 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length: シーケンス長（フレーム数）
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
+            augmentor: オンラインデータ拡張（訓練時のみ使用）
 
         Note:
             CSVデータは既に正規化されていることを想定
@@ -47,11 +49,13 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
         super().__init__(
             sequence_length=sequence_length,
             stride=stride,
-            keypoint_features=keypoint_features
+            keypoint_features=keypoint_features,
+            augmentor=augmentor
         )
 
         # データを読み込み
         self._load_data()
+        self._compute_motion_features()
 
         # シーケンスインデックスを作成
         self.sequence_indices = self._create_sequence_indices()

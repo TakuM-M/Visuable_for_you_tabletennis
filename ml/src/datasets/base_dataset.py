@@ -1,8 +1,3 @@
-"""
-基底データセットクラスと共通機能
-
-全てのデータセットクラスが継承する基底クラスを定義
-"""
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -28,7 +23,8 @@ class BasePoseSequenceDataset(Dataset, ABC):
         self,
         sequence_length: int = 30,
         stride: int = 1,
-        keypoint_features: Optional[List[str]] = None
+        keypoint_features: Optional[List[str]] = None,
+        augmentor=None
     ):
         """
         骨格シーケンスデータセットの基底クラスを初期化
@@ -37,6 +33,7 @@ class BasePoseSequenceDataset(Dataset, ABC):
             sequence_length: シーケンス長（フレーム数）
             stride: シーケンス抽出時のストライド
             keypoint_features: 使用するキーポイント名のリスト（Noneの場合は全て使用）
+            augmentor: オンラインデータ拡張（OnlineAugmentorインスタンス、訓練時のみ使用）
 
         Note:
             入力データは既に正規化されていることを想定
@@ -45,6 +42,7 @@ class BasePoseSequenceDataset(Dataset, ABC):
         super().__init__()
         self.sequence_length = sequence_length
         self.stride = stride
+        self.augmentor = augmentor
 
         # 使用するキーポイントを決定
         if keypoint_features is None:
@@ -60,12 +58,39 @@ class BasePoseSequenceDataset(Dataset, ABC):
         # シーケンスインデックス
         self.sequence_indices: List[Tuple[int, int]] = []
 
+    def _compute_motion_features(self) -> None:
+        """
+        速度・加速度特徴量を計算してfeaturesに追加
+
+        座標データ (num_frames, 34) に対して:
+        - 速度: frame[t] - frame[t-1] (1次差分)
+        - 加速度: velocity[t] - velocity[t-1] (2次差分)
+        を計算し、34 → 102次元に拡張する
+
+        先頭フレームの差分は0で埋める
+        """
+        if self.features is None:
+            return
+
+        coords = self.features  # (num_frames, 34)
+
+        # 速度: 1次差分（先頭は0）
+        velocity = np.zeros_like(coords)
+        velocity[1:] = coords[1:] - coords[:-1]
+
+        # 加速度: 2次差分（先頭2フレームは0）
+        acceleration = np.zeros_like(coords)
+        acceleration[1:] = velocity[1:] - velocity[:-1]
+
+        # 結合: (num_frames, 102)
+        self.features = np.concatenate(
+            [coords, velocity, acceleration], axis=1
+        ).astype(np.float32)
+
     @abstractmethod
     def _load_data(self):
         """
-        データを読み込む（サブクラスで実装）
-
-        self.features, self.labels, self.framesを設定する必要がある
+        データを読み込む, サブクラスで実装
         """
         pass
 
@@ -114,6 +139,10 @@ class BasePoseSequenceDataset(Dataset, ABC):
         features = self.features[start_idx:end_idx]
         labels = self.labels[start_idx:end_idx]
         frames = self.frames[start_idx:end_idx]
+
+        # オンラインデータ拡張（訓練時のみ）
+        if self.augmentor is not None:
+            features = self.augmentor(features)
 
         # テンソルに変換
         features_tensor = torch.from_numpy(features)

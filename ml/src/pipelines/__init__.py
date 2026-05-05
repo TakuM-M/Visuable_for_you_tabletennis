@@ -3,7 +3,6 @@
 """
 from .player_pose_exporter import PlayerPoseExporter
 from .play_scene_detector import PlaySceneDetector
-from .video_composer import VideoComposer
 from .inference_pipeline import InferencePipeline
 from .config import (
     PlayerPoseExporterConfig,
@@ -16,7 +15,7 @@ from .config import (
     VideoCompositionConfig,
     InferencePipelineConfig
 )
-from .exceptions import (
+from src.core.exceptions import (
     PipelineError,
     TableDetectionError,
     VideoInputError,

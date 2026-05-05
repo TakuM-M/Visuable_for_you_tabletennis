@@ -1,7 +1,3 @@
-"""
-映像から獲得した人間骨格データと卓球台情報をもとにトラッキングすべきプレイヤーを選定するコンポーネント
-"""
-
 from typing import List, Dict
 import numpy as np
 

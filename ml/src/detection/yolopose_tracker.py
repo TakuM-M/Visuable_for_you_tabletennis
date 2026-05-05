@@ -1,6 +1,3 @@
-"""
-YOLOv11-Pose を用いた人物トラッキングモジュール
-"""
 import cv2
 import numpy as np
 from typing import List, Set
@@ -20,6 +17,8 @@ class YOLOPose_Tracker:
         iou_threshold: float = 0.7,
         table_distance_threshold: float = 0.2,
         device: str = "cpu",
+        imgsz: int = 640,
+        half: bool = False,
     ):
         """
         YOLOトラッカーの初期化
@@ -30,12 +29,16 @@ class YOLOPose_Tracker:
             iou_threshold: NMS（Non-Maximum Suppression）のIoU閾値
             table_distance_threshold: 卓球台との正規化距離の閾値（これ以下の距離にいる人物のみトラッキング）
             device: 使用デバイス（"cpu" or "cuda"）
+            imgsz: YOLO推論時の入力画像サイズ（デフォルト: 640）
+            half: FP16推論を有効にするか（CUDA環境でのみ有効）
         """
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.table_distance_threshold = table_distance_threshold
         self.device = device
+        self.imgsz = imgsz
+        self.half = half and device == "cuda"
 
         # 卓球台領域に一度でも入ったtrack_idを記憶
         self.validated_track_ids: Set[int] = set()
@@ -50,8 +53,50 @@ class YOLOPose_Tracker:
         print(f"  デバイス: {device}")
         print(f"  信頼度閾値: {conf_threshold}")
         print(f"  卓球台距離閾値: {table_distance_threshold}")
+        print(f"  入力画像サイズ: {self.imgsz}")
+        print(f"  FP16推論: {self.half}")
 
-    def track_frame(
+    def track_frame_with_table_filter(
+        self,
+        frame: np.ndarray,
+        table_info,
+        persist: bool = True
+    ) -> List[PersonTrack]:
+        """
+        卓球台フィルタリングを適用した人物トラッキング
+
+        卓球台から遠い人物は検出から除外し、
+        一度でも卓球台領域に入った人物は継続的にトラッキングします。
+
+        Args:
+            frame: 入力フレーム（BGR形式）
+            table_info: 卓球台情報（TableInfo）
+            persist: トラッキングIDを維持するか
+
+        Returns:
+            フィルタリングされた人物のリスト
+        """
+        all_persons = self._track_frame(frame, persist=persist)
+
+        if table_info is None:
+            return all_persons
+
+        filtered_persons = []
+        for person in all_persons:
+            track_id = person.track_id
+            distance = self._calculate_table_distance(person, table_info)
+
+            # 卓球台に近い場合、このtrack_idを記憶
+            if distance < self.table_distance_threshold:
+                self.validated_track_ids.add(track_id)
+
+            # 一度でも卓球台領域に入ったIDか、または現在卓球台に近い場合のみ追加
+            if track_id in self.validated_track_ids or distance < self.table_distance_threshold:
+                filtered_persons.append(person)
+
+        return filtered_persons
+    
+    def _track_frame(
         self,
         frame: np.ndarray,
         persist: bool = True
@@ -70,6 +115,8 @@ class YOLOPose_Tracker:
             frame,
             conf=self.conf_threshold,
             iou=self.iou_threshold,
+            imgsz=self.imgsz,
+            half=self.half,
             persist=persist,
             verbose=False
         )
@@ -115,46 +162,6 @@ class YOLOPose_Tracker:
             ))
 
         return persons
-
-    def track_frame_with_table_filter(
-        self,
-        frame: np.ndarray,
-        table_info,
-        persist: bool = True
-    ) -> List[PersonTrack]:
-        """
-        卓球台フィルタリングを適用した人物トラッキング
-
-        卓球台から遠い人物は検出から除外し、
-        一度でも卓球台領域に入った人物は継続的にトラッキングします。
-
-        Args:
-            frame: 入力フレーム（BGR形式）
-            table_info: 卓球台情報（TableInfo）
-            persist: トラッキングIDを維持するか
-
-        Returns:
-            フィルタリングされた人物のリスト
-        """
-        all_persons = self.track_frame(frame, persist=persist)
-
-        if table_info is None:
-            return all_persons
-
-        filtered_persons = []
-        for person in all_persons:
-            track_id = person.track_id
-            distance = self._calculate_table_distance(person, table_info)
-
-            # 卓球台に近い場合、このtrack_idを記憶
-            if distance < self.table_distance_threshold:
-                self.validated_track_ids.add(track_id)
-
-            # 一度でも卓球台領域に入ったIDか、または現在卓球台に近い場合のみ追加
-            if track_id in self.validated_track_ids or distance < self.table_distance_threshold:
-                filtered_persons.append(person)
-
-        return filtered_persons
 
     def _calculate_table_distance(
         self,

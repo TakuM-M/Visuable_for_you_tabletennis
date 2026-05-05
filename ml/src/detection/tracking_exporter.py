@@ -355,8 +355,10 @@ class TrackingExporter:
                 if track_id is not None and person.track_id != track_id:
                     continue
 
-                # キーポイントのx, y座標のみを抽出 (17, 2) -> (34,)
-                keypoints_xy = person.keypoints[:, :2].flatten()
+                # 正規化座標を使用（学習データと同じ形式）
+                if not person.is_normalized_valid or person.normalized_keypoints is None:
+                    continue  # 正規化に失敗したフレームはスキップ
+                keypoints_xy = person.normalized_keypoints.flatten()  # (17, 2) -> (34,)
                 pose_list.append(keypoints_xy)
                 frame_list.append(frame_data.frame_num)
 

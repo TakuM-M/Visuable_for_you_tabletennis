@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def upload_video(
     """動画アップロード"""
     save_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
     with save_path.open("wb") as f:
-        f.write(file.file.read())
+        shutil.copyfileobj(file.file, f)
 
     video = video_repo.create(
         db=db,

@@ -1,9 +1,3 @@
-"""
-複数CSV骨格シーケンスデータセット
-
-複数のCSVファイルを単一のデータセットに結合
-複数動画の骨格データを扱う
-"""
 from pathlib import Path
 from typing import List, Tuple, Dict
 from torch.utils.data import Dataset
@@ -23,7 +17,8 @@ class MultiCSVPoseDataset(Dataset):
         self,
         csv_label_pairs: List[Tuple[str, str]],
         sequence_length: int = 30,
-        stride: int = 5
+        stride: int = 5,
+        augmentor=None
     ):
         """
         複数CSVデータセットを初期化
@@ -32,6 +27,7 @@ class MultiCSVPoseDataset(Dataset):
             csv_label_pairs: (csv_path, label_path)タプルのリスト
             sequence_length: シーケンス長
             stride: シーケンス抽出時のストライド
+            augmentor: オンラインデータ拡張（訓練時のみ使用）
 
         Note:
             CSVデータは既に正規化されていることを想定
@@ -55,7 +51,8 @@ class MultiCSVPoseDataset(Dataset):
                 csv_path=csv_path,
                 label_path=label_path,
                 sequence_length=sequence_length,
-                stride=stride
+                stride=stride,
+                augmentor=augmentor
             )
 
             self.datasets.append(dataset)
@@ -136,7 +133,8 @@ class MultiCSVPoseDataset(Dataset):
         csv_filename: str = 'normalized_pose_data.csv',
         label_filename: str = 'play_labels.csv',
         sequence_length: int = 30,
-        stride: int = 5
+        stride: int = 5,
+        augmentor=None
     ) -> 'MultiCSVPoseDataset':
         """
         ディレクトリリストからMultiCSVPoseDatasetを作成
@@ -147,6 +145,7 @@ class MultiCSVPoseDataset(Dataset):
             label_filename: ラベルファイル名
             sequence_length: シーケンス長
             stride: ストライド
+            augmentor: オンラインデータ拡張（訓練時のみ使用）
 
         Returns:
             MultiCSVPoseDatasetインスタンス
@@ -173,5 +172,6 @@ class MultiCSVPoseDataset(Dataset):
         return cls(
             csv_label_pairs=csv_label_pairs,
             sequence_length=sequence_length,
-            stride=stride
+            stride=stride,
+            augmentor=augmentor
         )
