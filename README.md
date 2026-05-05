@@ -98,14 +98,21 @@ Backend ←→ PostgreSQL (:5432)
 │       └── api/       # Orval 自動生成
 ├── ml/                # ML サービス
 │   ├── src/
-│   │   ├── pipelines/ # 推論・学習パイプライン
-│   │   ├── detection/ # 検出・トラッキング
-│   │   ├── models/    # モデルアーキテクチャ
-│   │   ├── datasets/  # データセットローダー
-│   │   └── training/  # 学習パイプライン
-│   ├── models/        # 学習済みモデル (git 管理外)
-│   ├── runpod_handler.py  # RunPod Serverless エントリーポイント
-│   └── mock_app.py    # ローカル開発用モックサービス
+│   │   ├── pipelines/      # 推論パイプライン
+│   │   ├── detection/      # 検出・トラッキング
+│   │   ├── models/         # モデルアーキテクチャ
+│   │   ├── datasets/       # データセットローダー
+│   │   ├── training/       # 学習パイプライン
+│   │   ├── annotation/     # アノテーションツール
+│   │   ├── core/           # データクラス・例外定義
+│   │   ├── utils/          # ユーティリティ
+│   │   └── visualization/  # 可視化ツール
+│   ├── scripts/
+│   │   ├── notebooks/      # 学習・評価用 Notebook
+│   │   └── play_scene_annotate.py  # プレーシーンアノテーション
+│   ├── models/             # 学習済みモデル (git 管理外)
+│   ├── runpod_handler.py   # RunPod Serverless エントリーポイント
+│   └── mock_app.py         # ローカル開発用モックサービス
 ├── nginx/             # nginx 設定
 │   └── nginx.prod.conf
 ├── docker-compose.yml      # ローカル開発用
@@ -170,10 +177,8 @@ RunPod エンドポイントでこのイメージを指定して使用します�
 |---|---|
 | `01_train_table_detector.ipynb` | 卓球台検出モデルの学習 |
 | `02_export_player_pose.ipynb` | 選手の姿勢データ抽出 |
-| `02b_pose_augmentation.ipynb` | 姿勢データのオーグメンテーション |
 | `03_train_lstm_play_classifier.ipynb` | LSTM プレー分類モデルの学習 |
-| `04_predict_play_scenes.ipynb` | プレー区間の予測 |
-| `05_crip.ipynb` | 動画の切り抜き |
+| `04_crip.ipynb` | 動画の切り抜き |
 
 ## ライセンス
 
