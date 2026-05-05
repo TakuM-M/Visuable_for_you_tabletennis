@@ -83,5 +83,4 @@ temp/
 ml/models/
 
 # documentation
-docs/ml/
-docs/others/
+docs/develop
