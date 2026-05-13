@@ -9,7 +9,7 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories import video as video_repo
-from app.schemas.video import VideoResponse
+from app.schemas.video import ChunkUploadInitRequest, ChunkUploadInitResponse, VideoResponse
 
 from app.services import video_service
 
@@ -32,6 +32,54 @@ def upload_video(
         background_tasks=background_tasks,
     )
     
+    return video
+
+
+@router.post("/upload/init", response_model=ChunkUploadInitResponse)
+def chunk_upload_init(
+    body: ChunkUploadInitRequest,
+    current_user: User = Depends(get_current_user),
+) -> ChunkUploadInitResponse:
+    """チャンクアップロード初期化"""
+    upload_id = video_service.init_chunk_upload(
+        title=body.title,
+        filename=body.filename,
+        total_chunks=body.total_chunks,
+    )
+    return ChunkUploadInitResponse(upload_id=upload_id)
+
+
+@router.post("/upload/{upload_id}/chunk", status_code=204)
+def chunk_upload(
+    upload_id: str,
+    index: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """チャンクデータ受信"""
+    try:
+        video_service.save_chunk(upload_id, index, file)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+
+@router.post("/upload/{upload_id}/complete", response_model=VideoResponse, status_code=201)
+def chunk_upload_complete(
+    upload_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> VideoResponse:
+    """チャンクアップロード完了・動画結合"""
+    try:
+        video = video_service.complete_chunk_upload(
+            db=db,
+            user_id=current_user.id,
+            upload_id=upload_id,
+            background_tasks=background_tasks,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return video
 
 

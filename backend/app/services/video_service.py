@@ -16,6 +16,9 @@ from app.repositories import notification_log as notification_log_repo
 UPLOAD_DIR = Path("/app/uploads/videos")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+CHUNK_TMP_DIR = Path("/app/uploads/tmp")
+CHUNK_TMP_DIR.mkdir(parents=True, exist_ok=True)
+
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://ml-mock:8001")
 BACKEND_INTERNAL_URL = os.getenv("BACKEND_INTERNAL_URL", "http://backend:8000")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "")
@@ -65,31 +68,101 @@ def call_ml_service(video_path: str, job_id: str, video_id: str) -> None:
         except Exception as e:
             print(f"MLサービス呼び出し失敗 job_id={job_id}: {e}")
 
-def upload_video(
+def _register_video_and_start_ml(
     db: Session,
-    user_id: uuid.UUID,   # current_user.id をRouterで取り出して渡す
-    title: str,           # Formの値をRouterで取り出して渡す
-    file: UploadFile,     # UploadFile自体はOK（FastAPIの型だが値として渡す）
-    background_tasks: BackgroundTasks,  # BackgroundTasksはOK
+    user_id: uuid.UUID,
+    title: str,
+    save_path: Path,
+    background_tasks: BackgroundTasks,
 ) -> Video:
-    """動画アップロード"""
-    save_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
-    with save_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
-
+    """動画をDBに登録し、MLサービスを呼び出す共通処理"""
     video = video_repo.create(
         db=db,
         user_id=user_id,
         title=title,
         storage_path=str(save_path),
     )
-    
     video_repo.update_status(db, video.id, VideoStatus.queued)
-
     job = job_repo.create(db=db, video_id=video.id)
     background_tasks.add_task(call_ml_service, str(save_path), str(job.id), str(video.id))
-
     return video
+
+
+def upload_video(
+    db: Session,
+    user_id: uuid.UUID,
+    title: str,
+    file: UploadFile,
+    background_tasks: BackgroundTasks,
+) -> Video:
+    """動画アップロード（単一リクエスト）"""
+    save_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
+    with save_path.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return _register_video_and_start_ml(db, user_id, title, save_path, background_tasks)
+
+
+def init_chunk_upload(title: str, filename: str, total_chunks: int) -> str:
+    """チャンクアップロードを初期化し、upload_idを返す"""
+    upload_id = str(uuid.uuid4())
+    upload_dir = CHUNK_TMP_DIR / upload_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    # メタデータを保存
+    meta_path = upload_dir / "meta.json"
+    import json
+    meta_path.write_text(json.dumps({
+        "title": title,
+        "filename": filename,
+        "total_chunks": total_chunks,
+    }))
+    return upload_id
+
+
+def save_chunk(upload_id: str, index: int, file: UploadFile) -> None:
+    """チャンクデータを一時ディレクトリに保存"""
+    upload_dir = CHUNK_TMP_DIR / upload_id
+    if not upload_dir.exists():
+        raise FileNotFoundError(f"Upload {upload_id} not found")
+    chunk_path = upload_dir / str(index)
+    with chunk_path.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+
+def complete_chunk_upload(
+    db: Session,
+    user_id: uuid.UUID,
+    upload_id: str,
+    background_tasks: BackgroundTasks,
+) -> Video:
+    """全チャンクを結合して動画を登録し、ML処理を開始する"""
+    import json
+
+    upload_dir = CHUNK_TMP_DIR / upload_id
+    if not upload_dir.exists():
+        raise FileNotFoundError(f"Upload {upload_id} not found")
+
+    meta = json.loads((upload_dir / "meta.json").read_text())
+    title = meta["title"]
+    filename = meta["filename"]
+    total_chunks = meta["total_chunks"]
+
+    # 全チャンクが揃っているか確認
+    for i in range(total_chunks):
+        if not (upload_dir / str(i)).exists():
+            raise FileNotFoundError(f"Chunk {i} is missing")
+
+    # チャンクを結合
+    save_path = UPLOAD_DIR / f"{uuid.uuid4()}_{filename}"
+    with save_path.open("wb") as out_f:
+        for i in range(total_chunks):
+            chunk_path = upload_dir / str(i)
+            with chunk_path.open("rb") as chunk_f:
+                shutil.copyfileobj(chunk_f, out_f)
+
+    # 一時ディレクトリを削除
+    shutil.rmtree(upload_dir)
+
+    return _register_video_and_start_ml(db, user_id, title, save_path, background_tasks)
 
 
 def delete_video(db: Session, video_id: uuid.UUID) -> bool:

@@ -12,6 +12,20 @@ class VideoCreate(BaseModel):
     title: str
 
 
+class ChunkUploadInitRequest(BaseModel):
+    """チャンクアップロード初期化リクエスト"""
+
+    title: str
+    filename: str
+    total_chunks: int
+
+
+class ChunkUploadInitResponse(BaseModel):
+    """チャンクアップロード初期化レスポンス"""
+
+    upload_id: str
+
+
 class VideoResponse(BaseModel):
     """動画情報レスポンス"""
 

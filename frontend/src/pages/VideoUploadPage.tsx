@@ -1,10 +1,10 @@
+import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { uploadVideoVideosPost } from "../api/generated";
-import { authHeaders } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
+import { chunkedUpload } from "../lib/chunkedUpload";
 
 const schema = z.object({
   title: z.string().min(1, "タイトルを入力してください"),
@@ -18,23 +18,38 @@ type FormValues = z.infer<typeof schema>;
 
 export default function VideoUploadPage() {
   const navigate = useNavigate();
+  const [progress, setProgress] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
   });
 
   const mutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      uploadVideoVideosPost(
-        { title: values.title, file: values.file[0] },
-        { headers: authHeaders() }
-      ),
-    onSuccess: (res) => {
-      if (res.status === 201) {
-        navigate("/");
-      }
+    mutationFn: (values: FormValues) => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setProgress(0);
+      return chunkedUpload({
+        file: values.file[0],
+        title: values.title,
+        onProgress: setProgress,
+        signal: controller.signal,
+      });
+    },
+    onSuccess: () => {
+      navigate("/");
+    },
+    onError: () => {
+      setProgress(null);
     },
   });
+
+  const handleCancel = () => {
+    abortRef.current?.abort();
+    mutation.reset();
+    setProgress(null);
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -71,6 +86,27 @@ export default function VideoUploadPage() {
             )}
           </div>
 
+          {progress !== null && (
+            <div>
+              <div className="mb-1 flex justify-between text-sm text-gray-600">
+                <span>アップロード中...</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-200">
+                <div
+                  className="h-2 rounded-full bg-blue-600 transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {mutation.isError && (
+            <p className="text-sm text-red-500">
+              アップロードに失敗しました。もう一度お試しください。
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={mutation.isPending}
@@ -78,6 +114,16 @@ export default function VideoUploadPage() {
           >
             {mutation.isPending ? "アップロード中..." : "アップロード"}
           </button>
+
+          {mutation.isPending && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="w-full rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              キャンセル
+            </button>
+          )}
         </form>
 
         <button
