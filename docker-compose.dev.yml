@@ -1,0 +1,147 @@
+services:
+  # ========================================
+  # PostgreSQL データベース
+  # ========================================
+  postgres:
+    image: postgres:17
+    container_name: tabletennis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - tabletennis-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========================================
+  # FastAPI バックエンド
+  # ========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: tabletennis-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app                     # ホットリロード用
+      - ./ml/models:/app/ml/models:ro      # MLモデルを読み取り専用でマウント
+      - uploads:/app/uploads               # ml-mockと動画ファイルを共有
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
+      - ML_SERVICE_URL=http://ml-mock:8001
+      - BACKEND_INTERNAL_URL=http://backend:8000
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
+      # RunPod Serverless（USE_RUNPOD=true にすると RunPod に切り替わる）
+      - USE_RUNPOD=${USE_RUNPOD:-false}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-}
+      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID:-}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
+    networks:
+      - tabletennis-net
+
+  # ========================================
+  # React フロントエンド
+  # ========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: tabletennis-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app                    # ホットリロード用
+      - /app/node_modules                  # node_modules はコンテナ内のものを使用
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+    networks:
+      - tabletennis-net
+
+  # ========================================
+  # ML 模擬サービス（ローカル開発用 / タイムスタンプのみ返す）
+  # ========================================
+  ml-mock:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+      target: mock
+    container_name: tabletennis-ml-mock
+    restart: unless-stopped
+    volumes:
+      - uploads:/app/uploads               # backendと動画ファイルを共有（/app/uploads/videos/... パスで参照）
+      - ./ml/mock_app.py:/workspace/mock_app.py  # ホットリロード用（mock_app.py のみ）
+    ports:
+      - "8001:8001"
+    networks:
+      - tabletennis-net
+
+  # ========================================
+  # ML 推論・学習（必要なときだけ起動）
+  # ========================================
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+      target: app
+    container_name: tabletennis-ml
+    volumes:
+      - ./ml:/workspace                    # コードのマウント
+      - model-cache:/root/.cache           # モデルキャッシュ
+    ports:
+      - "8888:8888"                        # Jupyter 用
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    profiles:
+      - ml                                 # 通常起動では除外（docker compose --profile ml up で起動）
+    networks:
+      - tabletennis-net
+
+# ========================================
+# ボリューム定義
+# ========================================
+volumes:
+  postgres-data:
+    driver: local
+  model-cache:
+    driver: local
+  uploads:
+    driver: local
+
+# ========================================
+# ネットワーク定義
+# ========================================
+networks:
+  tabletennis-net:
+    driver: bridge
