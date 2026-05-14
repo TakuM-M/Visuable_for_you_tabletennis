@@ -43,6 +43,7 @@ frontend/build/
 # 環境変数（機密情報）
 # ========================================
 .env
+.env.dev
 .env.local
 .env.*.local
 

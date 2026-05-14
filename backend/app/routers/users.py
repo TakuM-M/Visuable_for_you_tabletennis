@@ -15,19 +15,25 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.post("", response_model=UserResponse, status_code=201)
 def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
     """ユーザー登録"""
-    if user_repo.get_by_email(db, body.email):
-        raise HTTPException(
-            status_code=400,
-            detail="このメールアドレスは既に使用されています",
+    existing_users = user_repo.get_by_email(db, body.email)
+    if existing_users is None:
+        user = user_repo.create(
+            db=db,
+            email=body.email,
+            password_hash=hash_password(body.password),
+            display_name=body.display_name,
         )
-
-    user = user_repo.create(
-        db=db,
-        email=body.email,
-        password_hash=hash_password(body.password),
-        display_name=body.display_name,
-    )
-    
+    else:
+        if existing_users.email_verified:
+            raise HTTPException(status_code=400, detail="このメールアドレスは既に使用されています",)
+        else:
+            user_repo.update(
+                db=db,
+                user_id=existing_users.id,
+                display_name=body.display_name,
+                password_hash=hash_password(body.password),
+            )
+            user = existing_users
     auth_service.send_verification_email(user) 
     return user
 
