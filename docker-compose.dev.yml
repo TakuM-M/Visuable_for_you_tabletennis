@@ -32,6 +32,7 @@ services:
       target: development
     container_name: tabletennis-backend
     restart: unless-stopped
+    env_file: .env.dev
     depends_on:
       postgres:
         condition: service_healthy
