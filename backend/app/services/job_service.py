@@ -1,4 +1,5 @@
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 
@@ -12,6 +13,7 @@ from app.repositories import job as job_repo
 from app.repositories import notification_log as notification_log_repo
 from app.repositories import user as user_repo
 from app.repositories import video as video_repo
+from app.services import storage_service
 from app.services.email_service import send_clip_completion_email
 from app.services.video_clip_service import clip_video
 
@@ -31,14 +33,35 @@ def complete_job(
     if video is None:
         return
 
+    output_r2_key = ""
+
     # 1. FFmpeg でシーンをカット・結合
-    output_path = f"/app/uploads/outputs/{job_id}/play_scenes.mp4"
     if clips:
         try:
-            clip_video(video.storage_path, clips, output_path)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # R2から元動画をローカル一時ファイルにダウンロード
+                local_input = os.path.join(tmpdir, "input.mp4")
+                presigned_url = storage_service.generate_presigned_url(video.storage_path)
+
+                import httpx
+                with httpx.Client(timeout=600.0) as client:
+                    with client.stream("GET", presigned_url) as response:
+                        response.raise_for_status()
+                        with open(local_input, "wb") as f:
+                            for chunk in response.iter_bytes(chunk_size=65536):
+                                f.write(chunk)
+
+                # FFmpegで処理（ローカル一時ファイル）
+                local_output = os.path.join(tmpdir, "play_scenes.mp4")
+                clip_video(local_input, clips, local_output)
+
+                # 処理済み動画をR2にアップロード
+                output_r2_key = f"outputs/{job_id}/play_scenes.mp4"
+                storage_service.upload_file(local_output, output_r2_key)
+
         except Exception as e:
             print(f"FFmpegクリップ失敗 job_id={job_id}: {e}")
-            output_path = ""
+            output_r2_key = ""
 
     # 2. クリップを保存
     for clip_data in clips:
@@ -60,19 +83,18 @@ def complete_job(
     )
 
     # 4. VideoにoutputPathを保存してcompletedに更新
-    video_repo.update_output_path(db, job.video_id, output_path)
+    video_repo.update_output_path(db, job.video_id, output_r2_key)
     video = video_repo.update_status(db, job.video_id, VideoStatus.completed)
 
-    # 4. メール送信
+    # 5. メール送信
     if video is None:
         return
-    user = user_repo.get_by_id(db, video.user_id)  # video.user_id でユーザーを取得
+    user = user_repo.get_by_id(db, video.user_id)
     if user is None:
         return
 
     video_url = f"{FRONTEND_URL}/videos/{video.id}"
 
-    # 通知ログを pending で作成
     log = notification_log_repo.create(
         db=db,
         user_id=user.id,
@@ -80,7 +102,6 @@ def complete_job(
         email=user.email,
     )
 
-    # メール送信
     success = send_clip_completion_email(
         to_email=user.email,
         video_title=video.title,
@@ -88,7 +109,6 @@ def complete_job(
         video_url=video_url,
     )
 
-    # 送信結果に応じてログを更新
     notification_log_repo.update_status(
         db=db,
         log_id=log.id,

@@ -30,8 +30,6 @@ services:
       target: production
     restart: unless-stopped
     env_file: .env
-    volumes:
-      - uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,8 +73,6 @@ services:
 # ========================================
 volumes:
   postgres-data:
-    driver: local
-  uploads:
     driver: local
 
 # ========================================
