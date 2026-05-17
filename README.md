@@ -5,7 +5,7 @@
 ## 概要
 
 卓球の試合動画をアップロードすると、ML パイプラインがサービスやラリーなどのプレー区間を自動検出し、待機時間やボール拾いの時間をカットしたプレー部分のみの動画を生成します。
-[Visuable for You](https://visualize-tt.com)
+[Visuable for You](https://visualize-tt.com/login)
 
 ## アーキテクチャ
 
