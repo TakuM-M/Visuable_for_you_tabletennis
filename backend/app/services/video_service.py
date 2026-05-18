@@ -9,6 +9,7 @@ import httpx
 from fastapi import BackgroundTasks, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models.job import JobStatus
@@ -20,6 +21,18 @@ from app.repositories import notification_log as notification_log_repo
 from app.services import storage_service
 
 logger = get_logger(__name__)
+
+
+class QuotaExceededError(Exception):
+    """ユーザーごとの動画本数上限に到達した際に raise する"""
+
+
+def _ensure_under_quota(db: Session, user_id: uuid.UUID) -> None:
+    """user_video_quota を超えていれば QuotaExceededError を raise する"""
+    if video_repo.count_by_user_id(db, user_id) >= settings.user_video_quota:
+        raise QuotaExceededError(
+            f"動画本数上限 {settings.user_video_quota} 本に到達しました"
+        )
 
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
 LOCAL_TMP_DIR = Path("/app/uploads/tmp")
@@ -123,6 +136,7 @@ def upload_video(
     background_tasks: BackgroundTasks,
 ) -> Video:
     """動画アップロード（単一リクエスト）"""
+    _ensure_under_quota(db, user_id)
     file_id = uuid.uuid4()
     local_path = LOCAL_TMP_DIR / f"{file_id}_{file.filename}"
     r2_key = f"videos/{file_id}.mp4"
@@ -136,8 +150,15 @@ def upload_video(
     return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks)
 
 
-def init_chunk_upload(title: str, filename: str, total_chunks: int) -> str:
+def init_chunk_upload(
+    db: Session,
+    user_id: uuid.UUID,
+    title: str,
+    filename: str,
+    total_chunks: int,
+) -> str:
     """チャンクアップロードを初期化し、upload_idを返す"""
+    _ensure_under_quota(db, user_id)
     upload_id = str(uuid.uuid4())
     upload_dir = LOCAL_TMP_DIR / upload_id
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -168,6 +189,7 @@ def complete_chunk_upload(
     background_tasks: BackgroundTasks,
 ) -> Video:
     """全チャンクを結合して動画を登録し、ML処理を開始する"""
+    _ensure_under_quota(db, user_id)
     upload_dir = LOCAL_TMP_DIR / upload_id
     if not upload_dir.exists():
         raise FileNotFoundError(f"Upload {upload_id} not found")
