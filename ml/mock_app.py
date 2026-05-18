@@ -22,7 +22,7 @@ class ProcessRequest(BaseModel):
 
 
 def get_video_duration(video_path: str) -> float:
-    """ffprobeで動画の長さ（秒）を取得する"""
+    """ffprobeで動画の長さ（秒）を取得する（ローカルパス・HTTP URL両対応）"""
     result = subprocess.run(
         [
             "ffprobe", "-v", "error",
@@ -32,8 +32,10 @@ def get_video_duration(video_path: str) -> float:
         ],
         capture_output=True,
         text=True,
-        check=True,
+        timeout=120,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {result.stderr}")
     return float(result.stdout.strip())
 
 

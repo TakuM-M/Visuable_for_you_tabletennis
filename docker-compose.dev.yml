@@ -50,10 +50,8 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
-      # RunPod Serverless（USE_RUNPOD=true にすると RunPod に切り替わる）
-      - USE_RUNPOD=${USE_RUNPOD:-false}
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-}
-      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID:-}
+      # ローカル開発では常に ml-mock を使用（RunPod は使わない）
+      - USE_RUNPOD=false
       - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
       # Cloudflare R2 ストレージ
       - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
