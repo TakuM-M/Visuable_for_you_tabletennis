@@ -6,7 +6,8 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.repositories import job as job_repo
-from app.services import job_service
+from app.repositories import video as video_repo
+from app.services import job_service, metrics_service, video_service
 from app.services.video_service import LOCAL_TMP_DIR, call_ml_service
 
 logger = get_logger(__name__)
@@ -45,6 +46,45 @@ def dispatch_retries() -> None:
         logger.info("自動リトライ実行 job_id=%s", job_id)
         # call_ml_service は同期 HTTP。失敗時は内部で handle_ml_failure を呼ぶ
         call_ml_service(storage_path, job_id, video_id)
+
+
+def cleanup_expired_videos() -> None:
+    """video_retention_days を超えた動画を delete_video() で削除する"""
+    threshold = datetime.now(timezone.utc) - timedelta(
+        days=settings.video_retention_days
+    )
+    with SessionLocal() as db:
+        expired = video_repo.get_expired(db, threshold)
+        # セッションを跨いで使うので id だけコピー
+        ids = [v.id for v in expired]
+
+    removed = 0
+    for video_id in ids:
+        try:
+            with SessionLocal() as db:
+                if video_service.delete_video(db, video_id):
+                    removed += 1
+        except Exception as e:
+            logger.warning("保持期限切れ動画の削除失敗 id=%s: %s", video_id, e)
+
+    if removed > 0:
+        logger.info("保持期限切れ動画 削除数=%s", removed)
+
+
+def log_storage_metrics() -> None:
+    """R2 / DB の現在のストレージ統計を INFO ログに出力する"""
+    try:
+        with SessionLocal() as db:
+            metrics = metrics_service.collect_storage_metrics(db)
+    except Exception as e:
+        logger.warning("ストレージ統計取得失敗: %s", e)
+        return
+    logger.info(
+        "ストレージ統計 r2_bytes=%s r2_objects=%s db_videos=%s",
+        metrics.r2_total_bytes,
+        metrics.r2_object_count,
+        metrics.db_video_count,
+    )
 
 
 def clean_tmp_dir() -> None:

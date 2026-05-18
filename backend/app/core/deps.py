@@ -1,8 +1,9 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
@@ -32,3 +33,14 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="ユーザーが見つかりません")
 
     return user
+
+
+def require_internal_api_key(
+    x_internal_api_key: str | None = Header(default=None),
+) -> None:
+    """X-Internal-Api-Key ヘッダで /admin/* と内部エンドポイントを保護する。
+
+    internal_api_key が未設定の環境では常に 401 を返し、誤公開を防ぐ。
+    """
+    if not settings.internal_api_key or x_internal_api_key != settings.internal_api_key:
+        raise HTTPException(status_code=401, detail="Unauthorized")

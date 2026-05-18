@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     tmp_cleaner_interval_seconds: int = 3600
     tmp_retention_hours: float = 24.0
 
+    # 動画保持ポリシー・容量管理
+    video_retention_days: float = 7.0
+    video_retention_cleanup_interval_seconds: int = 3600
+    user_video_quota: int = 10
+    metrics_log_interval_seconds: int = 3600
+    # /admin/* と内部コールバックの認証で共有
+    internal_api_key: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
