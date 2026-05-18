@@ -149,9 +149,15 @@ def handler(job: dict) -> dict:
     print(f"推論完了 job_id={job_id}, scenes={len(scenes)}")
 
     try:
+        headers = {}
+        api_key = os.getenv("INTERNAL_API_KEY")
+        if api_key:
+            headers["X-Internal-Api-Key"] = api_key
+
         httpx.post(
             callback_url,
             json={"job_id": job_id, "clips": clips},
+            headers=headers,
             timeout=10.0,
         )
         print(f"コールバック送信完了 job_id={job_id}")

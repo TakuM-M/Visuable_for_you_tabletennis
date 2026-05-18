@@ -6,6 +6,7 @@
 動画のカット・結合はバックエンドが行う。
 """
 import asyncio
+import os
 import subprocess
 
 import httpx
@@ -61,10 +62,16 @@ async def run_mock_processing(job_id: str, video_path: str, callback_url: str) -
     ]
 
     try:
+        headers = {}
+        api_key = os.getenv("INTERNAL_API_KEY")
+        if api_key:
+            headers["X-Internal-Api-Key"] = api_key
+
         async with httpx.AsyncClient() as client:
             await client.post(
                 callback_url,
                 json={"job_id": job_id, "clips": clips},
+                headers=headers,
                 timeout=10.0,
             )
         print(f"コールバック送信完了 job_id={job_id} clips={len(clips)}件")
