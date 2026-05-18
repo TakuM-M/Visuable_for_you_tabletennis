@@ -1,6 +1,6 @@
 # chore: セキュリティ強化
 
-**Status: In Progress**
+**Status: Done (2026-05-18)**
 
 重要度: 中
 
@@ -10,11 +10,11 @@
 
 ## 受け入れ条件
 
-- [ ] アップロード系エンドポイントに Rate limiting が掛かっている（per-user / per-IP）
-- [ ] CORS 設定がレビュー済みで、本番ドメインのみ許可になっている
-- [ ] `INTERNAL_API_KEY` のローテーション手順が文書化され、無停止で切り替え可能
-- [ ] CSRF 対策が必要なエンドポイント（特に Cookie ベース部分）を整理し、対応 or 不要判定が済んでいる
-- [ ] セキュリティ設定が `docs/` 配下にまとまっている
+- [x] アップロード系エンドポイントに Rate limiting が掛かっている（per-user / per-IP）
+- [x] CORS 設定がレビュー済みで、本番ドメインのみ許可になっている
+- [x] `INTERNAL_API_KEY` のローテーション手順が文書化され、無停止で切り替え可能
+- [x] CSRF 対策が必要なエンドポイント（特に Cookie ベース部分）を整理し、対応 or 不要判定が済んでいる
+- [x] セキュリティ設定が `docs/` 配下にまとまっている
 
 ## 関連ファイル
 
@@ -31,3 +31,10 @@
 ## 進捗ログ
 
 - 2026-05-18: タスク移行（個別ファイル化）
+- 2026-05-18: コールバック認証を jobs.py に追加（require_internal_api_key）
+- 2026-05-18: CORS allow_headers を明示的リストに変更（Authorization, Content-Type, X-Internal-Api-Key）
+- 2026-05-18: nginx で Rate limiting を実装（アップロード系 10req/min、API 60req/min）
+- 2026-05-18: docs/security.md を作成（INTERNAL_API_KEY ローテーション手順・CSRF判定の根拠を記載）
+- 2026-05-18: 動作確認完了（コールバック認証・CORS ヘッダが正しく機能することを確認）
+- 2026-05-18: 完了
+- 2026-05-19: RunPod Serverless への INTERNAL_API_KEY 環境変数設定を確認（ml/runpod_handler.py は既に実装済み、RunPod Console 側で Environment Variables に INTERNAL_API_KEY を追加設定が必要）

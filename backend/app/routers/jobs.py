@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_internal_api_key
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
@@ -69,7 +69,7 @@ class JobCompleteRequest(BaseModel):
     job_id: str
     clips: list[ClipData]
 
-@router.post("/internal/jobs/{job_id}/complete")
+@router.post("/internal/jobs/{job_id}/complete", dependencies=[Depends(require_internal_api_key)])
 def complete_job(
     job_id: uuid.UUID,
     request: JobCompleteRequest,

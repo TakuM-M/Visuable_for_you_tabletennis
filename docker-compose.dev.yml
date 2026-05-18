@@ -93,6 +93,7 @@ services:
       target: mock
     container_name: tabletennis-ml-mock
     restart: unless-stopped
+    env_file: .env.dev
     volumes:
       - ./ml/mock_app.py:/workspace/mock_app.py  # ホットリロード用（mock_app.py のみ）
     ports:
