@@ -1,13 +1,56 @@
 import os
+from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
+from app.core.logging import get_logger, setup_logging
 from app.routers import auth, clips, jobs, users, videos
+from app.services import job_reaper
+
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """アプリ起動/停止時のフック。APScheduler を立ち上げて reaper を回す"""
+    setup_logging()
+    scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.add_job(
+        job_reaper.reap_timeouts,
+        "interval",
+        seconds=settings.reaper_interval_seconds,
+        id="reap_timeouts",
+    )
+    scheduler.add_job(
+        job_reaper.dispatch_retries,
+        "interval",
+        seconds=settings.reaper_interval_seconds,
+        id="dispatch_retries",
+    )
+    scheduler.add_job(
+        job_reaper.clean_tmp_dir,
+        "interval",
+        seconds=settings.tmp_cleaner_interval_seconds,
+        id="clean_tmp_dir",
+    )
+    # 起動時に tmp を一度掃除しておく
+    job_reaper.clean_tmp_dir()
+    scheduler.start()
+    logger.info("APScheduler 起動")
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
+        logger.info("APScheduler 停止")
+
 
 app = FastAPI(
     title="Visuable for You Table Tennis API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 allowed_origins = ["http://localhost:5173"]

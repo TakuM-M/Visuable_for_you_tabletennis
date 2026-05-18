@@ -1,16 +1,18 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getVideoVideosVideoIdGet,
   listJobsByVideoVideosVideoIdJobsGet,
   listClipsByVideoVideosVideoIdClipsGet,
   deleteVideoVideosVideoIdDelete,
+  retryJobJobsJobIdRetryPost,
 } from "../api/generated";
 import VideoStatusBadge from "../components/VideoStatusBadge";
 import { authHeaders } from "../lib/auth";
 
 export default function VideoDetailPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { id } = useParams();
 
   const { data, isLoading } = useQuery({
@@ -38,6 +40,18 @@ export default function VideoDetailPage() {
         (j) => j.status === "queued" || j.status === "processing"
       );
       return isProcessing ? 3000 : false;
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: (jobId: string) =>
+      retryJobJobsJobIdRetryPost(jobId, { headers: authHeaders() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs", id] });
+      queryClient.invalidateQueries({ queryKey: ["video", id] });
+    },
+    onError: () => {
+      alert("再実行に失敗しました");
     },
   });
 
@@ -135,6 +149,22 @@ export default function VideoDetailPage() {
                           {job.status === "failed" && "失敗"}
                         </span>
                       </div>
+                      {job.status === "failed" && (
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          {job.error_message && (
+                            <p className="flex-1 text-xs text-gray-500">
+                              {job.error_message}
+                            </p>
+                          )}
+                          <button
+                            onClick={() => retryMutation.mutate(job.id)}
+                            disabled={retryMutation.isPending}
+                            className="rounded bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50"
+                          >
+                            {retryMutation.isPending ? "再実行中..." : "再実行"}
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

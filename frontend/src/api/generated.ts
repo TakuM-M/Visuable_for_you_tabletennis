@@ -4,6 +4,10 @@
  * Visuable for You Table Tennis API
  * OpenAPI spec version: 0.1.0
  */
+export interface BodyChunkUploadVideosUploadUploadIdChunkPost {
+  file: Blob;
+}
+
 export interface BodyLoginAuthLoginPost {
   grant_type?: string | null;
   username: string;
@@ -16,6 +20,22 @@ export interface BodyLoginAuthLoginPost {
 export interface BodyUploadVideoVideosPost {
   title: string;
   file: Blob;
+}
+
+/**
+ * チャンクアップロード初期化リクエスト
+ */
+export interface ChunkUploadInitRequest {
+  title: string;
+  filename: string;
+  total_chunks: number;
+}
+
+/**
+ * チャンクアップロード初期化レスポンス
+ */
+export interface ChunkUploadInitResponse {
+  upload_id: string;
 }
 
 export interface ClipData {
@@ -49,7 +69,6 @@ export interface HTTPValidationError {
 export interface JobCompleteRequest {
   job_id: string;
   clips: ClipData[];
-  output_path: string;
 }
 
 export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
@@ -72,7 +91,10 @@ export interface JobResponse {
   started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  retry_count: number;
+  next_retry_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 /**
@@ -139,6 +161,10 @@ export interface VideoResponse {
 
 export type VerifyEmailAuthVerifyEmailGetParams = {
 token: string;
+};
+
+export type ChunkUploadVideosUploadUploadIdChunkPostParams = {
+index: number;
 };
 
 export type CompleteJobInternalJobsJobIdCompletePost200 = { [key: string]: unknown };
@@ -510,6 +536,170 @@ formData.append(`file`, bodyUploadVideoVideosPost.file);
 
 
 /**
+ * チャンクアップロード初期化
+ * @summary Chunk Upload Init
+ */
+export type chunkUploadInitVideosUploadInitPostResponse200 = {
+  data: ChunkUploadInitResponse
+  status: 200
+}
+
+export type chunkUploadInitVideosUploadInitPostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type chunkUploadInitVideosUploadInitPostResponseSuccess = (chunkUploadInitVideosUploadInitPostResponse200) & {
+  headers: Headers;
+};
+export type chunkUploadInitVideosUploadInitPostResponseError = (chunkUploadInitVideosUploadInitPostResponse422) & {
+  headers: Headers;
+};
+
+export type chunkUploadInitVideosUploadInitPostResponse = (chunkUploadInitVideosUploadInitPostResponseSuccess | chunkUploadInitVideosUploadInitPostResponseError)
+
+export const getChunkUploadInitVideosUploadInitPostUrl = () => {
+
+
+  
+
+  return `/api/videos/upload/init`
+}
+
+export const chunkUploadInitVideosUploadInitPost = async (chunkUploadInitRequest: ChunkUploadInitRequest, options?: RequestInit): Promise<chunkUploadInitVideosUploadInitPostResponse> => {
+  
+  const res = await fetch(getChunkUploadInitVideosUploadInitPostUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      chunkUploadInitRequest,)
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: chunkUploadInitVideosUploadInitPostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as chunkUploadInitVideosUploadInitPostResponse
+}
+  
+
+
+/**
+ * チャンクデータ受信
+ * @summary Chunk Upload
+ */
+export type chunkUploadVideosUploadUploadIdChunkPostResponse204 = {
+  data: void
+  status: 204
+}
+
+export type chunkUploadVideosUploadUploadIdChunkPostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type chunkUploadVideosUploadUploadIdChunkPostResponseSuccess = (chunkUploadVideosUploadUploadIdChunkPostResponse204) & {
+  headers: Headers;
+};
+export type chunkUploadVideosUploadUploadIdChunkPostResponseError = (chunkUploadVideosUploadUploadIdChunkPostResponse422) & {
+  headers: Headers;
+};
+
+export type chunkUploadVideosUploadUploadIdChunkPostResponse = (chunkUploadVideosUploadUploadIdChunkPostResponseSuccess | chunkUploadVideosUploadUploadIdChunkPostResponseError)
+
+export const getChunkUploadVideosUploadUploadIdChunkPostUrl = (uploadId: string,
+    params: ChunkUploadVideosUploadUploadIdChunkPostParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/videos/upload/${uploadId}/chunk?${stringifiedParams}` : `/api/videos/upload/${uploadId}/chunk`
+}
+
+export const chunkUploadVideosUploadUploadIdChunkPost = async (uploadId: string,
+    bodyChunkUploadVideosUploadUploadIdChunkPost: BodyChunkUploadVideosUploadUploadIdChunkPost,
+    params: ChunkUploadVideosUploadUploadIdChunkPostParams, options?: RequestInit): Promise<chunkUploadVideosUploadUploadIdChunkPostResponse> => {
+    const formData = new FormData();
+formData.append(`file`, bodyChunkUploadVideosUploadUploadIdChunkPost.file);
+
+  const res = await fetch(getChunkUploadVideosUploadUploadIdChunkPostUrl(uploadId,params),
+  {      
+    ...options,
+    method: 'POST'
+    ,
+    body: 
+      formData,
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: chunkUploadVideosUploadUploadIdChunkPostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as chunkUploadVideosUploadUploadIdChunkPostResponse
+}
+  
+
+
+/**
+ * チャンクアップロード完了・動画結合
+ * @summary Chunk Upload Complete
+ */
+export type chunkUploadCompleteVideosUploadUploadIdCompletePostResponse201 = {
+  data: VideoResponse
+  status: 201
+}
+
+export type chunkUploadCompleteVideosUploadUploadIdCompletePostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type chunkUploadCompleteVideosUploadUploadIdCompletePostResponseSuccess = (chunkUploadCompleteVideosUploadUploadIdCompletePostResponse201) & {
+  headers: Headers;
+};
+export type chunkUploadCompleteVideosUploadUploadIdCompletePostResponseError = (chunkUploadCompleteVideosUploadUploadIdCompletePostResponse422) & {
+  headers: Headers;
+};
+
+export type chunkUploadCompleteVideosUploadUploadIdCompletePostResponse = (chunkUploadCompleteVideosUploadUploadIdCompletePostResponseSuccess | chunkUploadCompleteVideosUploadUploadIdCompletePostResponseError)
+
+export const getChunkUploadCompleteVideosUploadUploadIdCompletePostUrl = (uploadId: string,) => {
+
+
+  
+
+  return `/api/videos/upload/${uploadId}/complete`
+}
+
+export const chunkUploadCompleteVideosUploadUploadIdCompletePost = async (uploadId: string, options?: RequestInit): Promise<chunkUploadCompleteVideosUploadUploadIdCompletePostResponse> => {
+  
+  const res = await fetch(getChunkUploadCompleteVideosUploadUploadIdCompletePostUrl(uploadId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: chunkUploadCompleteVideosUploadUploadIdCompletePostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as chunkUploadCompleteVideosUploadUploadIdCompletePostResponse
+}
+  
+
+
+/**
  * 動画詳細取得
  * @summary Get Video
  */
@@ -610,7 +800,7 @@ export const deleteVideoVideosVideoIdDelete = async (videoId: string, options?: 
 
 
 /**
- * 連結済み動画ファイルを返す（videoタグで直接再生するため認証なし）
+ * 連結済み動画のPresigned URLへリダイレクトする
  * @summary Get Output Video
  */
 export type getOutputVideoVideosVideoIdOutputGetResponse200 = {
@@ -755,6 +945,56 @@ export const listJobsByVideoVideosVideoIdJobsGet = async (videoId: string, optio
   
   const data: listJobsByVideoVideosVideoIdJobsGetResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listJobsByVideoVideosVideoIdJobsGetResponse
+}
+  
+
+
+/**
+ * 失敗したジョブの手動再実行
+ * @summary Retry Job
+ */
+export type retryJobJobsJobIdRetryPostResponse200 = {
+  data: JobResponse
+  status: 200
+}
+
+export type retryJobJobsJobIdRetryPostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type retryJobJobsJobIdRetryPostResponseSuccess = (retryJobJobsJobIdRetryPostResponse200) & {
+  headers: Headers;
+};
+export type retryJobJobsJobIdRetryPostResponseError = (retryJobJobsJobIdRetryPostResponse422) & {
+  headers: Headers;
+};
+
+export type retryJobJobsJobIdRetryPostResponse = (retryJobJobsJobIdRetryPostResponseSuccess | retryJobJobsJobIdRetryPostResponseError)
+
+export const getRetryJobJobsJobIdRetryPostUrl = (jobId: string,) => {
+
+
+  
+
+  return `/api/jobs/${jobId}/retry`
+}
+
+export const retryJobJobsJobIdRetryPost = async (jobId: string, options?: RequestInit): Promise<retryJobJobsJobIdRetryPostResponse> => {
+  
+  const res = await fetch(getRetryJobJobsJobIdRetryPostUrl(jobId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: retryJobJobsJobIdRetryPostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as retryJobJobsJobIdRetryPostResponse
 }
   
 
