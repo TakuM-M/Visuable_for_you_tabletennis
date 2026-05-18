@@ -1,18 +1,25 @@
+import json
 import os
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 from fastapi import BackgroundTasks, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
+from app.db.session import SessionLocal
+from app.models.job import JobStatus
 from app.models.video import Video, VideoStatus
 from app.repositories import job as job_repo
 from app.repositories import video as video_repo
 from app.repositories import clip as clip_repo
 from app.repositories import notification_log as notification_log_repo
 from app.services import storage_service
+
+logger = get_logger(__name__)
 
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
 LOCAL_TMP_DIR = Path("/app/uploads/tmp")
@@ -27,13 +34,28 @@ USE_RUNPOD = os.getenv("USE_RUNPOD", "false").lower() == "true"
 
 
 def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
-    """MLサービスに処理を依頼する（RunPod or ローカル Mock）"""
+    """MLサービスに処理を依頼する（RunPod or ローカル Mock）。
+
+    BackgroundTasks / APScheduler の両方から呼ばれる前提で、内部で独自に DB セッションを開く。
+    開始時に status=processing / started_at=now をセットし、ディスパッチ失敗時は
+    job_service.handle_ml_failure に委譲して自動リトライ・通知を一元化する。
+    """
+    job_uuid = uuid.UUID(job_id)
     callback_url = f"{BACKEND_INTERNAL_URL}/internal/jobs/{job_id}/complete"
 
-    if USE_RUNPOD:
-        # R2 の Presigned URL を生成して RunPod に渡す
+    # 処理開始マーク（タイムアウト判定の起点になる）
+    with SessionLocal() as db:
+        job_repo.update_status(
+            db=db,
+            job_id=job_uuid,
+            status=JobStatus.processing,
+            started_at=datetime.now(timezone.utc),
+        )
+        video_repo.update_status(db, uuid.UUID(video_id), VideoStatus.processing)
+
+    try:
         video_download_url = storage_service.generate_presigned_url(r2_key, expires_in=7200)
-        try:
+        if USE_RUNPOD:
             with httpx.Client(timeout=30.0) as client:
                 response = client.post(
                     f"https://api.runpod.ai/v2/{RUNPOD_ENDPOINT_ID}/run",
@@ -47,15 +69,14 @@ def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
                     },
                 )
                 response.raise_for_status()
-            print(f"RunPod ジョブ送信成功 job_id={job_id} runpod_id={response.json().get('id')}")
-        except Exception as e:
-            print(f"RunPod 呼び出し失敗 job_id={job_id}: {e}")
-    else:
-        # ローカル Mock: R2 から一時ダウンロードURLを渡す
-        video_download_url = storage_service.generate_presigned_url(r2_key, expires_in=7200)
-        try:
+            logger.info(
+                "RunPod ジョブ送信成功 job_id=%s runpod_id=%s",
+                job_id,
+                response.json().get("id"),
+            )
+        else:
             with httpx.Client(timeout=5.0) as client:
-                client.post(
+                response = client.post(
                     f"{ML_SERVICE_URL}/process",
                     json={
                         "job_id": job_id,
@@ -63,9 +84,16 @@ def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
                         "callback_url": callback_url,
                     },
                 )
-            print(f"MLサービス呼び出し成功 job_id={job_id}")
-        except Exception as e:
-            print(f"MLサービス呼び出し失敗 job_id={job_id}: {e}")
+                response.raise_for_status()
+            logger.info("MLサービス呼び出し成功 job_id=%s", job_id)
+    except Exception as e:
+        # 循環インポート回避のため遅延 import
+        from app.services import job_service
+
+        logger.exception("MLサービス呼び出し失敗 job_id=%s: %s", job_id, e)
+        with SessionLocal() as db:
+            job_service.handle_ml_failure(db, job_uuid, f"ML呼び出し失敗: {e}")
+
 
 def _register_video_and_start_ml(
     db: Session,
@@ -115,7 +143,6 @@ def init_chunk_upload(title: str, filename: str, total_chunks: int) -> str:
     upload_dir.mkdir(parents=True, exist_ok=True)
     # メタデータを保存
     meta_path = upload_dir / "meta.json"
-    import json
     meta_path.write_text(json.dumps({
         "title": title,
         "filename": filename,
@@ -141,8 +168,6 @@ def complete_chunk_upload(
     background_tasks: BackgroundTasks,
 ) -> Video:
     """全チャンクを結合して動画を登録し、ML処理を開始する"""
-    import json
-
     upload_dir = LOCAL_TMP_DIR / upload_id
     if not upload_dir.exists():
         raise FileNotFoundError(f"Upload {upload_id} not found")
@@ -193,11 +218,11 @@ def delete_video(db: Session, video_id: uuid.UUID) -> bool:
     try:
         storage_service.delete_file(storage_r2_key)
     except Exception as e:
-        print(f"R2 元動画削除失敗: {e}")
+        logger.warning("R2 元動画削除失敗: %s", e)
     if output_r2_key:
         try:
             storage_service.delete_file(output_r2_key)
         except Exception as e:
-            print(f"R2 output削除失敗: {e}")
+            logger.warning("R2 output削除失敗: %s", e)
 
     return True
