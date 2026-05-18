@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
-from app.routers import auth, clips, jobs, users, videos
+from app.routers import admin, auth, clips, jobs, users, videos
 from app.services import job_reaper
 
 logger = get_logger(__name__)
@@ -35,6 +35,18 @@ async def lifespan(app: FastAPI):
         "interval",
         seconds=settings.tmp_cleaner_interval_seconds,
         id="clean_tmp_dir",
+    )
+    scheduler.add_job(
+        job_reaper.cleanup_expired_videos,
+        "interval",
+        seconds=settings.video_retention_cleanup_interval_seconds,
+        id="cleanup_expired_videos",
+    )
+    scheduler.add_job(
+        job_reaper.log_storage_metrics,
+        "interval",
+        seconds=settings.metrics_log_interval_seconds,
+        id="log_storage_metrics",
     )
     # 起動時に tmp を一度掃除しておく
     job_reaper.clean_tmp_dir()
@@ -70,6 +82,7 @@ app.include_router(users.router)
 app.include_router(videos.router)
 app.include_router(jobs.router)
 app.include_router(clips.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

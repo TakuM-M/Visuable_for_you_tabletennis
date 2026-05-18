@@ -24,14 +24,17 @@ def upload_video(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> VideoResponse:
     """動画アップロード"""
-    video = video_service.upload_video(
-        db=db,
-        user_id=current_user.id,
-        title=title,
-        file=file,
-        background_tasks=background_tasks,
-    )
-    
+    try:
+        video = video_service.upload_video(
+            db=db,
+            user_id=current_user.id,
+            title=title,
+            file=file,
+            background_tasks=background_tasks,
+        )
+    except video_service.QuotaExceededError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
     return video
 
 
@@ -39,13 +42,19 @@ def upload_video(
 def chunk_upload_init(
     body: ChunkUploadInitRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> ChunkUploadInitResponse:
     """チャンクアップロード初期化"""
-    upload_id = video_service.init_chunk_upload(
-        title=body.title,
-        filename=body.filename,
-        total_chunks=body.total_chunks,
-    )
+    try:
+        upload_id = video_service.init_chunk_upload(
+            db=db,
+            user_id=current_user.id,
+            title=body.title,
+            filename=body.filename,
+            total_chunks=body.total_chunks,
+        )
+    except video_service.QuotaExceededError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return ChunkUploadInitResponse(upload_id=upload_id)
 
 
@@ -80,6 +89,8 @@ def chunk_upload_complete(
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except video_service.QuotaExceededError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return video
 
 
