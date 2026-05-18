@@ -1,8 +1,6 @@
-import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -10,7 +8,6 @@ from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories import job as job_repo
-from app.repositories import video as video_repo
 from app.schemas.job import JobResponse
 from app.services import job_service
 
@@ -47,22 +44,6 @@ class ClipData(BaseModel):
 class JobCompleteRequest(BaseModel):
     job_id: str
     clips: list[ClipData]
-
-@router.get("/internal/videos/{video_id}/raw")
-def download_raw_video(
-    video_id: uuid.UUID,
-    token: str,
-    db: Session = Depends(get_db),
-) -> FileResponse:
-    """RunPod ワーカーが動画をダウンロードするための内部エンドポイント"""
-    internal_api_key = os.getenv("INTERNAL_API_KEY", "")
-    if not internal_api_key or token != internal_api_key:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="Video not found")
-    return FileResponse(video.storage_path, media_type="video/mp4")
-
 
 @router.post("/internal/jobs/{job_id}/complete")
 def complete_job(

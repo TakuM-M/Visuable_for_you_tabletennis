@@ -32,13 +32,13 @@ services:
       target: development
     container_name: tabletennis-backend
     restart: unless-stopped
+    env_file: .env.dev
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend:/app                     # ホットリロード用
       - ./ml/models:/app/ml/models:ro      # MLモデルを読み取り専用でマウント
-      - uploads:/app/uploads               # ml-mockと動画ファイルを共有
     ports:
       - "8000:8000"
     environment:
@@ -50,11 +50,14 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
-      # RunPod Serverless（USE_RUNPOD=true にすると RunPod に切り替わる）
-      - USE_RUNPOD=${USE_RUNPOD:-false}
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY:-}
-      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID:-}
+      # ローカル開発では常に ml-mock を使用（RunPod は使わない）
+      - USE_RUNPOD=false
       - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
+      # Cloudflare R2 ストレージ
+      - R2_ENDPOINT_URL=${R2_ENDPOINT_URL}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
     networks:
       - tabletennis-net
 
@@ -91,7 +94,6 @@ services:
     container_name: tabletennis-ml-mock
     restart: unless-stopped
     volumes:
-      - uploads:/app/uploads               # backendと動画ファイルを共有（/app/uploads/videos/... パスで参照）
       - ./ml/mock_app.py:/workspace/mock_app.py  # ホットリロード用（mock_app.py のみ）
     ports:
       - "8001:8001"
@@ -135,8 +137,6 @@ volumes:
   postgres-data:
     driver: local
   model-cache:
-    driver: local
-  uploads:
     driver: local
 
 # ========================================
