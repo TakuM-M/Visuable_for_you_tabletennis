@@ -49,6 +49,10 @@ export default function VideoDetailPage() {
     queryKey: ["video", id],
     queryFn: () => getVideoVideosVideoIdGet(id!, { headers: authHeaders() }),
     enabled: !!id,
+    refetchInterval: (q) => {
+      const v = q.state.data?.status === 200 ? q.state.data.data : null;
+      return v?.status === "queued" || v?.status === "processing" ? 3000 : false;
+    },
   });
   const video: VideoResponse | null =
     videoRes?.status === 200 ? videoRes.data : null;

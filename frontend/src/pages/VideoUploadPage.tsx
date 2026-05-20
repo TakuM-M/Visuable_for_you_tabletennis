@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +23,7 @@ const ACCEPT = "video/mp4,video/quicktime,video/x-matroska";
 
 export default function VideoUploadPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [progress, setProgress] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -32,6 +33,7 @@ export default function VideoUploadPage() {
     register,
     handleSubmit,
     setValue,
+    resetField,
     watch,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
@@ -51,7 +53,10 @@ export default function VideoUploadPage() {
         signal: controller.signal,
       });
     },
-    onSuccess: () => navigate("/"),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["videos"] });
+      navigate(`/videos/${data.id}`);
+    },
     onError: () => setProgress(null),
   });
 
@@ -63,13 +68,12 @@ export default function VideoUploadPage() {
 
   const onFileChange = (files: FileList | null) => {
     if (!files?.length) return;
-    const dt = new DataTransfer();
-    Array.from(files).forEach((f) => dt.items.add(f));
-    setValue("file", dt.files, { shouldValidate: true });
-    setSelectedFile(files[0]);
+    const file = files[0];
+    setValue("file", files);
+    setSelectedFile(file);
     if (!titleValue) {
-      const stem = files[0].name.replace(/\.[^.]+$/, "");
-      setValue("title", stem, { shouldValidate: true });
+      const stem = file.name.replace(/\.[^.]+$/, "");
+      setValue("title", stem);
     }
   };
 
@@ -81,7 +85,7 @@ export default function VideoUploadPage() {
 
   const onClear = () => {
     setSelectedFile(null);
-    setValue("file", new DataTransfer().files);
+    resetField("file");
   };
 
   const isUploading = mutation.isPending;
@@ -167,12 +171,15 @@ export default function VideoUploadPage() {
                   `}
                 >
                   <input
-                    {...fileRegister}
                     type="file"
+                    name={fileRegister.name}
+                    ref={fileRegister.ref}
+                    onBlur={fileRegister.onBlur}
                     accept={ACCEPT}
                     className="hidden"
                     onChange={(e) => {
-                      fileRegister.onChange(e);
+                      console.log("File input onChange fired");
+                      console.log("e.target.files:", e.target.files);
                       onFileChange(e.target.files);
                     }}
                   />
