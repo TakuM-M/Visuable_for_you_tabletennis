@@ -68,10 +68,10 @@ export default function VideoListPage() {
           </div>
 
           {/* Table header */}
-          <div className="grid h-8 grid-cols-[1fr_100px_130px_110px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
+          <div className="grid h-8 grid-cols-[1fr_120px_120px_120px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
             <span>タイトル</span>
-            <span className="pr-3 text-right">再生時間</span>
-            <span>状態</span>
+            <span className="text-right">再生時間</span>
+            <span className="text-right">状態</span>
             <span className="text-right">アップロード</span>
           </div>
 
@@ -96,7 +96,7 @@ export default function VideoListPage() {
                 type="button"
                 key={v.id}
                 onClick={() => navigate(`/videos/${v.id}`)}
-                className="grid w-full cursor-pointer grid-cols-[1fr_100px_130px_110px] items-center border-b border-border px-3.5 py-3 text-left hover:bg-subtle"
+                className="grid w-full cursor-pointer grid-cols-[1fr_120px_120px_120px] items-center border-b border-border px-3.5 py-3 text-left hover:bg-subtle"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="h-6 w-9 flex-none overflow-hidden rounded">
@@ -107,10 +107,10 @@ export default function VideoListPage() {
                     <div className="font-mono text-[10.5px] text-fg-4">MP4</div>
                   </div>
                 </div>
-                <div className="pr-3 text-right font-mono text-[12px] text-fg-2">
+                <div className="text-right font-mono text-[12px] text-fg-2">
                   {fmtDuration(v.duration)}
                 </div>
-                <div>
+                <div className="flex justify-end">
                   <StatusBadge status={v.status} />
                 </div>
                 <div className="text-right text-[12px] text-fg-3">{fmtDate(v.created_at)}</div>
