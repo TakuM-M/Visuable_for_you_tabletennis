@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,28 @@ def _ensure_under_quota(db: Session, user_id: uuid.UUID) -> None:
         raise QuotaExceededError(
             f"動画本数上限 {settings.user_video_quota} 本に到達しました"
         )
+
+
+def _extract_duration(local_path: Path) -> float | None:
+    """ffprobe でローカル動画ファイルの再生時間（秒）を取得する。
+    失敗した場合は None を返す（アップロード処理は継続）。
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(local_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return float(result.stdout.strip())
+    except Exception as e:
+        logger.warning("ffprobe による再生時間取得に失敗しました: %s", e)
+        return None
 
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
 LOCAL_TMP_DIR = Path("/app/uploads/tmp")
@@ -114,6 +137,7 @@ def _register_video_and_start_ml(
     title: str,
     r2_key: str,
     background_tasks: BackgroundTasks,
+    duration: float | None = None,
 ) -> Video:
     """動画をDBに登録し、MLサービスを呼び出す共通処理"""
     video = video_repo.create(
@@ -121,6 +145,7 @@ def _register_video_and_start_ml(
         user_id=user_id,
         title=title,
         storage_path=r2_key,
+        duration=duration,
     )
     video_repo.update_status(db, video.id, VideoStatus.queued)
     job = job_repo.create(db=db, video_id=video.id)
@@ -144,10 +169,11 @@ def upload_video(
     # ローカルに一時保存 → R2にアップロード → ローカル削除
     with local_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
+    duration = _extract_duration(local_path)
     storage_service.upload_file(str(local_path), r2_key)
     local_path.unlink(missing_ok=True)
 
-    return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks)
+    return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks, duration=duration)
 
 
 def init_chunk_upload(
@@ -214,12 +240,14 @@ def complete_chunk_upload(
             with chunk_path.open("rb") as chunk_f:
                 shutil.copyfileobj(chunk_f, out_f)
 
+    duration = _extract_duration(merged_path)
+
     # R2にアップロード → ローカル一時ファイルを削除
     storage_service.upload_file(str(merged_path), r2_key)
     merged_path.unlink(missing_ok=True)
     shutil.rmtree(upload_dir)
 
-    return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks)
+    return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks, duration=duration)
 
 
 def delete_video(db: Session, video_id: uuid.UUID) -> bool:

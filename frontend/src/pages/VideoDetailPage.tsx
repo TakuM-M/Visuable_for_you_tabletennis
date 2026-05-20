@@ -287,7 +287,6 @@ export default function VideoDetailPage() {
                 <>
                   <Stat label="検出シーン" value={`${clips.length}`} unit="件" />
                   <Stat label="プレー時間" value={fmt(sumPlay(clips))} mono />
-                  <Stat label="元動画" value={fmtDuration(video.duration)} mono />
                 </>
               )}
             </aside>

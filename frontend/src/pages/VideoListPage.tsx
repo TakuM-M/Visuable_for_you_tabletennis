@@ -70,7 +70,7 @@ export default function VideoListPage() {
           {/* Table header */}
           <div className="grid h-8 grid-cols-[1fr_100px_130px_110px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
             <span>タイトル</span>
-            <span className="pr-3 text-right">長さ</span>
+            <span className="pr-3 text-right">再生時間</span>
             <span>状態</span>
             <span className="text-right">アップロード</span>
           </div>

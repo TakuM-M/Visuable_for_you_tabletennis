@@ -12,11 +12,13 @@ def create(
     user_id: uuid.UUID,
     title: str,
     storage_path: str,
+    duration: float | None = None,
 ) -> Video:
     video = Video(
         user_id=user_id,
         title=title,
         storage_path=storage_path,
+        duration=duration,
     )
     db.add(video)
     db.commit()
