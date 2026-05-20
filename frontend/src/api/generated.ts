@@ -97,6 +97,18 @@ export interface JobResponse {
   updated_at: string;
 }
 
+export type StorageMetricsResponseVideosPerUser = {[key: string]: number};
+
+/**
+ * R2 / DB のストレージ統計レスポンス
+ */
+export interface StorageMetricsResponse {
+  r2_total_bytes: number;
+  r2_object_count: number;
+  db_video_count: number;
+  videos_per_user: StorageMetricsResponseVideosPerUser;
+}
+
 /**
  * JWTトークンレスポンス
  */
@@ -1097,6 +1109,56 @@ export const listClipsByVideoVideosVideoIdClipsGet = async (videoId: string, opt
   
   const data: listClipsByVideoVideosVideoIdClipsGetResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listClipsByVideoVideosVideoIdClipsGetResponse
+}
+  
+
+
+/**
+ * R2 使用量・DB レコード数のストレージ統計を返す（管理者用）
+ * @summary Get Storage Metrics
+ */
+export type getStorageMetricsAdminMetricsGetResponse200 = {
+  data: StorageMetricsResponse
+  status: 200
+}
+
+export type getStorageMetricsAdminMetricsGetResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type getStorageMetricsAdminMetricsGetResponseSuccess = (getStorageMetricsAdminMetricsGetResponse200) & {
+  headers: Headers;
+};
+export type getStorageMetricsAdminMetricsGetResponseError = (getStorageMetricsAdminMetricsGetResponse422) & {
+  headers: Headers;
+};
+
+export type getStorageMetricsAdminMetricsGetResponse = (getStorageMetricsAdminMetricsGetResponseSuccess | getStorageMetricsAdminMetricsGetResponseError)
+
+export const getGetStorageMetricsAdminMetricsGetUrl = () => {
+
+
+  
+
+  return `/api/admin/metrics`
+}
+
+export const getStorageMetricsAdminMetricsGet = async ( options?: RequestInit): Promise<getStorageMetricsAdminMetricsGetResponse> => {
+  
+  const res = await fetch(getGetStorageMetricsAdminMetricsGetUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: getStorageMetricsAdminMetricsGetResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getStorageMetricsAdminMetricsGetResponse
 }
   
 
