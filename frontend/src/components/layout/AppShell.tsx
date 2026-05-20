@@ -10,7 +10,7 @@ import { IconSearch, IconUpload } from "../ui/Icons";
 type Props = { children: ReactNode };
 
 const TABS = [
-  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || p.startsWith("/videos") },
+  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || (p.startsWith("/videos/") && p !== "/videos/new") },
   { to: "/videos/new",  label: "アップロード",   match: (p: string) => p === "/videos/new" },
   { to: "/profile",     label: "プロフィール",   match: (p: string) => p === "/profile" },
 ];
