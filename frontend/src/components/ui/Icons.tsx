@@ -2,16 +2,19 @@ import type { SVGProps, ReactNode } from "react";
 
 /* Minimal hairline icon set. Stroke-based unless otherwise noted. */
 
-type Props = SVGProps<SVGSVGElement> & {
+type Props = Omit<SVGProps<SVGSVGElement>, 'stroke' | 'fill'> & {
   size?: number;
-  stroke?: number;
+  strokeWidth?: number;
+  stroke?: string;
+  fill?: string;
 };
 
 function Svg({
   size = 16,
-  stroke = 1.5,
+  strokeWidth = 1.5,
   children,
   fill = "none",
+  stroke = "currentColor",
   ...rest
 }: Props & { children: ReactNode }) {
   return (
@@ -20,8 +23,8 @@ function Svg({
       height={size}
       viewBox="0 0 24 24"
       fill={fill}
-      stroke="currentColor"
-      strokeWidth={stroke}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
