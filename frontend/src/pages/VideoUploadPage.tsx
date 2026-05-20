@@ -13,7 +13,10 @@ import { IconChevL, IconClose, IconUpload } from "../components/ui/Icons";
 const schema = z.object({
   title: z.string().min(1, "タイトルを入力してください"),
   file: z
-    .instanceof(FileList)
+    .custom<FileList>(
+      (v) => typeof FileList !== "undefined" && v instanceof FileList,
+      "動画ファイルを選択してください"
+    )
     .refine((files) => files.length > 0, "動画ファイルを選択してください"),
 });
 
@@ -69,7 +72,6 @@ export default function VideoUploadPage() {
   const onFileChange = (files: FileList | null) => {
     if (!files?.length) return;
     const file = files[0];
-    setValue("file", files);
     setSelectedFile(file);
     if (!titleValue) {
       const stem = file.name.replace(/\.[^.]+$/, "");
@@ -174,12 +176,10 @@ export default function VideoUploadPage() {
                     type="file"
                     name={fileRegister.name}
                     ref={fileRegister.ref}
-                    onBlur={fileRegister.onBlur}
                     accept={ACCEPT}
                     className="hidden"
                     onChange={(e) => {
-                      console.log("File input onChange fired");
-                      console.log("e.target.files:", e.target.files);
+                      fileRegister.onChange(e);
                       onFileChange(e.target.files);
                     }}
                   />
