@@ -71,6 +71,19 @@ def update_output_path(
     db.refresh(video)
     return video
 
+def update_duration(
+    db: Session,
+    video_id: uuid.UUID,
+    duration: float,
+) -> Video | None:
+    video = get_by_id(db, video_id)
+    if video is None:
+        return None
+    video.duration = duration
+    db.commit()
+    db.refresh(video)
+    return video
+
 def delete(db: Session, video_id: uuid.UUID) -> bool:
     video = get_by_id(db, video_id)
     if video is None:
