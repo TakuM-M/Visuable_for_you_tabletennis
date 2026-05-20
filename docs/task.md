@@ -6,7 +6,7 @@
 ## インフラ / CI/CD
 - [ ] [CI/CDパイプライン構築](./tasks/chore-cicd-pipeline.md) - 重要度: 高
 
-## バックエンド / ジョブ基盤
+## バックエンド
 <!-- 未完了タスクなし -->
 
 
@@ -17,9 +17,10 @@
 - [ ] [卓球台検出ロジックの堅牢化](./tasks/fix-ml-table-detection-robustness.md) - 重要度: 中
 
 ## UX
-<!-- 未完了タスクなし -->
+- []フロントでstatus変更が生じない場合に詰むという問題
 
 ## 完了
+- [x] ナビゲーションタブの二重アンダーバー表示バグ修正 - 2026-05-20
 - [x] [UX改善](./tasks/completion/feat-ux-improvements.md) - 2026-05-20
 - [x] [セキュリティ強化](./tasks/completion/chore-security-hardening.md) - 2026-05-18
 - [x] [動画の保持ポリシー・容量管理](./tasks/completion/feat-video-retention-policy.md) - 2026-05-18 ※アラート通知のみスコープ外
