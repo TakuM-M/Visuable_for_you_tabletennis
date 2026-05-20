@@ -13,6 +13,7 @@ import { authHeaders } from "../lib/auth";
 import AppShell from "../components/layout/AppShell";
 import StatusBadge from "../components/ui/StatusBadge";
 import Button from "../components/ui/Button";
+import DropdownMenu from "../components/ui/DropdownMenu";
 import Stripes from "../components/ui/Stripes";
 import EmptyState from "../components/ui/EmptyState";
 import {
@@ -173,9 +174,21 @@ export default function VideoDetailPage() {
                   </Button>
                 </a>
               )}
-              <Button kind="ghost" size="sm" onClick={onDelete} aria-label="その他">
-                <IconMore size={14} />
-              </Button>
+              <DropdownMenu
+                items={[
+                  {
+                    label: "削除",
+                    icon: <IconTrash size={13} />,
+                    onClick: onDelete,
+                    variant: "danger",
+                  },
+                ]}
+                align="right"
+              >
+                <Button kind="ghost" size="sm" aria-label="その他">
+                  <IconMore size={14} />
+                </Button>
+              </DropdownMenu>
             </div>
           </div>
 
