@@ -68,13 +68,14 @@ async def run_mock_processing(job_id: str, video_path: str, callback_url: str) -
             headers["X-Internal-Api-Key"] = api_key
 
         async with httpx.AsyncClient() as client:
-            await client.post(
+            response = await client.post(
                 callback_url,
                 json={"job_id": job_id, "clips": clips},
                 headers=headers,
                 timeout=10.0,
             )
-        print(f"コールバック送信完了 job_id={job_id} clips={len(clips)}件")
+            response.raise_for_status()
+        print(f"コールバック送信完了 job_id={job_id} status={response.status_code} clips={len(clips)}件")
     except Exception as e:
         print(f"コールバック送信失敗 job_id={job_id}: {e}")
 
