@@ -4,13 +4,12 @@ import type { ReactNode } from "react";
 import { getMeUsersMeGet } from "../../api/generated";
 import { authHeaders } from "../../lib/auth";
 import Logo from "../ui/Logo";
-import Button from "../ui/Button";
-import { IconSearch, IconUpload } from "../ui/Icons";
+import { IconSearch } from "../ui/Icons";
 
 type Props = { children: ReactNode };
 
 const TABS = [
-  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || (p.startsWith("/videos/") && p !== "/videos/new") },
+  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || p.startsWith("/videos") },
   { to: "/videos/new",  label: "アップロード",   match: (p: string) => p === "/videos/new" },
   { to: "/profile",     label: "プロフィール",   match: (p: string) => p === "/profile" },
 ];
@@ -54,16 +53,6 @@ export default function AppShell({ children }: Props) {
           </div>
 
           <div className="flex-1" />
-
-          <Button
-            kind="secondary"
-            size="sm"
-            onClick={() => navigate("/videos/new")}
-            className="hidden md:inline-flex"
-          >
-            <IconUpload size={13} />
-            アップロード
-          </Button>
 
           <button
             onClick={() => navigate("/profile")}
