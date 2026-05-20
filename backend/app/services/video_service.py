@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,28 @@ def _ensure_under_quota(db: Session, user_id: uuid.UUID) -> None:
         raise QuotaExceededError(
             f"動画本数上限 {settings.user_video_quota} 本に到達しました"
         )
+
+
+def _extract_duration(local_path: Path) -> float | None:
+    """ffprobe でローカル動画ファイルの再生時間（秒）を取得する。
+    失敗した場合は None を返す（アップロード処理は継続）。
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(local_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return float(result.stdout.strip())
+    except Exception as e:
+        logger.warning("ffprobe による再生時間取得に失敗しました: %s", e)
+        return None
 
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
 LOCAL_TMP_DIR = Path("/app/uploads/tmp")

@@ -207,6 +207,18 @@ def complete_job(
 
     # 4. VideoにoutputPathを保存してcompletedに更新
     video_repo.update_output_path(db, job.video_id, output_r2_key)
+
+    # 出力動画の再生時間を取得・保存
+    if output_r2_key:
+        try:
+            from app.services import video_service
+            output_url = storage_service.generate_presigned_url(output_r2_key, expires_in=7200)
+            output_duration = video_service._extract_duration(output_url)
+            if output_duration is not None:
+                video_repo.update_duration(db, job.video_id, output_duration)
+        except Exception as e:
+            logger.warning("出力動画の再生時間取得に失敗しました job_id=%s: %s", job_id, e)
+
     video = video_repo.update_status(db, job.video_id, VideoStatus.completed)
 
     # 5. メール送信

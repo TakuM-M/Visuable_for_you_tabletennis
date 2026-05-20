@@ -1,67 +1,124 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { listVideosVideosGet } from "../api/generated";
-import { authHeaders, removeToken } from "../lib/auth";
-import VideoStatusBadge from "../components/VideoStatusBadge";
+import {
+  listVideosVideosGet,
+  type VideoResponse,
+} from "../api/generated";
+import { authHeaders } from "../lib/auth";
+import AppShell from "../components/layout/AppShell";
+import StatusBadge from "../components/ui/StatusBadge";
+import Button from "../components/ui/Button";
+import Stripes from "../components/ui/Stripes";
+import EmptyState from "../components/ui/EmptyState";
+import { IconFilm, IconPlus, IconSearch } from "../components/ui/Icons";
+
+/**
+ * Format seconds → mm:ss; "—" when missing.
+ */
+function fmtDuration(seconds: number | null | undefined) {
+  if (seconds == null) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).replaceAll("/", "-");
+}
 
 export default function VideoListPage() {
   const navigate = useNavigate();
 
-  const {data, isLoading} = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["videos"],
     queryFn: () => listVideosVideosGet({ headers: authHeaders() }),
   });
 
+  const videos: VideoResponse[] = data?.status === 200 ? data.data : [];
+
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">動画一覧</h1>
-        <button
-          onClick={() => navigate("/videos/new")}
-          className="rounded bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
-        >
-          + 動画を追加
-        </button>
-
-        <button
-          onClick={() => navigate("/profile")}
-          className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-        >
-          プロフィール編集
-        </button>
-      </div>
-
-      {isLoading ? (
-        <p>読み込み中...</p>
-      ) : (
-        <ul className="mt-4 space-y-3">
-          {data?.data.map((video) => (
-            <li
-              key={video.id}
-              onClick={() => navigate(`/videos/${video.id}`)}
-              className="cursor-pointer rounded-lg border bg-white p-4 shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center justify-between">
-                <p className="font-medium text-gray-800">{video.title}</p>
-                <VideoStatusBadge status={video.status} />
+    <AppShell>
+      <div className="scroll-thin h-full overflow-auto">
+        <div className="mx-auto max-w-[1040px] px-8 pt-7 pb-16">
+          {/* Page header */}
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <div className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-fg-4">
+                Library
               </div>
-              <p className="mt-1 text-xs text-gray-400">
-                {new Date(video.created_at).toLocaleDateString("ja-JP")}
+              <h1 className="m-0 text-[22px] font-semibold tracking-[-0.015em]">動画一覧</h1>
+              <p className="mt-1.5 text-[13px] text-fg-3">
+                {isLoading ? "読み込み中..." : `${videos.length}件`}
               </p>
-              </li>
-          ))}
-        </ul>
-      )}
+            </div>
+            <div className="flex gap-2">
+              <Button kind="secondary" size="sm">
+                <IconSearch size={13} />
+                絞り込み
+              </Button>
+              <Button kind="primary" size="sm" onClick={() => navigate("/videos/new")}>
+                <IconPlus size={13} />
+                動画を追加
+              </Button>
+            </div>
+          </div>
 
-      <button
-        onClick={() => {
-          removeToken();
-          navigate("/login");
-        }}
-        className="mt-4 rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
-      >
-        ログアウト
-      </button>
-    </div>
+          {/* Table header */}
+          <div className="grid h-8 grid-cols-[1fr_120px_120px_120px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
+            <span>タイトル</span>
+            <span className="text-right">再生時間</span>
+            <span className="text-right">状態</span>
+            <span className="text-right">アップロード</span>
+          </div>
+
+          {/* Rows */}
+          {!isLoading && videos.length === 0 ? (
+            <div className="mt-6">
+              <EmptyState
+                icon={<IconFilm size={18} />}
+                title="まだ動画がありません"
+                description="最初の動画をアップロードすると、プレーシーンが自動で抽出されます。"
+                actions={
+                  <Button kind="primary" size="sm" onClick={() => navigate("/videos/new")}>
+                    <IconPlus size={13} />
+                    動画を追加
+                  </Button>
+                }
+              />
+            </div>
+          ) : (
+            videos.map((v) => (
+              <button
+                type="button"
+                key={v.id}
+                onClick={() => navigate(`/videos/${v.id}`)}
+                className="grid w-full cursor-pointer grid-cols-[1fr_120px_120px_120px] items-center border-b border-border px-3.5 py-3 text-left hover:bg-subtle"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="h-6 w-9 flex-none overflow-hidden rounded">
+                    <Stripes />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[13.5px] font-medium">{v.title}</div>
+                    <div className="font-mono text-[10.5px] text-fg-4">MP4</div>
+                  </div>
+                </div>
+                <div className="text-right font-mono text-[12px] text-fg-2">
+                  {fmtDuration(v.duration)}
+                </div>
+                <div className="flex justify-end">
+                  <StatusBadge status={v.status} />
+                </div>
+                <div className="text-right text-[12px] text-fg-3">{fmtDate(v.created_at)}</div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </AppShell>
   );
 }

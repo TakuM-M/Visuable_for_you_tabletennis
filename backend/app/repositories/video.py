@@ -12,11 +12,13 @@ def create(
     user_id: uuid.UUID,
     title: str,
     storage_path: str,
+    duration: float | None = None,
 ) -> Video:
     video = Video(
         user_id=user_id,
         title=title,
         storage_path=storage_path,
+        duration=duration,
     )
     db.add(video)
     db.commit()
@@ -65,6 +67,19 @@ def update_output_path(
     if video is None:
         return None
     video.output_path = output_path
+    db.commit()
+    db.refresh(video)
+    return video
+
+def update_duration(
+    db: Session,
+    video_id: uuid.UUID,
+    duration: float,
+) -> Video | None:
+    video = get_by_id(db, video_id)
+    if video is None:
+        return None
+    video.duration = duration
     db.commit()
     db.refresh(video)
     return video
