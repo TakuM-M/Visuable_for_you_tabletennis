@@ -11,8 +11,9 @@ dependencies = [
     # 物体検出
     "ultralytics>=8.0.0",
     # 深層学習（torch は pytorch/pytorch Docker base image でも提供される）
-    "torch==2.1.0",
-    "torchvision==0.16.0",
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "torchaudio==2.5.1",
     "tensorboard>=2.13.0",
     # 数値計算・データ処理
     "numpy==1.26.4",
@@ -42,18 +43,21 @@ dev = [
 # ─────────────────────────────────────────────────
 # PyTorch CUDA インデックス設定
 #
-# Linux（Docker）環境では CUDA 12.1 対応版を使用する。
+# Linux（Docker）環境では CUDA 12.4 対応版を使用する（Blackwell sm_120 対応）。
 # macOS ローカル開発環境では PyPI デフォルト（CPU版）を使用する。
 # ─────────────────────────────────────────────────
 [[tool.uv.index]]
-name = "pytorch-cu121"
-url = "https://download.pytorch.org/whl/cu121"
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
 explicit = true  # torch / torchvision にのみ使用する
 
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
-    { index = "pytorch-cu121", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
+]
+torchaudio = [
+    { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
 ]
