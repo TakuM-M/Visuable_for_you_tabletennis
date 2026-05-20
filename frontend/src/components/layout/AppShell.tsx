@@ -9,7 +9,7 @@ import { IconSearch } from "../ui/Icons";
 type Props = { children: ReactNode };
 
 const TABS = [
-  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || p.startsWith("/videos") },
+  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || (p.startsWith("/videos") && p !== "/videos/new") },
   { to: "/videos/new",  label: "アップロード",   match: (p: string) => p === "/videos/new" },
   { to: "/profile",     label: "プロフィール",   match: (p: string) => p === "/profile" },
 ];
@@ -27,12 +27,11 @@ export default function AppShell({ children }: Props) {
     queryFn: () => getMeUsersMeGet({ headers: authHeaders() }),
   });
   const me = meRes?.status === 200 ? meRes.data : null;
-  const initials = me?.display_name?.slice(0, 2).toUpperCase() ?? "—";
+  const initials = me?.display_name ? [...me.display_name].slice(0, 2).join("").toUpperCase() : "—";
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] bg-bg">
       <header className="bg-surface border-b border-border">
-        {/* Row 1 — brand, search, primary actions */}
         <div className="flex h-[52px] items-center gap-6 px-6">
           <Link to="/" className="no-underline text-fg">
             <Logo />
@@ -63,7 +62,6 @@ export default function AppShell({ children }: Props) {
           </button>
         </div>
 
-        {/* Row 2 — section tabs */}
         <nav className="flex items-stretch gap-6 border-t border-border px-6">
           {TABS.map((t) => {
             const active = t.match(location.pathname);

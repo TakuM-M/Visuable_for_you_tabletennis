@@ -10,7 +10,9 @@ import VerifyEmailPage from "./pages/VerifyEmailPage";
 import ProfilePage from "./pages/ProfilePage";
 
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60 * 1000 } },
+});
 
 // ログインしていない場合は /login にリダイレクトするラッパー
 function PrivateRoute({ children }: { children: React.ReactNode }) {
