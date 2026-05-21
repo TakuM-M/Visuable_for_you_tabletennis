@@ -18,11 +18,6 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return getToken() ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
-// スマートルート: ログイン済みなら /videos へ、未ログインなら LP を表示
-function RootRoute() {
-  return getToken() ? <Navigate to="/videos" replace /> : <LandingPage />;
-}
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -30,7 +25,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/" element={<RootRoute />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/videos" element={<PrivateRoute><VideoListPage /></PrivateRoute>} />
           <Route path="/videos/new" element={<PrivateRoute><VideoUploadPage /></PrivateRoute>} />

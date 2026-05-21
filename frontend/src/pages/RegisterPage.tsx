@@ -2,9 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { registerUsersPost } from "../api/generated";
+import { getToken } from "../lib/auth";
 
 // バリデーションルール
 const schema = z.object({
@@ -42,6 +43,8 @@ export default function RegisterPage() {
     setRegisterError(null);
     mutation.mutate(values);
   };
+
+  if (getToken()) return <Navigate to="/videos" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

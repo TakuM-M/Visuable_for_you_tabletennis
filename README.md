@@ -1,5 +1,5 @@
 # Visuable for You Table Tennis
--> https://visualize-tt.com/login
+-> https://visualize-tt.com/
 
 *卓球映像から選手のプレーシーンを自動検出，プレー間の不要な時間をカットする Web アプリケーション*
 

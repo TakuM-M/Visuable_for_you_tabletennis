@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import Logo from '../components/ui/Logo'
+import { getToken } from '../lib/auth'
 
 type LpCtaProps = {
   kind?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'inverted'
@@ -70,6 +71,9 @@ export function Eyebrow({ children, style }: { children: ReactNode; style?: CSSP
 }
 
 export function LpTopbar() {
+  const loggedIn = !!getToken()
+  const loginHref = loggedIn ? '/videos' : '/login'
+  const registerHref = loggedIn ? '/videos' : '/register'
   return (
     <div
       style={{
@@ -87,10 +91,10 @@ export function LpTopbar() {
     >
       <Logo />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <LpCta size="sm" kind="secondary" href="/login">
+        <LpCta size="sm" kind="secondary" href={loginHref}>
           ログイン
         </LpCta>
-        <LpCta size="sm" kind="primary" href="/register">
+        <LpCta size="sm" kind="primary" href={registerHref}>
           無料でβに登録
         </LpCta>
       </div>
@@ -99,6 +103,9 @@ export function LpTopbar() {
 }
 
 export function LpTopbarMobile() {
+  const loggedIn = !!getToken()
+  const loginHref = loggedIn ? '/videos' : '/login'
+  const registerHref = loggedIn ? '/videos' : '/register'
   return (
     <div
       style={{
@@ -116,10 +123,10 @@ export function LpTopbarMobile() {
     >
       <Logo />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <LpCta size="sm" kind="secondary" href="/login">
+        <LpCta size="sm" kind="secondary" href={loginHref}>
           ログイン
         </LpCta>
-        <LpCta size="sm" kind="primary" href="/register">
+        <LpCta size="sm" kind="primary" href={registerHref}>
           登録
         </LpCta>
       </div>

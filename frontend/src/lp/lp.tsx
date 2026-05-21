@@ -8,6 +8,7 @@ import {
   LpFooter,
   LpFooterMobile,
 } from './lp-content'
+import { getToken } from '../lib/auth'
 import type { CSSProperties } from 'react'
 
 const BALL = 'oklch(0.68 0.18 50)'
@@ -60,6 +61,7 @@ function NetRule({ style }: { style?: CSSProperties }) {
 }
 
 export function LpVariation() {
+  const registerHref = getToken() ? '/videos' : '/register'
   return (
     <div className="vsbl" style={{ background: 'var(--bg)', color: 'var(--fg)', minHeight: '100%' }}>
       <LpTopbar />
@@ -132,7 +134,7 @@ export function LpVariation() {
             {LP_HERO.sub}
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 36 }}>
-            <LpCta kind="primary" href="/register">
+            <LpCta kind="primary" href={registerHref}>
               {LP_HERO.cta_primary}
             </LpCta>
           </div>
@@ -276,6 +278,7 @@ export function LpVariation() {
 }
 
 export function LpVariationAMobile() {
+  const registerHref = getToken() ? '/videos' : '/register'
   return (
     <div className="vsbl" style={{ background: 'var(--bg)', color: 'var(--fg)', minHeight: '100%' }}>
       <LpTopbarMobile />
@@ -322,7 +325,7 @@ export function LpVariationAMobile() {
             {LP_HERO.sub}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
-            <LpCta kind="primary" href="/register" style={{ justifyContent: 'center' }}>
+            <LpCta kind="primary" href={registerHref} style={{ justifyContent: 'center' }}>
               {LP_HERO.cta_primary}
             </LpCta>
           </div>
