@@ -5,6 +5,7 @@
 
 ## インフラ / CI/CD
 - [ ] [CI/CDパイプライン構築](./tasks/chore-cicd-pipeline.md) - 重要度: 高
+- [ ] dockerについて，GPU割り当てによっては対応できていないPytorch version
 
 ## バックエンド
 <!-- 未完了タスクなし -->
