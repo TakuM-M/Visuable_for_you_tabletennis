@@ -72,7 +72,7 @@ async def run_mock_processing(job_id: str, video_path: str, callback_url: str) -
                 callback_url,
                 json={"job_id": job_id, "clips": clips},
                 headers=headers,
-                timeout=10.0,
+                timeout=30.0,
             )
             response.raise_for_status()
         print(f"コールバック送信完了 job_id={job_id} status={response.status_code} clips={len(clips)}件")

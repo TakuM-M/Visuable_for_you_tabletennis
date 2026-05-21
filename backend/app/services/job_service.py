@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.db.session import SessionLocal
 from app.models.job import JobStatus
 from app.models.notification_log import NotificationStatus
 from app.models.user import User
@@ -140,6 +141,23 @@ def retry_job(
     background_tasks.add_task(
         call_ml_service, video.storage_path, str(job.id), str(video.id)
     )
+
+
+def process_complete_job(
+    job_id: uuid.UUID,
+    clips: list[dict],
+) -> None:
+    """ML コールバックの背景タスクエントリポイント。
+
+    ルーターは即座に 202 を返し、本関数が自前 DB セッションを開いて
+    重い結合処理を担当する。例外は handle_ml_failure に委譲する。
+    """
+    with SessionLocal() as db:
+        try:
+            complete_job(db=db, job_id=job_id, clips=clips)
+        except Exception as e:
+            logger.exception("complete_job 失敗 job_id=%s: %s", job_id, e)
+            handle_ml_failure(db, job_id, f"完了処理失敗: {e}")
 
 
 def complete_job(

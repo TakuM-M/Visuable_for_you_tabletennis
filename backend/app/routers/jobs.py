@@ -69,14 +69,21 @@ class JobCompleteRequest(BaseModel):
     job_id: str
     clips: list[ClipData]
 
-@router.post("/internal/jobs/{job_id}/complete", dependencies=[Depends(require_internal_api_key)])
+@router.post(
+    "/internal/jobs/{job_id}/complete",
+    dependencies=[Depends(require_internal_api_key)],
+    status_code=202,
+)
 def complete_job(
     job_id: uuid.UUID,
     request: JobCompleteRequest,
-    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks,
 ) -> dict:
-    """MLサービスからの処理完了コールバック"""
+    """MLサービスからの処理完了コールバック。
+
+    重い結合処理は背景タスクへ委譲し、ML 側の read timeout を回避するため即 202 を返す。
+    """
     clips = [{"start_time": c.start_time, "end_time": c.end_time} for c in request.clips]
-    job_service.complete_job(db=db, job_id=job_id, clips=clips)
-    logger.info("ジョブ完了 job_id=%s clips=%s件", job_id, len(clips))
-    return {"message": "完了"}
+    background_tasks.add_task(job_service.process_complete_job, job_id, clips)
+    logger.info("ジョブ完了コールバック受信 job_id=%s clips=%s件", job_id, len(clips))
+    return {"message": "受付完了"}
