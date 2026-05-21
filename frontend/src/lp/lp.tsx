@@ -8,7 +8,6 @@ import {
   LpFooter,
   LpFooterMobile,
 } from './lp-content'
-import { IconChevR } from '../components/ui/Icons'
 import type { CSSProperties } from 'react'
 
 const BALL = 'oklch(0.68 0.18 50)'
@@ -60,7 +59,7 @@ function NetRule({ style }: { style?: CSSProperties }) {
   )
 }
 
-export function LpVariationA() {
+export function LpVariation() {
   return (
     <div className="vsbl" style={{ background: 'var(--bg)', color: 'var(--fg)', minHeight: '100%' }}>
       <LpTopbar />
@@ -103,7 +102,7 @@ export function LpVariationA() {
           }}
         />
 
-        <div style={{ position: 'relative', maxWidth: 880, margin: '0 auto' }}>
+        <div style={{ position: 'relative', maxWidth: 880, margin: '0 auto', padding: '0 48px' }}>
           <BallTrail style={{ margin: '0 auto 18px' }} />
           <Eyebrow style={{ marginBottom: 24 }}>{LP_HERO.eyebrow}</Eyebrow>
           <h1
@@ -136,11 +135,7 @@ export function LpVariationA() {
             <LpCta kind="primary" href="/register">
               {LP_HERO.cta_primary}
             </LpCta>
-            <LpCta kind="secondary" href="#how">
-              {LP_HERO.cta_secondary} <IconChevR size={14} />
-            </LpCta>
           </div>
-          <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--fg-4)' }}>{LP_HERO.meta}</div>
         </div>
 
         <div style={{ position: 'relative', maxWidth: 1200, margin: '72px auto 0', padding: '0 24px' }}>
@@ -154,7 +149,7 @@ export function LpVariationA() {
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <Eyebrow style={{ marginBottom: 12 }}>The problem</Eyebrow>
             <h2 style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', margin: 0 }}>
-              こんな悩み、ありませんか。
+              こんな悩み、ありませんか
             </h2>
             <NetRule style={{ maxWidth: 120, margin: '20px auto 0' }} />
           </div>
@@ -209,8 +204,8 @@ export function LpVariationA() {
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <div style={{ marginBottom: 56 }}>
             <Eyebrow style={{ marginBottom: 12 }}>How it works</Eyebrow>
-            <h2 style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, maxWidth: 720 }}>
-              撮って、上げる。あとは AI が、ラリーを切り出して並べます。
+            <h2 style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em', margin: 0, maxWidth: 1200, textAlign: 'center'}}>
+              撮影してアップロード、AI がラリーを自動検出して表示します
             </h2>
           </div>
           <div
@@ -330,12 +325,6 @@ export function LpVariationAMobile() {
             <LpCta kind="primary" href="/register" style={{ justifyContent: 'center' }}>
               {LP_HERO.cta_primary}
             </LpCta>
-            <LpCta kind="secondary" href="#how" style={{ justifyContent: 'center' }}>
-              {LP_HERO.cta_secondary}
-            </LpCta>
-          </div>
-          <div style={{ marginTop: 14, fontSize: 12, color: 'var(--fg-4)', textAlign: 'center' }}>
-            {LP_HERO.meta}
           </div>
           <div
             style={{

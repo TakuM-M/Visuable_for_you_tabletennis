@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import '../lp/dark.css'
-import { LpVariationA, LpVariationAMobile } from '../lp/lp'
+import { LpVariation, LpVariationAMobile } from '../lp/lp'
 
 export default function LandingPage() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
@@ -11,5 +11,5 @@ export default function LandingPage() {
     return () => window.removeEventListener('resize', fn)
   }, [])
 
-  return isMobile ? <LpVariationAMobile /> : <LpVariationA />
+  return isMobile ? <LpVariationAMobile /> : <LpVariation />
 }

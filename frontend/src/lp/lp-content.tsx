@@ -1,8 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { LP_NAV, LP_FAQS } from './lp-shared'
 import Logo from '../components/ui/Logo'
-import { IconPlus } from '../components/ui/Icons'
-import { useState } from 'react'
 
 type LpCtaProps = {
   kind?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'inverted'
@@ -89,26 +86,10 @@ export function LpTopbar() {
       }}
     >
       <Logo />
-      <nav style={{ display: 'flex', gap: 28 }}>
-        {LP_NAV.map((n) => (
-          <a
-            key={n.label}
-            href={n.anchor}
-            style={{
-              fontSize: 13.5,
-              color: 'var(--fg-2)',
-              textDecoration: 'none',
-              fontWeight: 450,
-            }}
-          >
-            {n.label}
-          </a>
-        ))}
-      </nav>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <a href="/login" style={{ fontSize: 13.5, color: 'var(--fg-2)', textDecoration: 'none' }}>
+        <LpCta size="sm" kind="secondary" href="/login">
           ログイン
-        </a>
+        </LpCta>
         <LpCta size="sm" kind="primary" href="/register">
           無料でβに登録
         </LpCta>
@@ -118,7 +99,6 @@ export function LpTopbar() {
 }
 
 export function LpTopbarMobile() {
-  const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div
       style={{
@@ -135,40 +115,65 @@ export function LpTopbarMobile() {
       }}
     >
       <Logo />
-      <button
-        onClick={() => setMenuOpen(!menuOpen)}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-          color: 'var(--fg-2)',
-        }}
-        aria-label="Menu"
-      >
-        <svg
-          width={20}
-          height={20}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 6h16M4 12h16M4 18h10" />
-        </svg>
-      </button>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <LpCta size="sm" kind="secondary" href="/login">
+          ログイン
+        </LpCta>
+        <LpCta size="sm" kind="primary" href="/register">
+          登録
+        </LpCta>
+      </div>
     </div>
   )
 }
 
 const MOCK_ROWS = [
-  { title: '練習試合 vs 田中さん', clips: 23, date: '05/18', done: true },
-  { title: '大会予選 第2ラウンド', clips: 17, date: '05/15', done: true },
-  { title: 'フォーム確認 バックハンド', clips: null, date: '05/12', done: false },
-  { title: 'ダブルス練習', clips: 31, date: '05/08', done: true },
+  { title: '練習試合 vs 田中さん', duration: 1523, status: 'completed', created_at: '2025-05-18' },
+  { title: '大会予選 第2ラウンド', duration: 2847, status: 'completed', created_at: '2025-05-15' },
+  { title: 'フォーム確認 バックハンド', duration: null, status: 'processing', created_at: '2025-05-12' },
+  { title: 'ダブルス練習', duration: 3156, status: 'completed', created_at: '2025-05-08' },
 ]
+
+function fmtDuration(seconds: number | null | undefined) {
+  if (seconds == null) return '—'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const STATUS_SPEC: Record<string, { dot: string; bg: string; fg: string; border: string; label: string; pulse?: boolean }> = {
+  completed:  { dot: 'var(--ok)',   bg: 'var(--ok-soft)',   fg: 'var(--ok-ink)',   border: 'color-mix(in oklab, var(--ok-ink) 15%, transparent)',   label: '完了' },
+  processing: { dot: 'var(--warn)', bg: 'var(--warn-soft)', fg: 'var(--warn-ink)', border: 'color-mix(in oklab, var(--warn-ink) 15%, transparent)', label: '処理中', pulse: true },
+  queued:     { dot: 'var(--warn)', bg: 'var(--warn-soft)', fg: 'var(--warn-ink)', border: 'color-mix(in oklab, var(--warn-ink) 15%, transparent)', label: '処理待ち' },
+  failed:     { dot: 'var(--err)',  bg: 'var(--err-soft)',  fg: 'var(--err-ink)',  border: 'color-mix(in oklab, var(--err-ink) 15%, transparent)',  label: '失敗' },
+}
+
+function StatusBadgeMock({ status }: { status: string }) {
+  const s = STATUS_SPEC[status] ?? STATUS_SPEC.completed
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '2px 8px',
+        borderRadius: 999,
+        border: `1px solid ${s.border}`,
+        background: s.bg,
+        color: s.fg,
+        fontSize: 11,
+        fontWeight: 500,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        className={s.pulse ? 'animate-pulseDot' : undefined}
+        style={{ width: 6, height: 6, borderRadius: 999, background: s.dot, color: s.dot }}
+      />
+      {s.label}
+    </span>
+  )
+}
 
 export function AppPreview({ height = 520 }: { height?: number }) {
   return (
@@ -181,6 +186,8 @@ export function AppPreview({ height = 520 }: { height?: number }) {
         boxShadow:
           '0 24px 60px -24px color-mix(in oklab, var(--fg) 22%, transparent), 0 2px 6px color-mix(in oklab, var(--fg) 8%, transparent)',
         height,
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* fake titlebar */}
@@ -193,6 +200,7 @@ export function AppPreview({ height = 520 }: { height?: number }) {
           alignItems: 'center',
           gap: 6,
           padding: '0 12px',
+          flexShrink: 0,
         }}
       >
         <span style={{ width: 9, height: 9, borderRadius: 99, background: 'oklch(0.85 0.04 30)' }} />
@@ -209,31 +217,187 @@ export function AppPreview({ height = 520 }: { height?: number }) {
           visuable.app/videos
         </span>
       </div>
-      <div style={{ height: height - 30, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {/* Mock video list */}
-        <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* AppShell — row 1 (brand / search / avatar) */}
+        <div
+          style={{
+            height: 42,
+            flexShrink: 0,
+            background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            padding: '0 16px',
+          }}
+        >
+          <Logo />
+          <span style={{ width: 1, height: 16, background: 'var(--border)' }} />
+          <div style={{ flex: 1 }} />
+          <div
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 999,
+              background: 'var(--accent-soft)',
+              color: 'var(--accent-ink)',
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 10.5,
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+            }}
+          >
+            TM
+          </div>
+        </div>
+
+        {/* AppShell — row 2 (tabs) */}
+        <div
+          style={{
+            height: 38,
+            flexShrink: 0,
+            background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'stretch',
+            gap: 22,
+            padding: '0 16px',
+          }}
+        >
+          {[
+            { label: '動画一覧', active: true },
+            { label: 'アップロード', active: false },
+            { label: 'プロフィール', active: false },
+          ].map((t, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: 12,
+                fontWeight: t.active ? 500 : 400,
+                color: t.active ? 'var(--fg)' : 'var(--fg-2)',
+                borderBottom: t.active ? '2px solid var(--fg)' : '2px solid transparent',
+              }}
+            >
+              {t.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Page header */}
+        <div
+          style={{
+            padding: '14px 16px',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+              Library
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>動画一覧</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>{MOCK_ROWS.length}件</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '5px 10px',
+                borderRadius: 6,
+                border: '1px solid var(--border-strong)',
+                background: 'transparent',
+                color: 'var(--fg)',
+                fontSize: 11.5,
+                fontWeight: 500,
+              }}
+            >
+              絞り込み
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '5px 10px',
+                borderRadius: 6,
+                background: 'var(--fg)',
+                color: 'var(--bg)',
+                fontSize: 11.5,
+                fontWeight: 500,
+              }}
+            >
+              + 動画を追加
+            </span>
+          </div>
+        </div>
+
+        {/* Table header */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 100px 100px 100px',
+            gap: 0,
+            padding: '0 16px',
+            borderBottom: '1px solid var(--border)',
+            height: 28,
+            alignItems: 'center',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--fg-4)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            flexShrink: 0,
+          }}
+        >
+          <span>タイトル</span>
+          <span style={{ textAlign: 'right' }}>再生時間</span>
+          <span style={{ textAlign: 'right' }}>状態</span>
+          <span style={{ textAlign: 'right' }}>アップロード</span>
+        </div>
+
+        {/* Rows */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
           {MOCK_ROWS.map((row, i) => (
             <div
               key={i}
               style={{
-                padding: '12px 14px',
+                display: 'grid',
+                gridTemplateColumns: '1fr 100px 100px 100px',
+                gap: 0,
+                padding: '8px 16px',
                 borderBottom: '1px solid var(--border)',
-                fontSize: 13,
-                color: 'var(--fg)',
-                display: 'flex',
-                justifyContent: 'space-between',
                 alignItems: 'center',
+                fontSize: 12,
+                color: 'var(--fg)',
               }}
             >
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500, marginBottom: 2 }}>{row.title}</div>
-                <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{row.date}</div>
+              <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="stripes" style={{ width: 32, height: 20, flexShrink: 0, borderRadius: 3 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.title}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-4)', marginTop: 2 }}>
+                    MP4
+                  </div>
+                </div>
               </div>
-              {row.done ? (
-                <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>{row.clips} シーン</div>
-              ) : (
-                <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>処理中…</div>
-              )}
+              <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-2)' }}>
+                {fmtDuration(row.duration)}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <StatusBadgeMock status={row.status} />
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 11, color: 'var(--fg-3)' }}>
+                {row.created_at}
+              </div>
             </div>
           ))}
         </div>
@@ -269,65 +433,6 @@ export function StatRow({ items, style }: { items: Array<{ v: string | number; k
           >
             {it.k}
           </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export function FaqList({ alwaysOpen = false }: { alwaysOpen?: boolean }) {
-  const [open, setOpen] = useState<Set<number>>(alwaysOpen ? new Set([0, 1, 2, 3, 4]) : new Set([0]))
-
-  const toggle = (i: number) => {
-    const n = new Set(open)
-    n.has(i) ? n.delete(i) : n.add(i)
-    setOpen(n)
-  }
-
-  return (
-    <div style={{ borderTop: '1px solid var(--border)' }}>
-      {LP_FAQS.map((f, i) => (
-        <div key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-          <button
-            onClick={() => toggle(i)}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              width: '100%',
-              padding: '20px 4px',
-              background: 'transparent',
-              border: 0,
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontFamily: 'inherit',
-            }}
-          >
-            <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--fg)', letterSpacing: '-0.005em' }}>
-              {f.q}
-            </span>
-            <IconPlus
-              size={16}
-              style={{
-                color: 'var(--fg-3)',
-                transition: 'transform 200ms',
-                transform: open.has(i) ? 'rotate(45deg)' : 'rotate(0)',
-              }}
-            />
-          </button>
-          {open.has(i) && (
-            <div
-              style={{
-                padding: '0 4px 22px',
-                fontSize: 14.5,
-                color: 'var(--fg-2)',
-                lineHeight: 1.7,
-                maxWidth: '70ch',
-              }}
-            >
-              {f.a}
-            </div>
-          )}
         </div>
       ))}
     </div>
