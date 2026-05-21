@@ -32,9 +32,9 @@ export default function Logo({ size = 22, withLabel = true, className = "" }: Pr
       </div>
       {withLabel && (
         <div className="leading-[1.05]">
-          <div className="text-[14px] font-semibold tracking-[-0.01em]">Visuable</div>
+          <div className="text-[14px] font-semibold tracking-[-0.01em]">VisuableForYou</div>
           <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-fg-3">
-            for tabletennis
+            tabletennis
           </div>
         </div>
       )}

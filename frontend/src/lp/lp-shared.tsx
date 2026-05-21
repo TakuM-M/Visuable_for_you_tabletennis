@@ -29,7 +29,7 @@ export const LP_PAINS = [
 export const LP_HOW = [
   {
     num: "01",
-    title: "撮って、上げる",
+    title: "動画をアップロード",
     body: "三脚や固定カメラで撮った試合・練習動画をそのままアップロード。",
     caption: "MP4 / MOV / 1080p~",
   },

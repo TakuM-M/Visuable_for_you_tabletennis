@@ -482,7 +482,6 @@ export function LpFooter() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <Logo />
         </div>
         <div
           style={{
@@ -496,11 +495,10 @@ export function LpFooter() {
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: 999, background: BALL }} />
-          <span>© 2025 VISUABLE, INC.</span>
           <span style={{ color: 'var(--border-strong)' }}>/</span>
           <span>TOKYO, JAPAN</span>
           <span style={{ color: 'var(--border-strong)' }}>/</span>
-          <span>v0.4.2-BETA</span>
+          <span>v1.0.0-BETA</span>
         </div>
       </div>
     </footer>
@@ -539,7 +537,6 @@ export function LpFooterMobile() {
           position: 'relative',
         }}
       >
-        <Logo />
         <div
           style={{
             display: 'flex',
@@ -553,11 +550,10 @@ export function LpFooterMobile() {
           }}
         >
           <span style={{ width: 6, height: 6, borderRadius: 999, background: BALL }} />
-          <span>© 2025 VISUABLE, INC.</span>
           <span style={{ color: 'var(--border-strong)' }}>/</span>
           <span>TOKYO</span>
           <span style={{ color: 'var(--border-strong)' }}>/</span>
-          <span>v0.4.2-BETA</span>
+          <span>v1.0.0-BETA</span>
         </div>
       </div>
     </footer>

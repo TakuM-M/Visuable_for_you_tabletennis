@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { getMeUsersMeGet } from "../../api/generated";
 import { authHeaders } from "../../lib/auth";
 import Logo from "../ui/Logo";
-import { IconSearch } from "../ui/Icons";
 
 type Props = { children: ReactNode };
 
@@ -37,20 +36,6 @@ export default function AppShell({ children }: Props) {
           <Link to="/videos" className="no-underline text-fg">
             <Logo />
           </Link>
-
-          <div className="hidden h-[18px] w-px bg-border md:block" />
-
-          <div className="relative hidden w-[280px] md:block">
-            <IconSearch
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-[9px] text-fg-4"
-            />
-            <input
-              readOnly
-              placeholder="動画を検索…"
-              className="w-full rounded-md border border-border bg-subtle py-[7px] pl-8 pr-3 text-[12.5px] text-fg-3 outline-none placeholder:text-fg-4 focus:border-accent focus:bg-surface focus:text-fg"
-            />
-          </div>
 
           <div className="flex-1" />
 
