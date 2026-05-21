@@ -9,7 +9,7 @@ import { IconSearch } from "../ui/Icons";
 type Props = { children: ReactNode };
 
 const TABS = [
-  { to: "/",            label: "動画一覧",       match: (p: string) => p === "/" || (p.startsWith("/videos") && p !== "/videos/new") },
+  { to: "/videos",      label: "動画一覧",       match: (p: string) => p.startsWith("/videos") && p !== "/videos/new" },
   { to: "/videos/new",  label: "アップロード",   match: (p: string) => p === "/videos/new" },
   { to: "/profile",     label: "プロフィール",   match: (p: string) => p === "/profile" },
 ];
@@ -34,7 +34,7 @@ export default function AppShell({ children }: Props) {
       <header className="bg-surface border-b border-border">
         {/* Row 1 — brand, search, primary actions */}
         <div className="flex h-[52px] items-center gap-6 px-6">
-          <Link to="/" className="no-underline text-fg">
+          <Link to="/videos" className="no-underline text-fg">
             <Logo />
           </Link>
 

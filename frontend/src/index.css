@@ -47,11 +47,40 @@
   --font-mono: "Geist Mono", ui-monospace, monospace;
 }
 
+:root {
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --subtle: var(--color-subtle);
+  --subtle-2: var(--color-subtle-2);
+  --hover: var(--color-hover);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --fg: var(--color-fg);
+  --fg-2: var(--color-fg-2);
+  --fg-3: var(--color-fg-3);
+  --fg-4: var(--color-fg-4);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --accent-ink: var(--color-accent-ink);
+  --ok: var(--color-ok);
+  --ok-soft: var(--color-ok-soft);
+  --ok-ink: var(--color-ok-ink);
+  --warn: var(--color-warn);
+  --warn-soft: var(--color-warn-soft);
+  --warn-ink: var(--color-warn-ink);
+  --err: var(--color-err);
+  --err-soft: var(--color-err-soft);
+  --err-ink: var(--color-err-ink);
+  --ball: var(--color-ball);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
 html, body, #root { height: 100%; }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-fg);
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
   letter-spacing: -0.005em;
