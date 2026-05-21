@@ -1,0 +1,40 @@
+/* Dark theme override — switched via `data-theme="dark"` on document root */
+
+:root[data-theme="dark"] {
+  --bg:          oklch(0.13 0.005 250);
+  --surface:    oklch(0.165 0.006 250);
+  --subtle:     oklch(0.19 0.006 250);
+  --subtle-2:   oklch(0.225 0.007 250);
+  --hover:      oklch(0.25 0.008 250);
+
+  --border:     oklch(0.275 0.008 250);
+  --border-strong: oklch(0.36 0.01 250);
+
+  --fg:         oklch(0.96 0.005 250);
+  --fg-2:       oklch(0.82 0.008 250);
+  --fg-3:       oklch(0.62 0.012 250);
+  --fg-4:       oklch(0.48 0.012 250);
+
+  --accent:     oklch(0.72 0.14 262);
+  --accent-2:   oklch(0.78 0.12 262);
+  --accent-soft: oklch(0.28 0.07 262);
+  --accent-ink: oklch(0.82 0.10 262);
+
+  --ok:         oklch(0.72 0.13 152);
+  --ok-soft:    oklch(0.28 0.06 152);
+  --warn:       oklch(0.78 0.13 75);
+  --warn-soft:  oklch(0.30 0.07 75);
+  --err:        oklch(0.68 0.18 27);
+  --err-soft:   oklch(0.30 0.07 27);
+}
+
+/* Striped placeholder needs dark-mode friendly colors */
+:root[data-theme="dark"] .vsbl-stripes {
+  background-color: oklch(0.22 0.006 250);
+  background-image: repeating-linear-gradient(
+    135deg,
+    oklch(0.24 0.006 250) 0 8px,
+    oklch(0.20 0.006 250) 8px 16px
+  );
+  color: var(--fg-3);
+}

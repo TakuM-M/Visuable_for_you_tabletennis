@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { getToken } from "./lib/auth";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import LandingPage from "./pages/LandingPage";
 import VideoListPage from "./pages/VideoListPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
 import VideoUploadPage from "./pages/VideoUploadPage";
@@ -17,6 +18,11 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return getToken() ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+// スマートルート: ログイン済みなら /videos へ、未ログインなら LP を表示
+function RootRoute() {
+  return getToken() ? <Navigate to="/videos" replace /> : <LandingPage />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -24,15 +30,9 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route
-            path="/"
-            element={
-              <PrivateRoute>
-                <VideoListPage />
-              </PrivateRoute>
-            }
-          />
+          <Route path="/" element={<RootRoute />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/videos" element={<PrivateRoute><VideoListPage /></PrivateRoute>} />
           <Route path="/videos/new" element={<PrivateRoute><VideoUploadPage /></PrivateRoute>} />
           <Route path="/videos/:id" element={<PrivateRoute><VideoDetailPage /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
