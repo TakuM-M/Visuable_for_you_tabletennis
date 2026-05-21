@@ -1,5 +1,7 @@
 import uuid
+from datetime import datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.video import Video, VideoStatus
@@ -10,11 +12,13 @@ def create(
     user_id: uuid.UUID,
     title: str,
     storage_path: str,
+    duration: float | None = None,
 ) -> Video:
     video = Video(
         user_id=user_id,
         title=title,
         storage_path=storage_path,
+        duration=duration,
     )
     db.add(video)
     db.commit()
@@ -28,6 +32,17 @@ def get_by_id(db: Session, video_id: uuid.UUID) -> Video | None:
 
 def get_by_user_id(db: Session, user_id: uuid.UUID) -> list[Video]:
     return db.query(Video).filter(Video.user_id == user_id).all()
+
+
+def count_by_user_id(db: Session, user_id: uuid.UUID) -> int:
+    return (
+        db.query(func.count(Video.id)).filter(Video.user_id == user_id).scalar() or 0
+    )
+
+
+def get_expired(db: Session, threshold: datetime) -> list[Video]:
+    """created_at が threshold より古い動画を返す"""
+    return db.query(Video).filter(Video.created_at < threshold).all()
 
 
 def update_status(
@@ -52,6 +67,19 @@ def update_output_path(
     if video is None:
         return None
     video.output_path = output_path
+    db.commit()
+    db.refresh(video)
+    return video
+
+def update_duration(
+    db: Session,
+    video_id: uuid.UUID,
+    duration: float,
+) -> Video | None:
+    video = get_by_id(db, video_id)
+    if video is None:
+        return None
+    video.duration = duration
     db.commit()
     db.refresh(video)
     return video

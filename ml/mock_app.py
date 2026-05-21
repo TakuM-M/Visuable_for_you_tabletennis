@@ -6,6 +6,7 @@
 動画のカット・結合はバックエンドが行う。
 """
 import asyncio
+import os
 import subprocess
 
 import httpx
@@ -22,7 +23,7 @@ class ProcessRequest(BaseModel):
 
 
 def get_video_duration(video_path: str) -> float:
-    """ffprobeで動画の長さ（秒）を取得する"""
+    """ffprobeで動画の長さ（秒）を取得する（ローカルパス・HTTP URL両対応）"""
     result = subprocess.run(
         [
             "ffprobe", "-v", "error",
@@ -32,8 +33,10 @@ def get_video_duration(video_path: str) -> float:
         ],
         capture_output=True,
         text=True,
-        check=True,
+        timeout=120,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {result.stderr}")
     return float(result.stdout.strip())
 
 
@@ -59,13 +62,20 @@ async def run_mock_processing(job_id: str, video_path: str, callback_url: str) -
     ]
 
     try:
+        headers = {}
+        api_key = os.getenv("INTERNAL_API_KEY")
+        if api_key:
+            headers["X-Internal-Api-Key"] = api_key
+
         async with httpx.AsyncClient() as client:
-            await client.post(
+            response = await client.post(
                 callback_url,
                 json={"job_id": job_id, "clips": clips},
-                timeout=10.0,
+                headers=headers,
+                timeout=30.0,
             )
-        print(f"コールバック送信完了 job_id={job_id} clips={len(clips)}件")
+            response.raise_for_status()
+        print(f"コールバック送信完了 job_id={job_id} status={response.status_code} clips={len(clips)}件")
     except Exception as e:
         print(f"コールバック送信失敗 job_id={job_id}: {e}")
 

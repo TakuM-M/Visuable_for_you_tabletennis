@@ -1,29 +1,48 @@
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { chunkedUpload } from "../lib/chunkedUpload";
+import AppShell from "../components/layout/AppShell";
+import Button from "../components/ui/Button";
+import Stripes from "../components/ui/Stripes";
+import { IconChevL, IconClose, IconUpload } from "../components/ui/Icons";
 
 const schema = z.object({
   title: z.string().min(1, "タイトルを入力してください"),
-  file: z.instanceof(FileList).refine(
-    (files) => files.length > 0,
-    "動画ファイルを選択してください"
-  ),
+  file: z
+    .custom<FileList>(
+      (v) => typeof FileList !== "undefined" && v instanceof FileList,
+      "動画ファイルを選択してください"
+    )
+    .refine((files) => files.length > 0, "動画ファイルを選択してください"),
 });
 
 type FormValues = z.infer<typeof schema>;
 
+const ACCEPT = "video/mp4,video/quicktime,video/x-matroska";
+
 export default function VideoUploadPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [progress, setProgress] = useState<number | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-  });
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    resetField,
+    watch,
+    formState: { errors },
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const fileRegister = register("file");
+  const titleValue = watch("title");
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
@@ -37,12 +56,11 @@ export default function VideoUploadPage() {
         signal: controller.signal,
       });
     },
-    onSuccess: () => {
-      navigate("/");
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["videos"] });
+      navigate(`/videos/${data.id}`);
     },
-    onError: () => {
-      setProgress(null);
-    },
+    onError: () => setProgress(null),
   });
 
   const handleCancel = () => {
@@ -51,88 +69,217 @@ export default function VideoUploadPage() {
     setProgress(null);
   };
 
+  const onFileChange = (files: FileList | null) => {
+    if (!files?.length) return;
+    const file = files[0];
+    setSelectedFile(file);
+    if (!titleValue) {
+      const stem = file.name.replace(/\.[^.]+$/, "");
+      setValue("title", stem);
+    }
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    onFileChange(e.dataTransfer.files);
+  };
+
+  const onClear = () => {
+    setSelectedFile(null);
+    resetField("file");
+  };
+
+  const isUploading = mutation.isPending;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow">
-        <h1 className="mb-6 text-2xl font-bold text-gray-800">動画アップロード</h1>
-
-        <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              タイトル
-            </label>
-            <input
-              {...register("title")}
-              type="text"
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.title && (
-              <p className="mt-1 text-sm text-red-500">{errors.title.message}</p>
-            )}
+    <AppShell>
+      <div className="scroll-thin h-full overflow-auto">
+        <div className="mx-auto max-w-[760px] px-8 pt-8 pb-16">
+          <div className="mb-6">
+            <div className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-fg-4">
+              New upload
+            </div>
+            <h1 className="m-0 text-[22px] font-semibold tracking-[-0.015em]">
+              動画をアップロード
+            </h1>
+            <p className="mt-1.5 text-[13px] leading-[1.6] text-fg-3">
+              MP4 / MOV 形式に対応。アップロード後、自動でプレーシーンを抽出します。
+            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              動画ファイル
-            </label>
-            <input
-              {...register("file")}
-              type="file"
-              accept="video/*"
-              className="mt-1 w-full text-sm"
-            />
-            {errors.file && (
-              <p className="mt-1 text-sm text-red-500">{errors.file.message}</p>
-            )}
-          </div>
+          <form
+            onSubmit={handleSubmit((d) => mutation.mutate(d))}
+            className="flex flex-col gap-5"
+          >
+            {/* Title */}
+            <Field
+              label="タイトル"
+              hint="例: 練習試合_2025-05-12 vs 田中"
+              error={errors.title?.message}
+            >
+              <input
+                {...register("title")}
+                type="text"
+                placeholder="動画タイトルを入力"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13.5px] outline-none focus:border-accent"
+                disabled={isUploading}
+              />
+            </Field>
 
-          {progress !== null && (
-            <div>
-              <div className="mb-1 flex justify-between text-sm text-gray-600">
-                <span>アップロード中...</span>
-                <span>{progress}%</span>
+            {/* File */}
+            <Field
+              label="動画ファイル"
+              hint="MP4 / MOV / MKV · 最大 5GB"
+              error={errors.file?.message as string | undefined}
+            >
+              {selectedFile ? (
+                <div className="flex items-center gap-3 rounded-[10px] border border-border bg-surface p-3">
+                  <div className="h-10 w-16 flex-none overflow-hidden rounded-md">
+                    <Stripes />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-medium">
+                      {selectedFile.name}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-fg-4">
+                      {formatBytes(selectedFile.size)}
+                    </div>
+                  </div>
+                  {!isUploading && (
+                    <button
+                      type="button"
+                      onClick={onClear}
+                      className="bg-transparent p-1.5 text-fg-3 hover:text-fg"
+                      aria-label="ファイルをクリア"
+                    >
+                      <IconClose size={14} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <label
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={onDrop}
+                  className={`
+                    block cursor-pointer rounded-[10px] border-[1.5px] border-dashed px-5 py-8 text-center transition-colors
+                    ${isDragging
+                      ? "border-accent bg-accent-soft"
+                      : "border-border-strong bg-subtle hover:bg-subtle-2"}
+                  `}
+                >
+                  <input
+                    type="file"
+                    name={fileRegister.name}
+                    ref={fileRegister.ref}
+                    accept={ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      fileRegister.onChange(e);
+                      onFileChange(e.target.files);
+                    }}
+                  />
+                  <div className="mx-auto grid h-9 w-9 place-items-center rounded-lg border border-border bg-surface text-fg-2">
+                    <IconUpload size={16} />
+                  </div>
+                  <div className="mt-3 text-[13.5px] font-medium">
+                    ファイルをドロップ <span className="font-normal text-fg-3">または</span>{" "}
+                    <span className="text-accent">選択</span>
+                  </div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-fg-4">
+                    MP4 / MOV / MKV · 最大 5GB
+                  </div>
+                </label>
+              )}
+            </Field>
+
+            {/* Progress */}
+            {progress !== null && (
+              <div className="rounded-[10px] border border-accent-ink/30 bg-accent-soft p-3.5">
+                <div className="mb-2 flex justify-between">
+                  <span className="text-[12.5px] font-medium text-accent-ink">
+                    アップロード中...
+                  </span>
+                  <span className="font-mono text-[11.5px] text-accent-ink">
+                    {progress}%
+                  </span>
+                </div>
+                <div className="h-1 overflow-hidden rounded-full bg-white/60">
+                  <div
+                    className="h-full rounded-full bg-accent transition-[width] duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2 w-full rounded-full bg-gray-200">
-                <div
-                  className="h-2 rounded-full bg-blue-600 transition-all"
-                  style={{ width: `${progress}%` }}
-                />
+            )}
+
+            {mutation.isError && (
+              <p className="text-[12.5px] text-err">
+                アップロードに失敗しました。もう一度お試しください。
+              </p>
+            )}
+
+            {/* Actions */}
+            <div className="mt-1 flex items-center justify-between">
+              <Button
+                type="button"
+                kind="ghost"
+                size="sm"
+                onClick={() => navigate("/")}
+                disabled={isUploading}
+              >
+                <IconChevL size={13} /> 一覧に戻る
+              </Button>
+              <div className="flex gap-2">
+                {isUploading && (
+                  <Button type="button" kind="secondary" size="sm" onClick={handleCancel}>
+                    キャンセル
+                  </Button>
+                )}
+                <Button type="submit" kind="primary" size="sm" disabled={isUploading}>
+                  {isUploading ? "アップロード中..." : "アップロードを開始"}
+                </Button>
               </div>
             </div>
-          )}
-
-          {mutation.isError && (
-            <p className="text-sm text-red-500">
-              アップロードに失敗しました。もう一度お試しください。
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="w-full rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? "アップロード中..." : "アップロード"}
-          </button>
-
-          {mutation.isPending && (
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="w-full rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
-            >
-              キャンセル
-            </button>
-          )}
-        </form>
-
-        <button
-          onClick={() => navigate("/")}
-          className="mt-4 w-full text-center text-sm text-gray-500 hover:underline"
-        >
-          ← 一覧に戻る
-        </button>
+          </form>
+        </div>
       </div>
+    </AppShell>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between">
+        <label className="text-[12.5px] font-medium">{label}</label>
+        {hint && (
+          <span className="font-mono text-[10.5px] text-fg-4">{hint}</span>
+        )}
+      </div>
+      {children}
+      {error && <p className="text-[11.5px] text-err">{error}</p>}
     </div>
   );
+}
+
+function formatBytes(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }

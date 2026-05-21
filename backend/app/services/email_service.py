@@ -1,6 +1,10 @@
 import os
 import resend
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 resend.api_key = os.getenv("RESEND_API_KEY", "")
 FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 
@@ -24,5 +28,31 @@ def send_clip_completion_email(
         })
         return True
     except Exception as e:
-        print(f"メール送信失敗: {e}")
+        logger.exception("メール送信失敗: %s", e)
+        return False
+
+
+def send_clip_failure_email(
+    to_email: str,
+    video_title: str,
+    video_url: str,
+    error_message: str,
+) -> bool:
+    """切り抜き失敗（自動リトライ枠を使い切った最終失敗時）にメールを送信する"""
+    try:
+        resend.Emails.send({
+            "from": FROM_EMAIL,
+            "to": to_email,
+            "subject": f"【{video_title}】の解析に失敗しました",
+            "html": f"""
+                <h2>解析に失敗しました</h2>
+                <p>「{video_title}」の解析を試みましたが、自動リトライを含めて失敗しました。</p>
+                <p>動画の詳細画面から「再実行」ボタンで再度お試しいただけます。</p>
+                <p><a href="{video_url}">動画を確認する</a></p>
+                <p style="color:#888;font-size:12px;">エラー: {error_message}</p>
+            """,
+        })
+        return True
+    except Exception as e:
+        logger.exception("失敗通知メール送信失敗: %s", e)
         return False

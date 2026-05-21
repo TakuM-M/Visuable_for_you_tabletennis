@@ -149,12 +149,19 @@ def handler(job: dict) -> dict:
     print(f"推論完了 job_id={job_id}, scenes={len(scenes)}")
 
     try:
-        httpx.post(
+        headers = {}
+        api_key = os.getenv("INTERNAL_API_KEY")
+        if api_key:
+            headers["X-Internal-Api-Key"] = api_key
+
+        response = httpx.post(
             callback_url,
             json={"job_id": job_id, "clips": clips},
+            headers=headers,
             timeout=10.0,
         )
-        print(f"コールバック送信完了 job_id={job_id}")
+        response.raise_for_status()
+        print(f"コールバック送信完了 job_id={job_id} status={response.status_code}")
     except Exception as e:
         print(f"コールバック送信失敗 job_id={job_id}: {e}")
 

@@ -2,10 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { loginAuthLoginPost } from "../api/generated";
-import { setToken } from "../lib/auth";
+import { getToken, setToken } from "../lib/auth";
 
 // バリデーションルール（Zod v4 の書き方）
 const schema = z.object({
@@ -33,7 +33,7 @@ export default function LoginPage() {
         onSuccess: (res:any) => {
           if (res.status === 200) {
             setToken(res.data.access_token);
-            navigate("/");
+            navigate("/videos");
           } else if (res.status === 403) {
             setErrorMessage("メール認証が完了していません。届いたメールを確認してください。");
           } else {
@@ -50,6 +50,8 @@ export default function LoginPage() {
     setSuccessMessage(null);  // ← 追加
     mutation.mutate(values);
   };
+
+  if (getToken()) return <Navigate to="/videos" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
