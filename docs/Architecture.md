@@ -48,7 +48,3 @@
 | **pytest** | Pythonテストフレームワーク |
 | **Orval** | OpenAPIからTypeScriptクライアント生成 |
 | **Nginx** | リバースプロキシ・静的ファイル配信 |
-
-## アーキテクチャ
-```mermaid
-```
