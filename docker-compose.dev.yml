@@ -33,6 +33,9 @@ services:
     container_name: tabletennis-backend
     restart: unless-stopped
     env_file: .env.dev
+    # 起動時に必ず最新マイグレーションを適用してから uvicorn を起動する
+    # （postgres は depends_on の service_healthy で準備完了を担保済み）
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
     depends_on:
       postgres:
         condition: service_healthy
