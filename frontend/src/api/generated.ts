@@ -38,6 +38,9 @@ export interface ChunkUploadInitResponse {
   upload_id: string;
 }
 
+/**
+ * MLサービスが返す1シーンの区間（秒）
+ */
 export interface ClipData {
   start_time: number;
   end_time: number;
@@ -66,8 +69,12 @@ export interface HTTPValidationError {
   detail?: ValidationError[];
 }
 
+/**
+ * MLサービスからの処理完了コールバックのリクエストボディ。
+
+job_id はパスパラメータで受け取るためボディには持たない。
+ */
 export interface JobCompleteRequest {
-  job_id: string;
   clips: ClipData[];
 }
 
@@ -145,6 +152,17 @@ export interface UserUpdate {
   password?: string | null;
 }
 
+/**
+ * 連結済み動画の取得用レスポンス。
+
+R2 の presigned URL（短命・推測不可）を返し、フロントは <video src> /
+ダウンロード href にこの URL を直接セットする。認可はこのエンドポイントで
+行い、バイト本体は R2 から直接配信する。
+ */
+export interface VideoOutputResponse {
+  url: string;
+}
+
 export type VideoStatus = typeof VideoStatus[keyof typeof VideoStatus];
 
 
@@ -179,7 +197,7 @@ export type ChunkUploadVideosUploadUploadIdChunkPostParams = {
 index: number;
 };
 
-export type CompleteJobInternalJobsJobIdCompletePost200 = { [key: string]: unknown };
+export type CompleteJobInternalJobsJobIdCompletePost202 = { [key: string]: unknown };
 
 export type HealthHealthGet200 = { [key: string]: unknown };
 
@@ -494,7 +512,12 @@ export const listVideosVideosGet = async ( options?: RequestInit): Promise<listV
 
 
 /**
- * 動画アップロード
+ * 動画アップロード（単一リクエスト）
+
+NOTE: 現在フロントエンドからは未使用。フロントは大容量対応のためチャンク
+アップロード（/videos/upload/init|chunk|complete、frontend/src/lib/chunkedUpload.ts）
+を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
+自分の current_user.id で作成するため所有者チェックは不要。
  * @summary Upload Video
  */
 export type uploadVideoVideosPostResponse201 = {
@@ -812,11 +835,14 @@ export const deleteVideoVideosVideoIdDelete = async (videoId: string, options?: 
 
 
 /**
- * 連結済み動画のPresigned URLへリダイレクトする
+ * 連結済み動画の presigned URL を返す。
+
+認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+presigned URL でフロントが R2 から直接取得する。
  * @summary Get Output Video
  */
 export type getOutputVideoVideosVideoIdOutputGetResponse200 = {
-  data: unknown
+  data: VideoOutputResponse
   status: 200
 }
 
@@ -857,56 +883,6 @@ export const getOutputVideoVideosVideoIdOutputGet = async (videoId: string, opti
   
   const data: getOutputVideoVideosVideoIdOutputGetResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as getOutputVideoVideosVideoIdOutputGetResponse
-}
-  
-
-
-/**
- * ジョブ詳細取得
- * @summary Get Job
- */
-export type getJobJobsJobIdGetResponse200 = {
-  data: JobResponse
-  status: 200
-}
-
-export type getJobJobsJobIdGetResponse422 = {
-  data: HTTPValidationError
-  status: 422
-}
-
-export type getJobJobsJobIdGetResponseSuccess = (getJobJobsJobIdGetResponse200) & {
-  headers: Headers;
-};
-export type getJobJobsJobIdGetResponseError = (getJobJobsJobIdGetResponse422) & {
-  headers: Headers;
-};
-
-export type getJobJobsJobIdGetResponse = (getJobJobsJobIdGetResponseSuccess | getJobJobsJobIdGetResponseError)
-
-export const getGetJobJobsJobIdGetUrl = (jobId: string,) => {
-
-
-  
-
-  return `/api/jobs/${jobId}`
-}
-
-export const getJobJobsJobIdGet = async (jobId: string, options?: RequestInit): Promise<getJobJobsJobIdGetResponse> => {
-  
-  const res = await fetch(getGetJobJobsJobIdGetUrl(jobId),
-  {      
-    ...options,
-    method: 'GET'
-    
-    
-  }
-)
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-  
-  const data: getJobJobsJobIdGetResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getJobJobsJobIdGetResponse
 }
   
 
@@ -1012,12 +988,14 @@ export const retryJobJobsJobIdRetryPost = async (jobId: string, options?: Reques
 
 
 /**
- * MLサービスからの処理完了コールバック
+ * MLサービスからの処理完了コールバック。
+
+重い結合処理は背景タスクへ委譲し、ML 側の read timeout を回避するため即 202 を返す。
  * @summary Complete Job
  */
-export type completeJobInternalJobsJobIdCompletePostResponse200 = {
-  data: CompleteJobInternalJobsJobIdCompletePost200
-  status: 200
+export type completeJobInternalJobsJobIdCompletePostResponse202 = {
+  data: CompleteJobInternalJobsJobIdCompletePost202
+  status: 202
 }
 
 export type completeJobInternalJobsJobIdCompletePostResponse422 = {
@@ -1025,7 +1003,7 @@ export type completeJobInternalJobsJobIdCompletePostResponse422 = {
   status: 422
 }
 
-export type completeJobInternalJobsJobIdCompletePostResponseSuccess = (completeJobInternalJobsJobIdCompletePostResponse200) & {
+export type completeJobInternalJobsJobIdCompletePostResponseSuccess = (completeJobInternalJobsJobIdCompletePostResponse202) & {
   headers: Headers;
 };
 export type completeJobInternalJobsJobIdCompletePostResponseError = (completeJobInternalJobsJobIdCompletePostResponse422) & {

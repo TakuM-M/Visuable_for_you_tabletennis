@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   deleteVideoVideosVideoIdDelete,
+  getOutputVideoVideosVideoIdOutputGet,
   getVideoVideosVideoIdGet,
   listClipsByVideoVideosVideoIdClipsGet,
   listJobsByVideoVideosVideoIdJobsGet,
@@ -83,6 +84,16 @@ export default function VideoDetailPage() {
   });
   const clips: ClipResponse[] = clipsRes?.status === 200 ? clipsRes.data : [];
 
+  // 連結済み動画は presigned URL を認証付きエンドポイントから取得し、
+  // <video src> / ダウンロード href に直接セットする（バイト本体はR2から直接配信）。
+  const { data: outputRes } = useQuery({
+    queryKey: ["output", id],
+    queryFn: () => getOutputVideoVideosVideoIdOutputGet(id!, { headers: authHeaders() }),
+    enabled: !!id && video?.status === "completed",
+  });
+  const outputUrl =
+    outputRes?.status === 200 ? (outputRes.data as { url: string }).url : null;
+
   /* ─── mutations ─── */
 
   const deleteMutation = useMutation({
@@ -162,9 +173,9 @@ export default function VideoDetailPage() {
             </div>
 
             <div className="flex flex-none gap-1.5">
-              {isCompleted && (
+              {isCompleted && outputUrl && (
                 <a
-                  href={`/api/videos/${id}/output`}
+                  href={outputUrl}
                   download
                   className="no-underline"
                 >
@@ -199,7 +210,7 @@ export default function VideoDetailPage() {
                 isCompleted={isCompleted}
                 isProcessing={isProcessing}
                 isFailed={isFailed}
-                videoId={id!}
+                outputUrl={outputUrl}
               />
 
               <div className="mt-6 mb-3 flex items-baseline justify-between">
@@ -303,19 +314,19 @@ function PlayerBlock({
   isCompleted,
   isProcessing,
   isFailed,
-  videoId,
+  outputUrl,
 }: {
   isCompleted: boolean;
   isProcessing: boolean;
   isFailed: boolean;
-  videoId: string;
+  outputUrl: string | null;
 }) {
-  if (isCompleted) {
+  if (isCompleted && outputUrl) {
     return (
       <video
         controls
         className="aspect-video w-full rounded-[10px] bg-[#0e0f12]"
-        src={`/api/videos/${videoId}/output`}
+        src={outputUrl}
       />
     );
   }

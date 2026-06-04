@@ -1,14 +1,17 @@
-import uuid
-
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_owned_video
 from app.db.session import get_db
 from app.models.user import User
+from app.models.video import Video
 from app.repositories import video as video_repo
-from app.schemas.video import ChunkUploadInitRequest, ChunkUploadInitResponse, VideoResponse
+from app.schemas.video import (
+    ChunkUploadInitRequest,
+    ChunkUploadInitResponse,
+    VideoOutputResponse,
+    VideoResponse,
+)
 
 from app.services import video_service
 from app.services import storage_service
@@ -23,7 +26,13 @@ def upload_video(
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> VideoResponse:
-    """動画アップロード"""
+    """動画アップロード（単一リクエスト）
+
+    NOTE: 現在フロントエンドからは未使用。フロントは大容量対応のためチャンク
+    アップロード（/videos/upload/init|chunk|complete、frontend/src/lib/chunkedUpload.ts）
+    を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
+    自分の current_user.id で作成するため所有者チェックは不要。
+    """
     try:
         video = video_service.upload_video(
             db=db,
@@ -105,41 +114,33 @@ def list_videos(
 
 @router.get("/{video_id}", response_model=VideoResponse)
 def get_video(
-    video_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    video: Video = Depends(get_owned_video),
 ) -> VideoResponse:
     """動画詳細取得"""
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="動画が見つかりません")
     return video
 
-@router.get("/{video_id}/output")
+
+@router.get("/{video_id}/output", response_model=VideoOutputResponse)
 def get_output_video(
-    video_id: uuid.UUID,
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """連結済み動画のPresigned URLへリダイレクトする"""
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="動画が見つかりません")
+    video: Video = Depends(get_owned_video),
+) -> VideoOutputResponse:
+    """連結済み動画の presigned URL を返す。
+
+    認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+    presigned URL でフロントが R2 から直接取得する。
+    """
     if not video.output_path:
         raise HTTPException(status_code=404, detail="連結動画がまだ生成されていません")
 
     url = storage_service.generate_presigned_url(video.output_path)
-    return RedirectResponse(url=url)
+    return VideoOutputResponse(url=url)
 
 
 @router.delete("/{video_id}", status_code=204)
 def delete_video(
-    video_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    video: Video = Depends(get_owned_video),
     db: Session = Depends(get_db),
 ) -> None:
     """動画削除"""
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="動画が見つかりません")
-    video_service.delete_video(db, video_id)
+    video_service.delete_video(db, video.id)
     return None
