@@ -91,6 +91,13 @@ def _make_job(**kw) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
+def _make_video(**kw) -> SimpleNamespace:
+    """get_owned_video が返すニセ動画。所有者チェックは user_id だけ見る。"""
+    defaults = dict(id=uuid.uuid4(), user_id=uuid.uuid4())
+    defaults.update(kw)
+    return SimpleNamespace(**defaults)
+
+
 def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
     """get_current_user を差し替えて「ログイン済み」にした TestClient を返す。
 
@@ -103,75 +110,64 @@ def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
 
 
 # ===========================================================================
-# GET /jobs/{job_id} （ジョブ詳細取得）
-#   ルーター: job = job_repo.get_by_id(db, job_id) → None なら 404 / それ以外は返す
-# ===========================================================================
-def test_get_job_returns_200() -> None:
-    """ジョブが存在すれば 200 と JobResponse を返す。"""
-    job = _make_job(status=JobStatus.completed)
-
-    # ルーターが呼ぶ job_repo.get_by_id を「常に job を返す」関数に差し替える。
-    with patch("app.routers.jobs.job_repo.get_by_id", return_value=job):
-        client = _authed_client()
-        resp = client.get(f"/jobs/{job.id}")
-
-    assert resp.status_code == 200
-    data = resp.json()
-    # UUID や Enum は JSON では文字列になる。str(...) / .value と突き合わせる。
-    assert data["id"] == str(job.id)
-    assert data["video_id"] == str(job.video_id)
-    assert data["status"] == JobStatus.completed.value  # "completed"
-    assert data["error_message"] is None
-    assert data["retry_count"] == 0
-
-
-def test_get_job_not_found_returns_404() -> None:
-    """job_repo が None を返したら、ルーターは 404 に変換する。"""
-    with patch("app.routers.jobs.job_repo.get_by_id", return_value=None):
-        client = _authed_client()
-        resp = client.get(f"/jobs/{uuid.uuid4()}")
-
-    assert resp.status_code == 404
-    assert resp.json()["detail"] == "ジョブが見つかりません"
-
-
-def test_get_job_requires_auth() -> None:
-    """get_current_user を override しない → 本物の認証が動いて 401。
-
-    トークンを送っていないので OAuth2 スキームが弾く。
-    """
-    client = TestClient(_make_app())
-    resp = client.get(f"/jobs/{uuid.uuid4()}")
-    assert resp.status_code == 401
-
-
-# ===========================================================================
 # GET /videos/{video_id}/jobs （動画に紐づくジョブ一覧）
-#   ルーター: return job_repo.get_by_video_id(db, video_id)  （404 判定なし）
+#   ルーター: video = Depends(get_owned_video) → job_repo.get_by_video_id(db, video.id)
+#   所有者チェックは get_owned_video（app.core.deps）が担うので、
+#   テストは app.core.deps.video_repo.get_by_id を patch し動画の所有者を制御する。
 # ===========================================================================
 def test_list_jobs_by_video_returns_jobs() -> None:
-    """repo が返したジョブのリストがそのまま JSON 配列になる。"""
-    video_id = uuid.uuid4()
-    items = [_make_job(video_id=video_id), _make_job(video_id=video_id)]
+    """所有者なら、repo が返したジョブのリストがそのまま JSON 配列になる。"""
+    user = _make_user()
+    video = _make_video(user_id=user.id)
+    items = [_make_job(video_id=video.id), _make_job(video_id=video.id)]
 
-    with patch("app.routers.jobs.job_repo.get_by_video_id", return_value=items):
-        client = _authed_client()
-        resp = client.get(f"/videos/{video_id}/jobs")
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch("app.routers.jobs.job_repo.get_by_video_id", return_value=items):
+        client = _authed_client(user)
+        resp = client.get(f"/videos/{video.id}/jobs")
 
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 2
-    assert {item["video_id"] for item in body} == {str(video_id)}
+    assert {item["video_id"] for item in body} == {str(video.id)}
 
 
 def test_list_jobs_by_video_empty_returns_empty_list() -> None:
     """ジョブが1件も無い動画でも、エラーではなく空配列 [] を返す。"""
-    with patch("app.routers.jobs.job_repo.get_by_video_id", return_value=[]):
-        client = _authed_client()
-        resp = client.get(f"/videos/{uuid.uuid4()}/jobs")
+    user = _make_user()
+    video = _make_video(user_id=user.id)
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch("app.routers.jobs.job_repo.get_by_video_id", return_value=[]):
+        client = _authed_client(user)
+        resp = client.get(f"/videos/{video.id}/jobs")
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_list_jobs_by_video_other_user_returns_403() -> None:
+    """他人の動画のジョブ一覧は 403。"""
+    user = _make_user()
+    video = _make_video(user_id=uuid.uuid4())  # 別人の動画
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
+        client = _authed_client(user)
+        resp = client.get(f"/videos/{video.id}/jobs")
+    assert resp.status_code == 403
+
+
+def test_list_jobs_by_video_not_found_returns_404() -> None:
+    """動画が存在しなければ 404。"""
+    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
+        client = _authed_client()
+        resp = client.get(f"/videos/{uuid.uuid4()}/jobs")
+    assert resp.status_code == 404
+
+
+def test_list_jobs_by_video_requires_auth() -> None:
+    """get_current_user を override しない → 本物の認証が動いて 401。"""
+    client = TestClient(_make_app())
+    resp = client.get(f"/videos/{uuid.uuid4()}/jobs")
+    assert resp.status_code == 401
 
 
 # ===========================================================================

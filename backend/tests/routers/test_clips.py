@@ -67,6 +67,13 @@ def _make_clip(**kw) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
+def _make_video(**kw) -> SimpleNamespace:
+    """get_owned_video が返すニセ動画。所有者チェックは user_id だけ見る。"""
+    defaults = dict(id=uuid.uuid4(), user_id=uuid.uuid4())
+    defaults.update(kw)
+    return SimpleNamespace(**defaults)
+
+
 def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
     """get_current_user を差し替えて「ログイン済み」にした TestClient を返す。"""
     app = _make_app()
@@ -76,31 +83,57 @@ def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
 
 # ===========================================================================
 # GET /videos/{video_id}/clips （動画に紐づくクリップ一覧）
+#   ルーター: video = Depends(get_owned_video) → clip_repo.get_by_video_id(db, video.id)
+#   所有者チェックは get_owned_video（app.core.deps）が担うので、
+#   テストは app.core.deps.video_repo.get_by_id を patch し動画の所有者を制御する。
 # ===========================================================================
 def test_list_clips_by_video_returns_clips() -> None:
-    """repo が返したクリップのリストがそのまま JSON 配列になる。"""
-    video_id = uuid.uuid4()
-    items = [_make_clip(video_id=video_id), _make_clip(video_id=video_id)]
+    """所有者なら、repo が返したクリップのリストがそのまま JSON 配列になる。"""
+    user = _make_user()
+    video = _make_video(user_id=user.id)
+    items = [_make_clip(video_id=video.id), _make_clip(video_id=video.id)]
 
-    with patch("app.routers.clips.clip_repo.get_by_video_id", return_value=items):
-        client = _authed_client()
-        resp = client.get(f"/videos/{video_id}/clips")
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch("app.routers.clips.clip_repo.get_by_video_id", return_value=items):
+        client = _authed_client(user)
+        resp = client.get(f"/videos/{video.id}/clips")
 
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 2
     # UUID は JSON では文字列になる。全クリップが同じ video_id を持つことを確認。
-    assert {item["video_id"] for item in body} == {str(video_id)}
+    assert {item["video_id"] for item in body} == {str(video.id)}
 
 
 def test_list_clips_by_video_empty_returns_empty_list() -> None:
     """クリップが1件も無い動画でも、エラーではなく空配列 [] を返す。"""
-    with patch("app.routers.clips.clip_repo.get_by_video_id", return_value=[]):
-        client = _authed_client()
-        resp = client.get(f"/videos/{uuid.uuid4()}/clips")
+    user = _make_user()
+    video = _make_video(user_id=user.id)
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch("app.routers.clips.clip_repo.get_by_video_id", return_value=[]):
+        client = _authed_client(user)
+        resp = client.get(f"/videos/{video.id}/clips")
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_list_clips_by_video_other_user_returns_403() -> None:
+    """他人の動画のクリップ一覧は 403。"""
+    user = _make_user()
+    video = _make_video(user_id=uuid.uuid4())  # 別人の動画
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
+        client = _authed_client(user)
+        resp = client.get(f"/videos/{video.id}/clips")
+    assert resp.status_code == 403
+
+
+def test_list_clips_by_video_not_found_returns_404() -> None:
+    """動画が存在しなければ 404。"""
+    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
+        client = _authed_client()
+        resp = client.get(f"/videos/{uuid.uuid4()}/clips")
+    assert resp.status_code == 404
 
 
 def test_list_clips_by_video_requires_auth() -> None:

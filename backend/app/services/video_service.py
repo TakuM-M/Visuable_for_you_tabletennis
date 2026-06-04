@@ -158,7 +158,12 @@ def upload_video(
     file: UploadFile,
     background_tasks: BackgroundTasks,
 ) -> Video:
-    """動画アップロード（単一リクエスト）"""
+    """動画アップロード（単一リクエスト）
+
+    NOTE: 現在フロントエンドからは未使用。フロントは大容量対応のため
+    チャンクアップロード（init_chunk_upload / save_chunk / complete_chunk_upload）
+    を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
+    """
     _ensure_under_quota(db, user_id)
     file_id = uuid.uuid4()
     local_path = LOCAL_TMP_DIR / f"{file_id}_{file.filename}"
