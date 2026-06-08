@@ -46,22 +46,6 @@ def _make_user(**kw) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
-def _httpx_client_cm(chunks=(b"data",)) -> MagicMock:
-    """httpx.Client() のコンテキストマネージャ + stream() をモックする"""
-    response = MagicMock()
-    response.raise_for_status = MagicMock()
-    response.iter_bytes = MagicMock(return_value=list(chunks))
-    stream_cm = MagicMock()
-    stream_cm.__enter__.return_value = response
-    stream_cm.__exit__.return_value = False
-    client = MagicMock()
-    client.stream.return_value = stream_cm
-    client_cm = MagicMock()
-    client_cm.__enter__.return_value = client
-    client_cm.__exit__.return_value = False
-    return client_cm
-
-
 # --- _compute_next_retry_at -------------------------------------------------
 
 def test_compute_next_retry_at_uses_backoff_for_index() -> None:
@@ -289,83 +273,60 @@ def test_complete_job_returns_when_video_missing() -> None:
     upd.assert_not_called()
 
 
-def test_complete_job_with_empty_clips_skips_ffmpeg() -> None:
+def test_complete_job_with_empty_clips_sets_ready() -> None:
+    """clips が空でも job=completed・video=ready になり、編集通知メールを送る。
+
+    出力動画は書き出し操作時に作るので、ここでは clip も作らず FFmpeg も呼ばない。
+    """
     db = MagicMock()
     job = _make_job()
     video = _make_video()
     user = _make_user(id=video.user_id)
     with patch("app.services.job_service.job_repo.get_by_id", return_value=job), \
          patch("app.services.job_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.job_service.clip_video") as clipv, \
-         patch("app.services.job_service.storage_service.upload_file") as upload, \
          patch("app.services.job_service.clip_repo.create") as clip_create, \
          patch("app.services.job_service.job_repo.update_status") as jupd, \
-         patch("app.services.job_service.video_repo.update_output_path") as out_path, \
-         patch("app.services.job_service.video_repo.update_status", return_value=video), \
+         patch("app.services.job_service.video_repo.update_status", return_value=video) as vupd, \
          patch("app.services.job_service.user_repo.get_by_id", return_value=user), \
          patch("app.services.job_service.notification_log_repo.create", return_value=SimpleNamespace(id=1)), \
-         patch("app.services.job_service.send_clip_completion_email", return_value=True) as send_mail, \
+         patch("app.services.job_service.send_analysis_complete_email", return_value=True) as send_mail, \
          patch("app.services.job_service.notification_log_repo.update_status"):
         job_service.complete_job(db, job.id, [])
 
-    clipv.assert_not_called()
-    upload.assert_not_called()
     clip_create.assert_not_called()
-    out_path.assert_called_once_with(db, job.video_id, "")
     assert jupd.call_args.kwargs["status"] == JobStatus.completed
+    vupd.assert_called_once_with(db, job.video_id, VideoStatus.ready)
     assert send_mail.call_args.kwargs["clip_count"] == 0
 
 
-def test_complete_job_with_clips_runs_ffmpeg_and_completes() -> None:
+def test_complete_job_with_clips_saves_and_sets_ready() -> None:
+    """clips があれば検出順に sort_order を付けて保存し、video=ready にする。
+
+    出力動画はここでは生成しないため FFmpeg(clip_video)は呼ばれない。
+    """
     db = MagicMock()
     job = _make_job()
     video = _make_video()
     user = _make_user(id=video.user_id)
-    clips = [{"start_time": 0.0, "end_time": 5.0}]
+    clips = [
+        {"start_time": 0.0, "end_time": 5.0},
+        {"start_time": 6.0, "end_time": 9.0},
+    ]
     with patch("app.services.job_service.job_repo.get_by_id", return_value=job), \
          patch("app.services.job_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.job_service.storage_service.generate_presigned_url", return_value="http://signed"), \
-         patch("app.services.job_service.storage_service.upload_file") as upload, \
-         patch("httpx.Client", return_value=_httpx_client_cm()), \
-         patch("app.services.job_service.clip_video") as clipv, \
-         patch("app.services.video_service._extract_duration", return_value=12.0), \
          patch("app.services.job_service.clip_repo.create") as clip_create, \
          patch("app.services.job_service.job_repo.update_status") as jupd, \
-         patch("app.services.job_service.video_repo.update_output_path"), \
-         patch("app.services.job_service.video_repo.update_duration") as vdur, \
-         patch("app.services.job_service.video_repo.update_status", return_value=video), \
+         patch("app.services.job_service.video_repo.update_status", return_value=video) as vupd, \
          patch("app.services.job_service.user_repo.get_by_id", return_value=user), \
          patch("app.services.job_service.notification_log_repo.create", return_value=SimpleNamespace(id=1)), \
-         patch("app.services.job_service.send_clip_completion_email", return_value=True) as send_mail, \
+         patch("app.services.job_service.send_analysis_complete_email", return_value=True) as send_mail, \
          patch("app.services.job_service.notification_log_repo.update_status"):
         job_service.complete_job(db, job.id, clips)
 
-    clipv.assert_called_once()
-    assert clipv.call_args.args[1] == clips
-    assert upload.call_args.args[1] == f"outputs/{job.id}/play_scenes.mp4"
-    clip_create.assert_called_once()
-    vdur.assert_called_once_with(db, job.video_id, 12.0)
+    assert clip_create.call_count == 2
+    assert clip_create.call_args_list[0].kwargs["sort_order"] == 0
+    assert clip_create.call_args_list[1].kwargs["sort_order"] == 1
+    assert clip_create.call_args_list[0].kwargs["job_id"] == job.id
     assert jupd.call_args.kwargs["status"] == JobStatus.completed
-    assert send_mail.call_args.kwargs["clip_count"] == 1
-
-
-def test_complete_job_handles_ffmpeg_failure() -> None:
-    db = MagicMock()
-    job = _make_job()
-    video = _make_video()
-    clips = [{"start_time": 0.0, "end_time": 5.0}]
-    with patch("app.services.job_service.job_repo.get_by_id", return_value=job), \
-         patch("app.services.job_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.job_service.storage_service.generate_presigned_url", return_value="http://signed"), \
-         patch("app.services.job_service.storage_service.upload_file"), \
-         patch("httpx.Client", return_value=_httpx_client_cm()), \
-         patch("app.services.job_service.clip_video", side_effect=RuntimeError("ffmpeg boom")), \
-         patch("app.services.job_service.handle_ml_failure") as handle, \
-         patch("app.services.job_service.clip_repo.create") as clip_create, \
-         patch("app.services.job_service.job_repo.update_status") as jupd:
-        job_service.complete_job(db, job.id, clips)
-
-    handle.assert_called_once()
-    assert "クリップ生成失敗" in handle.call_args.args[2]
-    clip_create.assert_not_called()
-    jupd.assert_not_called()
+    vupd.assert_called_once_with(db, job.video_id, VideoStatus.ready)
+    assert send_mail.call_args.kwargs["clip_count"] == 2

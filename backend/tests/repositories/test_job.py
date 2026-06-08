@@ -266,3 +266,23 @@ def test_delete_by_video_id_removes_all_jobs_and_returns_count(db, video):
 
 def test_delete_by_video_id_returns_zero_when_no_jobs(db, video):
     assert job_repo.delete_by_video_id(db, video.id) == 0
+
+
+# ----------------------------------------------------------------------
+# get_latest_by_video_id（ユーザー編集 clip に流用する最新ジョブの取得）
+# ----------------------------------------------------------------------
+
+def test_get_latest_by_video_id_returns_most_recent(db, video):
+    """created_at が最も新しいジョブを返す"""
+    old = job_repo.create(db, video_id=video.id)
+    old.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    db.commit()
+    latest = job_repo.create(db, video_id=video.id)
+
+    result = job_repo.get_latest_by_video_id(db, video.id)
+    assert result is not None
+    assert result.id == latest.id
+
+
+def test_get_latest_by_video_id_returns_none_when_no_jobs(db, video):
+    assert job_repo.get_latest_by_video_id(db, video.id) is None

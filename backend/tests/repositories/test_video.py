@@ -197,3 +197,23 @@ def test_delete_removes_video_and_returns_true(db, user):
 
 def test_delete_returns_false_when_not_found(db):
     assert video_repo.delete(db, uuid.uuid4()) is False
+
+
+# ----------------------------------------------------------------------
+# source_duration（元動画長）
+# ----------------------------------------------------------------------
+
+def test_create_source_duration_defaults_none(db, user):
+    """source_duration は引数省略時 None"""
+    video = video_repo.create(db, user_id=user.id, title="t", storage_path="p")
+    assert video.source_duration is None
+
+
+def test_create_with_source_duration_records_it(db, user):
+    """source_duration を渡せば保存される（duration とは独立）"""
+    video = video_repo.create(
+        db=db, user_id=user.id, title="t", storage_path="p",
+        duration=10.0, source_duration=88.0,
+    )
+    assert video.source_duration == 88.0
+    assert video.duration == 10.0

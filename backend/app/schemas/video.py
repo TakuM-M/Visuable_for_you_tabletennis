@@ -37,6 +37,7 @@ class VideoResponse(BaseModel):
     storage_path: str
     output_path: str | None
     duration: float | None
+    source_duration: float | None
     status: VideoStatus
     created_at: datetime
     updated_at: datetime

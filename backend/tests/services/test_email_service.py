@@ -64,3 +64,30 @@ def test_send_failure_email_returns_true_on_success():
         )
     assert result is True
     send_mock.assert_called_once()
+
+
+def test_send_analysis_complete_email_returns_true_on_success():
+    """ML 解析完了（編集可能）通知メールも、成功すれば True を返す"""
+    with patch("app.services.email_service.resend.Emails.send") as send_mock:
+        result = email_service.send_analysis_complete_email(
+            to_email="user@example.com",
+            video_title="練習試合",
+            clip_count=3,
+            video_url="https://example.com/v/1",
+        )
+    assert result is True
+    send_mock.assert_called_once()
+
+
+def test_send_analysis_complete_email_returns_false_on_failure():
+    with patch(
+        "app.services.email_service.resend.Emails.send",
+        side_effect=Exception("Resend API error"),
+    ):
+        result = email_service.send_analysis_complete_email(
+            to_email="user@example.com",
+            video_title="練習試合",
+            clip_count=3,
+            video_url="https://example.com/v/1",
+        )
+    assert result is False

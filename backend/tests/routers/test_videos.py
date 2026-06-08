@@ -53,6 +53,7 @@ def _make_video(**kw) -> SimpleNamespace:
         storage_path="videos/test.mp4",
         output_path=None,
         duration=None,
+        source_duration=None,
         status=VideoStatus.uploaded,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -337,3 +338,52 @@ def test_delete_video_other_user_returns_403() -> None:
         resp = client.delete(f"/videos/{video.id}")
     assert resp.status_code == 403
     delete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# POST /videos/{id}/export （現在の切り抜きから連結動画を書き出す・認証＋所有者必須）
+#   ルーター: video = Depends(get_owned_video) → video_service.export_video(...)
+# ---------------------------------------------------------------------------
+def test_export_video_returns_202() -> None:
+    """所有者なら 202 と processing 状態の動画を返し、service を1回呼ぶ。"""
+    user = _make_user()
+    client = _authed_client(user)
+    video = _make_video(user_id=user.id)
+    processing = _make_video(
+        id=video.id, user_id=user.id, status=VideoStatus.processing
+    )
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch(
+             "app.routers.videos.video_service.export_video", return_value=processing
+         ) as export:
+        resp = client.post(f"/videos/{video.id}/export")
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "processing"
+    export.assert_called_once()
+
+
+def test_export_video_other_user_returns_403() -> None:
+    """他人の動画は書き出せず 403。service は呼ばれない。"""
+    user = _make_user()
+    client = _authed_client(user)
+    video = _make_video(user_id=uuid.uuid4())
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch("app.routers.videos.video_service.export_video") as export:
+        resp = client.post(f"/videos/{video.id}/export")
+    assert resp.status_code == 403
+    export.assert_not_called()
+
+
+def test_export_video_not_found_returns_404() -> None:
+    client = _authed_client()
+    with patch("app.core.deps.video_repo.get_by_id", return_value=None), \
+         patch("app.routers.videos.video_service.export_video") as export:
+        resp = client.post(f"/videos/{uuid.uuid4()}/export")
+    assert resp.status_code == 404
+    export.assert_not_called()
+
+
+def test_export_video_requires_auth() -> None:
+    client = TestClient(_make_app())
+    resp = client.post(f"/videos/{uuid.uuid4()}/export")
+    assert resp.status_code == 401
