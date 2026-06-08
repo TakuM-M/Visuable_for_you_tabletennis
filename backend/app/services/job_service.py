@@ -1,5 +1,4 @@
 import os
-import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -18,12 +17,10 @@ from app.repositories import job as job_repo
 from app.repositories import notification_log as notification_log_repo
 from app.repositories import user as user_repo
 from app.repositories import video as video_repo
-from app.services import storage_service
 from app.services.email_service import (
-    send_clip_completion_email,
+    send_analysis_complete_email,
     send_clip_failure_email,
 )
-from app.services.video_clip_service import clip_video
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
@@ -165,6 +162,12 @@ def complete_job(
     job_id: uuid.UUID,
     clips: list[dict],   # {"start_time": float, "end_time": float} のリスト
 ) -> None:
+    """ML 解析完了コールバックの本処理。
+
+    出力動画はここでは生成しない（ユーザーが編集画面で書き出し操作をしたときに
+    video_service.export_video 経由で生成する）。ここでは検出された区間を clip と
+    して保存し、動画を ready（編集可能）に遷移させ、編集できる旨をメール通知する。
+    """
     job = job_repo.get_by_id(db, job_id)
     if job is None:
         return
@@ -173,39 +176,8 @@ def complete_job(
     if video is None:
         return
 
-    output_r2_key = ""
-
-    # 1. FFmpeg でシーンをカット・結合
-    if clips:
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # R2から元動画をローカル一時ファイルにダウンロード
-                local_input = os.path.join(tmpdir, "input.mp4")
-                presigned_url = storage_service.generate_presigned_url(video.storage_path)
-
-                import httpx
-                with httpx.Client(timeout=600.0) as client:
-                    with client.stream("GET", presigned_url) as response:
-                        response.raise_for_status()
-                        with open(local_input, "wb") as f:
-                            for chunk in response.iter_bytes(chunk_size=65536):
-                                f.write(chunk)
-
-                # FFmpegで処理（ローカル一時ファイル）
-                local_output = os.path.join(tmpdir, "play_scenes.mp4")
-                clip_video(local_input, clips, local_output)
-
-                # 処理済み動画をR2にアップロード
-                output_r2_key = f"outputs/{job_id}/play_scenes.mp4"
-                storage_service.upload_file(local_output, output_r2_key)
-
-        except Exception as e:
-            logger.exception("FFmpegクリップ失敗 job_id=%s: %s", job_id, e)
-            handle_ml_failure(db, job_id, f"クリップ生成失敗: {e}")
-            return
-
-    # 2. クリップを保存
-    for clip_data in clips:
+    # 1. クリップ区間を保存（並び順は検出順）
+    for i, clip_data in enumerate(clips):
         clip_repo.create(
             db=db,
             video_id=job.video_id,
@@ -213,9 +185,10 @@ def complete_job(
             start_time=clip_data["start_time"],
             end_time=clip_data["end_time"],
             storage_path="",
+            sort_order=i,
         )
 
-    # 3. Jobをcompletedに更新
+    # 2. Job を completed に更新
     job_repo.update_status(
         db=db,
         job_id=job_id,
@@ -223,23 +196,10 @@ def complete_job(
         completed_at=datetime.now(timezone.utc),
     )
 
-    # 4. VideoにoutputPathを保存してcompletedに更新
-    video_repo.update_output_path(db, job.video_id, output_r2_key)
+    # 3. Video を ready（解析完了・編集可能・未書き出し）に更新
+    video = video_repo.update_status(db, job.video_id, VideoStatus.ready)
 
-    # 出力動画の再生時間を取得・保存
-    if output_r2_key:
-        try:
-            from app.services import video_service
-            output_url = storage_service.generate_presigned_url(output_r2_key, expires_in=7200)
-            output_duration = video_service._extract_duration(output_url)
-            if output_duration is not None:
-                video_repo.update_duration(db, job.video_id, output_duration)
-        except Exception as e:
-            logger.warning("出力動画の再生時間取得に失敗しました job_id=%s: %s", job_id, e)
-
-    video = video_repo.update_status(db, job.video_id, VideoStatus.completed)
-
-    # 5. メール送信
+    # 4. 編集できるようになったことをメール通知
     if video is None:
         return
     user = user_repo.get_by_id(db, video.user_id)
@@ -255,7 +215,7 @@ def complete_job(
         email=user.email,
     )
 
-    success = send_clip_completion_email(
+    success = send_analysis_complete_email(
         to_email=user.email,
         video_title=video.title,
         clip_count=len(clips),

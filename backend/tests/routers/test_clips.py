@@ -60,6 +60,7 @@ def _make_clip(**kw) -> SimpleNamespace:
         job_id=uuid.uuid4(),
         start_time=0.0,
         end_time=10.0,
+        sort_order=0,
         storage_path="clips/test.mp4",
         created_at=datetime.now(timezone.utc),
     )
@@ -141,3 +142,69 @@ def test_list_clips_by_video_requires_auth() -> None:
     client = TestClient(_make_app())
     resp = client.get(f"/videos/{uuid.uuid4()}/clips")
     assert resp.status_code == 401
+
+
+# ===========================================================================
+# PUT /videos/{video_id}/clips （切り抜きの一括置換）
+#   ルーター: video = Depends(get_owned_video) → video_service.replace_clips(...)
+#   所有者チェックは get_owned_video が担うので app.core.deps.video_repo.get_by_id を patch。
+#   置換ロジック本体は video_service.replace_clips を patch して HTTP 層だけ見る。
+# ===========================================================================
+def test_put_clips_replaces_and_returns_list() -> None:
+    """所有者なら、service が返したクリップ配列がそのまま JSON で返る。"""
+    user = _make_user()
+    video = _make_video(user_id=user.id)
+    returned = [
+        _make_clip(video_id=video.id, sort_order=0),
+        _make_clip(video_id=video.id, sort_order=1),
+    ]
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch("app.routers.clips.video_service.replace_clips", return_value=returned) as replace:
+        client = _authed_client(user)
+        resp = client.put(
+            f"/videos/{video.id}/clips",
+            json={"clips": [
+                {"start_time": 0.0, "end_time": 5.0},
+                {"start_time": 6.0, "end_time": 9.0},
+            ]},
+        )
+
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+    replace.assert_called_once()
+
+
+def test_put_clips_other_user_returns_403() -> None:
+    """他人の動画のクリップは置換できず 403。"""
+    user = _make_user()
+    video = _make_video(user_id=uuid.uuid4())
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
+        client = _authed_client(user)
+        resp = client.put(f"/videos/{video.id}/clips", json={"clips": []})
+    assert resp.status_code == 403
+
+
+def test_put_clips_not_found_returns_404() -> None:
+    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
+        client = _authed_client()
+        resp = client.put(f"/videos/{uuid.uuid4()}/clips", json={"clips": []})
+    assert resp.status_code == 404
+
+
+def test_put_clips_requires_auth() -> None:
+    client = TestClient(_make_app())
+    resp = client.put(f"/videos/{uuid.uuid4()}/clips", json={"clips": []})
+    assert resp.status_code == 401
+
+
+def test_put_clips_invalid_range_returns_422() -> None:
+    """end_time <= start_time の区間はバリデーションで 422。"""
+    user = _make_user()
+    video = _make_video(user_id=user.id)
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
+        client = _authed_client(user)
+        resp = client.put(
+            f"/videos/{video.id}/clips",
+            json={"clips": [{"start_time": 5.0, "end_time": 2.0}]},
+        )
+    assert resp.status_code == 422

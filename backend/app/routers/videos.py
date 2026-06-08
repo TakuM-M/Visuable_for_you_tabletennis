@@ -136,6 +136,20 @@ def get_output_video(
     return VideoOutputResponse(url=url)
 
 
+@router.post("/{video_id}/export", response_model=VideoResponse, status_code=202)
+def export_video(
+    video: Video = Depends(get_owned_video),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> VideoResponse:
+    """現在の切り抜き区間から連結動画を書き出す（生成する）。
+
+    重い FFmpeg 処理は背景タスクで実行し、video を processing にして即座に返す。
+    完了すると status が completed になり、GET /videos/{id}/output で取得できる。
+    """
+    return video_service.export_video(db, video, background_tasks)
+
+
 @router.delete("/{video_id}", status_code=204)
 def delete_video(
     video: Video = Depends(get_owned_video),

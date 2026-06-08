@@ -32,6 +32,35 @@ def send_clip_completion_email(
         return False
 
 
+def send_analysis_complete_email(
+    to_email: str,
+    video_title: str,
+    clip_count: int,
+    video_url: str,
+) -> bool:
+    """ML 解析完了（切り抜きが編集可能になった）ことを通知する。
+
+    出力動画はユーザーが編集画面で書き出し操作をしたときに生成されるため、
+    このメールは「編集できる状態になった」ことを知らせる役割を持つ。
+    """
+    try:
+        resend.Emails.send({
+            "from": FROM_EMAIL,
+            "to": to_email,
+            "subject": f"【{video_title}】の解析が完了しました（編集できます）",
+            "html": f"""
+                <h2>解析が完了しました！</h2>
+                <p>「{video_title}」を解析し、{clip_count}件のプレーシーンを検出しました。</p>
+                <p>切り抜きの区間を編集してから動画を書き出すことができます。</p>
+                <p><a href="{video_url}">編集画面を開く</a></p>
+            """,
+        })
+        return True
+    except Exception as e:
+        logger.exception("解析完了通知メール送信失敗: %s", e)
+        return False
+
+
 def send_clip_failure_email(
     to_email: str,
     video_title: str,
