@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { Navigate, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { registerUsersPost } from "../api/generated";
-import { getToken } from "../lib/auth";
+import { isAuthenticated } from "../lib/auth";
 
 // バリデーションルール
 const schema = z.object({
@@ -44,7 +44,7 @@ export default function RegisterPage() {
     mutation.mutate(values);
   };
 
-  if (getToken()) return <Navigate to="/videos" replace />;
+  if (isAuthenticated()) return <Navigate to="/videos" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

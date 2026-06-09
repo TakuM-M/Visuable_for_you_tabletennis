@@ -98,7 +98,7 @@ export default function VideoDetailPage() {
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteVideoVideosVideoIdDelete(id!, { headers: authHeaders() }),
-    onSuccess: () => navigate("/"),
+    onSuccess: () => navigate("/videos"),
     onError: () => alert("動画の削除に失敗しました"),
   });
   const retryMutation = useMutation({
@@ -139,7 +139,7 @@ export default function VideoDetailPage() {
           {/* Breadcrumb */}
           <div className="mb-2.5 flex items-center gap-1.5 text-[12px] text-fg-3">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/videos")}
               className="cursor-pointer bg-transparent p-0 text-fg-3 hover:text-fg"
             >
               動画一覧
