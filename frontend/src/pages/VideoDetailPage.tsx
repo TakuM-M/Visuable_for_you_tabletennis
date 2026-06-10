@@ -21,7 +21,7 @@ import Button from "../components/ui/Button";
 import DropdownMenu from "../components/ui/DropdownMenu";
 import Stripes from "../components/ui/Stripes";
 import EmptyState from "../components/ui/EmptyState";
-import AddClipModal from "../components/video/AddClipModal";
+import ClipEditModal from "../components/video/ClipEditModal";
 import ClipPreviewPlayer, {
   type ClipPreviewHandle,
 } from "../components/video/ClipPreviewPlayer";
@@ -31,6 +31,7 @@ import {
   IconDownload,
   IconFilm,
   IconMore,
+  IconPencil,
   IconPlay,
   IconPlus,
   IconRefresh,
@@ -53,11 +54,14 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 type PlayerMode = "output" | "source" | "analyzing" | "exporting" | "failed" | "idle";
 
+/** 切り抜きモーダルの状態。add = 新規追加、edit = 既存切り抜きの範囲編集 */
+type ClipModalState = { mode: "add" } | { mode: "edit"; clip: ClipResponse } | null;
+
 export default function VideoDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
-  const [addOpen, setAddOpen] = useState(false);
+  const [clipModal, setClipModal] = useState<ClipModalState>(null);
   const previewRef = useRef<ClipPreviewHandle>(null);
 
   /* ─── queries ─── */
@@ -177,7 +181,16 @@ export default function VideoDetailPage() {
       ...clips.map((c) => ({ start_time: c.start_time, end_time: c.end_time })),
       { start_time: inP, end_time: outP },
     ];
-    replaceClipsMutation.mutate(items, { onSuccess: () => setAddOpen(false) });
+    replaceClipsMutation.mutate(items, { onSuccess: () => setClipModal(null) });
+  };
+  // 既存切り抜きの範囲変更。対象だけ差し替えた配列で一括置換する。
+  const onEditClip = (clipId: string, inP: number, outP: number) => {
+    const items = clips.map((c) =>
+      c.id === clipId
+        ? { start_time: inP, end_time: outP }
+        : { start_time: c.start_time, end_time: c.end_time },
+    );
+    replaceClipsMutation.mutate(items, { onSuccess: () => setClipModal(null) });
   };
   const onDeleteClip = (clipId: string) => {
     const items = clips
@@ -321,7 +334,7 @@ export default function VideoDetailPage() {
                   <Button
                     kind="secondary"
                     size="sm"
-                    onClick={() => setAddOpen(true)}
+                    onClick={() => setClipModal({ mode: "add" })}
                     disabled={!sourceUrl || editLocked}
                   >
                     <IconPlus size={13} />
@@ -366,7 +379,7 @@ export default function VideoDetailPage() {
                     <Button
                       kind="secondary"
                       size="sm"
-                      onClick={() => setAddOpen(true)}
+                      onClick={() => setClipModal({ mode: "add" })}
                       disabled={!sourceUrl || editLocked}
                     >
                       <IconPlus size={13} />
@@ -399,6 +412,11 @@ export default function VideoDetailPage() {
                 <ClipsGrid
                   clips={clips}
                   onDelete={isEditable && !editLocked ? onDeleteClip : undefined}
+                  onEdit={
+                    isEditable && !editLocked && sourceUrl
+                      ? (clip) => setClipModal({ mode: "edit", clip })
+                      : undefined
+                  }
                   onSelect={
                     previewActive ? (i) => previewRef.current?.jumpTo(i) : undefined
                   }
@@ -438,13 +456,21 @@ export default function VideoDetailPage() {
         </div>
       </div>
 
-      <AddClipModal
-        open={addOpen}
+      <ClipEditModal
+        open={clipModal != null}
         sourceUrl={sourceUrl}
         fallbackDuration={video.source_duration}
-        adding={replaceClipsMutation.isPending}
-        onAdd={onAddClip}
-        onClose={() => setAddOpen(false)}
+        saving={replaceClipsMutation.isPending}
+        initialRange={
+          clipModal?.mode === "edit"
+            ? { start: clipModal.clip.start_time, end: clipModal.clip.end_time }
+            : null
+        }
+        onSubmit={(inP, outP) => {
+          if (clipModal?.mode === "edit") onEditClip(clipModal.clip.id, inP, outP);
+          else onAddClip(inP, outP);
+        }}
+        onClose={() => setClipModal(null)}
       />
     </AppShell>
   );
@@ -526,10 +552,12 @@ function PlayerBlock({
 function ClipsGrid({
   clips,
   onDelete,
+  onEdit,
   onSelect,
 }: {
   clips: ClipResponse[];
   onDelete?: (id: string) => void;
+  onEdit?: (clip: ClipResponse) => void;
   onSelect?: (index: number) => void;
 }) {
   return (
@@ -540,6 +568,7 @@ function ClipsGrid({
           clip={c}
           index={idx + 1}
           onDelete={onDelete}
+          onEdit={onEdit}
           onSelect={onSelect ? () => onSelect(idx) : undefined}
         />
       ))}
@@ -551,11 +580,13 @@ function ClipCard({
   clip,
   index,
   onDelete,
+  onEdit,
   onSelect,
 }: {
   clip: ClipResponse;
   index: number;
   onDelete?: (id: string) => void;
+  onEdit?: (clip: ClipResponse) => void;
   onSelect?: () => void;
 }) {
   const length = Math.round(clip.end_time - clip.start_time);
@@ -577,6 +608,18 @@ function ClipCard({
         <div className="absolute left-2 top-2 rounded bg-white/92 px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-fg">
           #{String(index).padStart(2, "0")}
         </div>
+        {onEdit && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(clip);
+            }}
+            aria-label="この切り抜きの区間を編集"
+            className="absolute right-9 top-2 grid h-6 w-6 cursor-pointer place-items-center rounded-md border-none bg-[#14161a]/[0.78] text-white transition-colors hover:bg-accent"
+          >
+            <IconPencil size={13} />
+          </button>
+        )}
         {onDelete && (
           <button
             onClick={(e) => {

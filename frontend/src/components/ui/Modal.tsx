@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconClose } from "./Icons";
 
@@ -15,6 +15,11 @@ type Props = {
  * 開いている間は背景スクロールをロックする。
  */
 export default function Modal({ open, onClose, title, children, className = "" }: Props) {
+  // 背景クリックで閉じるのは「押下も背景で始まった」場合のみ。
+  // ダイアログ内でドラッグを始めて背景上で離すと click が背景で発火するため、
+  // pointerdown の開始位置を記録して誤クローズを防ぐ。
+  const downOnBackdrop = useRef(false);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -34,7 +39,13 @@ export default function Modal({ open, onClose, title, children, className = "" }
   return createPortal(
     <div
       className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4"
-      onClick={onClose}
+      onPointerDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && downOnBackdrop.current) onClose();
+        downOnBackdrop.current = false;
+      }}
       role="presentation"
     >
       <div
