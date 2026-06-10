@@ -136,6 +136,20 @@ def get_output_video(
     return VideoOutputResponse(url=url)
 
 
+@router.get("/{video_id}/source", response_model=VideoOutputResponse)
+def get_source_video(
+    video: Video = Depends(get_owned_video),
+) -> VideoOutputResponse:
+    """元動画（アップロードされた素材）の presigned URL を返す。
+
+    新規切り抜きのトリミング UI で元動画全体を再生するために使う。
+    認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+    presigned URL でフロントが R2 から直接取得する。
+    """
+    url = storage_service.generate_presigned_url(video.storage_path)
+    return VideoOutputResponse(url=url)
+
+
 @router.post("/{video_id}/export", response_model=VideoResponse, status_code=202)
 def export_video(
     video: Video = Depends(get_owned_video),

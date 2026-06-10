@@ -47,7 +47,17 @@ export interface ClipData {
 }
 
 /**
- * 切り抜き動画レスポンス（クリップはMLサービスが生成するためCreateスキーマは不要）
+ * ユーザー編集で送られる 1 区間。連結順は配列内の並び順で決まる。
+ */
+export interface ClipInput {
+  /** @minimum 0 */
+  start_time: number;
+  /** @exclusiveMinimum 0 */
+  end_time: number;
+}
+
+/**
+ * 切り抜き区間レスポンス
  */
 export interface ClipResponse {
   id: string;
@@ -55,8 +65,20 @@ export interface ClipResponse {
   job_id: string;
   start_time: number;
   end_time: number;
+  sort_order: number;
   storage_path: string;
   created_at: string;
+}
+
+/**
+ * 切り抜き一括置換リクエスト（PUT /videos/{id}/clips）。
+
+送られた配列で動画の切り抜きをまるごと置き換える。新規・編集・削除・
+並べ替えをこの 1 リクエストで表現する。
+ */
+export interface ClipsReplaceRequest {
+  /** @maxItems 200 */
+  clips: ClipInput[];
 }
 
 export interface ValidationError {
@@ -170,6 +192,7 @@ export const VideoStatus = {
   uploaded: 'uploaded',
   queued: 'queued',
   processing: 'processing',
+  ready: 'ready',
   completed: 'completed',
   failed: 'failed',
 } as const;
@@ -184,6 +207,7 @@ export interface VideoResponse {
   storage_path: string;
   output_path: string | null;
   duration: number | null;
+  source_duration: number | null;
   status: VideoStatus;
   created_at: string;
   updated_at: string;
@@ -888,6 +912,113 @@ export const getOutputVideoVideosVideoIdOutputGet = async (videoId: string, opti
 
 
 /**
+ * 元動画（アップロードされた素材）の presigned URL を返す。
+
+新規切り抜きのトリミング UI で元動画全体を再生するために使う。
+認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+presigned URL でフロントが R2 から直接取得する。
+ * @summary Get Source Video
+ */
+export type getSourceVideoVideosVideoIdSourceGetResponse200 = {
+  data: VideoOutputResponse
+  status: 200
+}
+
+export type getSourceVideoVideosVideoIdSourceGetResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type getSourceVideoVideosVideoIdSourceGetResponseSuccess = (getSourceVideoVideosVideoIdSourceGetResponse200) & {
+  headers: Headers;
+};
+export type getSourceVideoVideosVideoIdSourceGetResponseError = (getSourceVideoVideosVideoIdSourceGetResponse422) & {
+  headers: Headers;
+};
+
+export type getSourceVideoVideosVideoIdSourceGetResponse = (getSourceVideoVideosVideoIdSourceGetResponseSuccess | getSourceVideoVideosVideoIdSourceGetResponseError)
+
+export const getGetSourceVideoVideosVideoIdSourceGetUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}/source`
+}
+
+export const getSourceVideoVideosVideoIdSourceGet = async (videoId: string, options?: RequestInit): Promise<getSourceVideoVideosVideoIdSourceGetResponse> => {
+  
+  const res = await fetch(getGetSourceVideoVideosVideoIdSourceGetUrl(videoId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: getSourceVideoVideosVideoIdSourceGetResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getSourceVideoVideosVideoIdSourceGetResponse
+}
+  
+
+
+/**
+ * 現在の切り抜き区間から連結動画を書き出す（生成する）。
+
+重い FFmpeg 処理は背景タスクで実行し、video を processing にして即座に返す。
+完了すると status が completed になり、GET /videos/{id}/output で取得できる。
+ * @summary Export Video
+ */
+export type exportVideoVideosVideoIdExportPostResponse202 = {
+  data: VideoResponse
+  status: 202
+}
+
+export type exportVideoVideosVideoIdExportPostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type exportVideoVideosVideoIdExportPostResponseSuccess = (exportVideoVideosVideoIdExportPostResponse202) & {
+  headers: Headers;
+};
+export type exportVideoVideosVideoIdExportPostResponseError = (exportVideoVideosVideoIdExportPostResponse422) & {
+  headers: Headers;
+};
+
+export type exportVideoVideosVideoIdExportPostResponse = (exportVideoVideosVideoIdExportPostResponseSuccess | exportVideoVideosVideoIdExportPostResponseError)
+
+export const getExportVideoVideosVideoIdExportPostUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}/export`
+}
+
+export const exportVideoVideosVideoIdExportPost = async (videoId: string, options?: RequestInit): Promise<exportVideoVideosVideoIdExportPostResponse> => {
+  
+  const res = await fetch(getExportVideoVideosVideoIdExportPostUrl(videoId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: exportVideoVideosVideoIdExportPostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as exportVideoVideosVideoIdExportPostResponse
+}
+  
+
+
+/**
  * 動画に紐づくジョブ一覧取得
  * @summary List Jobs By Video
  */
@@ -1087,6 +1218,61 @@ export const listClipsByVideoVideosVideoIdClipsGet = async (videoId: string, opt
   
   const data: listClipsByVideoVideosVideoIdClipsGetResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listClipsByVideoVideosVideoIdClipsGetResponse
+}
+  
+
+
+/**
+ * 切り抜きを一括置換する（新規・編集・削除・並べ替えをまとめて反映）。
+
+出力動画はこの時点では再生成しない。編集を反映するには
+POST /videos/{id}/export で書き出す。
+ * @summary Replace Clips By Video
+ */
+export type replaceClipsByVideoVideosVideoIdClipsPutResponse200 = {
+  data: ClipResponse[]
+  status: 200
+}
+
+export type replaceClipsByVideoVideosVideoIdClipsPutResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type replaceClipsByVideoVideosVideoIdClipsPutResponseSuccess = (replaceClipsByVideoVideosVideoIdClipsPutResponse200) & {
+  headers: Headers;
+};
+export type replaceClipsByVideoVideosVideoIdClipsPutResponseError = (replaceClipsByVideoVideosVideoIdClipsPutResponse422) & {
+  headers: Headers;
+};
+
+export type replaceClipsByVideoVideosVideoIdClipsPutResponse = (replaceClipsByVideoVideosVideoIdClipsPutResponseSuccess | replaceClipsByVideoVideosVideoIdClipsPutResponseError)
+
+export const getReplaceClipsByVideoVideosVideoIdClipsPutUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}/clips`
+}
+
+export const replaceClipsByVideoVideosVideoIdClipsPut = async (videoId: string,
+    clipsReplaceRequest: ClipsReplaceRequest, options?: RequestInit): Promise<replaceClipsByVideoVideosVideoIdClipsPutResponse> => {
+  
+  const res = await fetch(getReplaceClipsByVideoVideosVideoIdClipsPutUrl(videoId),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      clipsReplaceRequest,)
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: replaceClipsByVideoVideosVideoIdClipsPutResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as replaceClipsByVideoVideosVideoIdClipsPutResponse
 }
   
 

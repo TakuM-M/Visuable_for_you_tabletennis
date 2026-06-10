@@ -442,3 +442,31 @@ def test_export_video_409_when_processing() -> None:
         with pytest.raises(HTTPException) as exc:
             video_service.export_video(db, video, bt)
     assert exc.value.status_code == 409
+
+
+# --- recover_interrupted_exports --------------------------------------------
+
+def test_recover_interrupted_exports_resets_to_ready() -> None:
+    videos = [SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())]
+    db = MagicMock()
+    with patch("app.services.video_service.SessionLocal") as sl, \
+         patch("app.services.video_service.video_repo.get_processing_without_running_job", return_value=videos), \
+         patch("app.services.video_service.video_repo.update_status") as vupd:
+        sl.return_value.__enter__.return_value = db
+        video_service.recover_interrupted_exports()
+
+    # 中断された書き出しはすべて ready に戻る
+    assert [c.args for c in vupd.call_args_list] == [
+        (db, videos[0].id, VideoStatus.ready),
+        (db, videos[1].id, VideoStatus.ready),
+    ]
+
+
+def test_recover_interrupted_exports_noop_when_none() -> None:
+    with patch("app.services.video_service.SessionLocal") as sl, \
+         patch("app.services.video_service.video_repo.get_processing_without_running_job", return_value=[]), \
+         patch("app.services.video_service.video_repo.update_status") as vupd:
+        sl.return_value.__enter__.return_value = MagicMock()
+        video_service.recover_interrupted_exports()
+
+    vupd.assert_not_called()

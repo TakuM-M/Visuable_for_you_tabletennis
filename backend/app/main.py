@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.routers import admin, auth, clips, jobs, users, videos
-from app.services import job_reaper
+from app.services import job_reaper, video_service
 
 logger = get_logger(__name__)
 
@@ -48,8 +48,9 @@ async def lifespan(app: FastAPI):
         seconds=settings.metrics_log_interval_seconds,
         id="log_storage_metrics",
     )
-    # 起動時に tmp を一度掃除しておく
+    # 起動時に tmp を一度掃除し、中断された書き出しを ready に戻す
     job_reaper.clean_tmp_dir()
+    video_service.recover_interrupted_exports()
     scheduler.start()
     logger.info("APScheduler 起動")
     try:

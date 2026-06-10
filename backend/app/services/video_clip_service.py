@@ -17,16 +17,21 @@ def clip_video(input_path: str, clips: list[dict], output_path: str) -> None:
         return
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # 各シーンを再エンコードして一時ファイルに切り出す
+        # 各シーンを再エンコードして一時ファイルに切り出す。
+        # -ss は -i の前（入力シーク）に置く。-i の後（出力シーク）だと
+        # セグメントごとに動画先頭から全デコードするため、長い動画では
+        # 書き出しに数十分かかる。再エンコードを伴う場合は入力シークでも
+        # フレーム精度は保たれる。
         segment_files: list[str] = []
         for i, clip in enumerate(clips):
             seg = os.path.join(tmpdir, f"seg_{i:04d}.mp4")
+            length = clip["end_time"] - clip["start_time"]
             subprocess.run(
                 [
                     "ffmpeg", "-y",
-                    "-i", input_path,
                     "-ss", str(clip["start_time"]),
-                    "-to", str(clip["end_time"]),
+                    "-i", input_path,
+                    "-t", str(length),
                     "-c:v", "libx264", "-preset", "fast",
                     "-c:a", "aac",
                     seg,

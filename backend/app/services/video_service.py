@@ -388,6 +388,24 @@ def process_export(video_id: uuid.UUID) -> None:
             video_repo.update_status(db, video_id, VideoStatus.ready)
 
 
+def recover_interrupted_exports() -> None:
+    """再起動で中断された書き出しを ready に戻す（起動時リカバリ）。
+
+    書き出しは BackgroundTasks（プロセス内）で実行されるため、processing の
+    最中にプロセスが落ちると status が processing のまま取り残され、
+    再書き出しもできなくなる。起動直後に実行中 job を持たない processing
+    動画が残っていれば中断された書き出しとみなして ready に戻す
+    （ML 解析中の動画は実行中 job を伴うので対象外。そちらのタイムアウトは
+    job_reaper が処理する）。
+    """
+    with SessionLocal() as db:
+        for video in video_repo.get_processing_without_running_job(db):
+            logger.warning(
+                "中断された書き出しを検知 video_id=%s → ready に戻します", video.id
+            )
+            video_repo.update_status(db, video.id, VideoStatus.ready)
+
+
 def export_video(
     db: Session,
     video: Video,

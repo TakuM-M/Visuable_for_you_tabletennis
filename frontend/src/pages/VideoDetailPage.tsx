@@ -1,11 +1,15 @@
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   deleteVideoVideosVideoIdDelete,
+  exportVideoVideosVideoIdExportPost,
   getOutputVideoVideosVideoIdOutputGet,
+  getSourceVideoVideosVideoIdSourceGet,
   getVideoVideosVideoIdGet,
   listClipsByVideoVideosVideoIdClipsGet,
   listJobsByVideoVideosVideoIdJobsGet,
+  replaceClipsByVideoVideosVideoIdClipsPut,
   retryJobJobsJobIdRetryPost,
   type ClipResponse,
   type VideoResponse,
@@ -17,6 +21,10 @@ import Button from "../components/ui/Button";
 import DropdownMenu from "../components/ui/DropdownMenu";
 import Stripes from "../components/ui/Stripes";
 import EmptyState from "../components/ui/EmptyState";
+import AddClipModal from "../components/video/AddClipModal";
+import ClipPreviewPlayer, {
+  type ClipPreviewHandle,
+} from "../components/video/ClipPreviewPlayer";
 import {
   IconChevR,
   IconClock,
@@ -24,6 +32,7 @@ import {
   IconFilm,
   IconMore,
   IconPlay,
+  IconPlus,
   IconRefresh,
   IconTrash,
 } from "../components/ui/Icons";
@@ -40,10 +49,16 @@ function sumPlay(clips: ClipResponse[]) {
   return clips.reduce((a, c) => a + (c.end_time - c.start_time), 0);
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+type PlayerMode = "output" | "source" | "analyzing" | "exporting" | "failed" | "idle";
+
 export default function VideoDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
+  const [addOpen, setAddOpen] = useState(false);
+  const previewRef = useRef<ClipPreviewHandle>(null);
 
   /* ─── queries ─── */
 
@@ -53,6 +68,7 @@ export default function VideoDetailPage() {
     enabled: !!id,
     refetchInterval: (q) => {
       const v = q.state.data?.status === 200 ? q.state.data.data : null;
+      // 解析中（queued/processing）と書き出し中（processing）のあいだポーリング
       return v?.status === "queued" || v?.status === "processing" ? 3000 : false;
     },
   });
@@ -71,6 +87,7 @@ export default function VideoDetailPage() {
   });
   const jobs = jobsRes?.status === 200 ? jobsRes.data : [];
   const failedJob = jobs.find((j) => j.status === "failed");
+  const jobRunning = jobs.some((j) => j.status === "queued" || j.status === "processing");
 
   const { data: clipsRes } = useQuery({
     queryKey: ["clips", id],
@@ -78,14 +95,13 @@ export default function VideoDetailPage() {
     enabled: !!id,
     refetchInterval: (q) => {
       const clips = q.state.data?.status === 200 ? q.state.data.data : [];
-      const running = jobs.some((j) => j.status === "queued" || j.status === "processing");
-      return running && clips.length === 0 ? 3000 : false;
+      return jobRunning && clips.length === 0 ? 3000 : false;
     },
   });
   const clips: ClipResponse[] = clipsRes?.status === 200 ? clipsRes.data : [];
 
-  // 連結済み動画は presigned URL を認証付きエンドポイントから取得し、
-  // <video src> / ダウンロード href に直接セットする（バイト本体はR2から直接配信）。
+  // 連結済み動画（output）と元動画（source）は presigned URL を認証付きエンドポイントから
+  // 取得し、<video src> / ダウンロード href に直接セットする（バイト本体はR2から直接配信）。
   const { data: outputRes } = useQuery({
     queryKey: ["output", id],
     queryFn: () => getOutputVideoVideosVideoIdOutputGet(id!, { headers: authHeaders() }),
@@ -93,6 +109,14 @@ export default function VideoDetailPage() {
   });
   const outputUrl =
     outputRes?.status === 200 ? (outputRes.data as { url: string }).url : null;
+
+  const { data: sourceRes } = useQuery({
+    queryKey: ["source", id],
+    queryFn: () => getSourceVideoVideosVideoIdSourceGet(id!, { headers: authHeaders() }),
+    enabled: !!id && (video?.status === "ready" || video?.status === "completed"),
+  });
+  const sourceUrl =
+    sourceRes?.status === 200 ? (sourceRes.data as { url: string }).url : null;
 
   /* ─── mutations ─── */
 
@@ -110,6 +134,37 @@ export default function VideoDetailPage() {
     },
     onError: () => alert("再実行に失敗しました"),
   });
+  // 切り抜きの一括置換。出力動画は再生成しない（書き出しは別操作）。
+  // 丸め → 元動画長でのクランプ → start_time 昇順ソートをここに集約する。
+  // end_time は source_duration を超えるとサーバが 422 にするため、丸め後に上限で抑える。
+  const replaceClipsMutation = useMutation({
+    mutationFn: (items: { start_time: number; end_time: number }[]) => {
+      const cap = video?.source_duration ?? null;
+      const clamped = items
+        .map((c) => {
+          const end = round2(c.end_time);
+          return {
+            start_time: round2(c.start_time),
+            end_time: cap != null && end > cap ? cap : end,
+          };
+        })
+        .sort((a, b) => a.start_time - b.start_time);
+      return replaceClipsByVideoVideosVideoIdClipsPut(
+        id!,
+        { clips: clamped },
+        { headers: authHeaders() },
+      );
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["clips", id] }),
+    onError: () => alert("切り抜きの保存に失敗しました"),
+  });
+  const exportMutation = useMutation({
+    mutationFn: () => exportVideoVideosVideoIdExportPost(id!, { headers: authHeaders() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["video", id] }),
+    onError: () => alert("書き出しの開始に失敗しました"),
+  });
+
+  /* ─── handlers ─── */
 
   const onDelete = () => {
     if (window.confirm("本当にこの動画を削除しますか？")) deleteMutation.mutate();
@@ -117,6 +172,20 @@ export default function VideoDetailPage() {
   const onRetry = () => {
     if (failedJob) retryMutation.mutate(failedJob.id);
   };
+  const onAddClip = (inP: number, outP: number) => {
+    const items = [
+      ...clips.map((c) => ({ start_time: c.start_time, end_time: c.end_time })),
+      { start_time: inP, end_time: outP },
+    ];
+    replaceClipsMutation.mutate(items, { onSuccess: () => setAddOpen(false) });
+  };
+  const onDeleteClip = (clipId: string) => {
+    const items = clips
+      .filter((c) => c.id !== clipId)
+      .map((c) => ({ start_time: c.start_time, end_time: c.end_time }));
+    replaceClipsMutation.mutate(items);
+  };
+  const onExport = () => exportMutation.mutate();
 
   /* ─── render ─── */
 
@@ -128,9 +197,29 @@ export default function VideoDetailPage() {
     );
   }
 
-  const isProcessing = video.status === "processing" || video.status === "queued";
   const isFailed = video.status === "failed";
   const isCompleted = video.status === "completed";
+  const isReady = video.status === "ready";
+  const isAnalyzing = video.status === "queued" || (video.status === "processing" && jobRunning);
+  const isExporting = video.status === "processing" && !jobRunning;
+  const isEditable = isReady || isCompleted; // 切り抜き編集・書き出しが可能な状態
+  const editLocked = replaceClipsMutation.isPending || exportMutation.isPending;
+  const showClips = clips.length > 0 && (isEditable || isExporting);
+
+  const playerMode: PlayerMode =
+    isCompleted && outputUrl
+      ? "output"
+      : isExporting
+        ? "exporting"
+        : isAnalyzing
+          ? "analyzing"
+          : isFailed
+            ? "failed"
+            : isReady && sourceUrl
+              ? "source"
+              : "idle";
+  // 擬似プレビュー（source モード）が出ているときだけシーン選択でジャンプ可能。
+  const previewActive = playerMode === "source" && clips.length > 0;
 
   return (
     <AppShell>
@@ -155,7 +244,8 @@ export default function VideoDetailPage() {
                 {video.title}
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-3.5 text-[12.5px] text-fg-3">
-                <StatusBadge status={video.status} />
+                {/* 書き出し中は「処理中」(processing) と区別して表示する */}
+                <StatusBadge status={isExporting ? "exporting" : video.status} />
                 <span className="flex items-center gap-1.5">
                   <IconClock size={12} className="text-fg-4" />
                   <span className="font-mono">{fmtDuration(video.duration)}</span>
@@ -172,16 +262,27 @@ export default function VideoDetailPage() {
               </div>
             </div>
 
-            <div className="flex flex-none gap-1.5">
-              {isCompleted && outputUrl && (
-                <a
-                  href={outputUrl}
-                  download
-                  className="no-underline"
+            <div className="flex flex-none items-center gap-1.5">
+              {isEditable && (
+                <Button
+                  kind="primary"
+                  size="sm"
+                  onClick={onExport}
+                  disabled={clips.length === 0 || editLocked}
                 >
+                  <IconFilm size={13} />
+                  {exportMutation.isPending
+                    ? "書き出し中..."
+                    : isCompleted
+                      ? "再書き出し"
+                      : "書き出し"}
+                </Button>
+              )}
+              {isCompleted && outputUrl && (
+                <a href={outputUrl} download className="no-underline">
                   <Button kind="secondary" size="sm">
                     <IconDownload size={13} />
-                    書き出し
+                    ダウンロード
                   </Button>
                 </a>
               )}
@@ -207,17 +308,30 @@ export default function VideoDetailPage() {
           <div className="mt-5 grid grid-cols-1 items-start gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <PlayerBlock
-                isCompleted={isCompleted}
-                isProcessing={isProcessing}
-                isFailed={isFailed}
+                mode={playerMode}
                 outputUrl={outputUrl}
+                sourceUrl={sourceUrl}
+                clips={clips}
+                previewRef={previewRef}
               />
 
-              <div className="mt-6 mb-3 flex items-baseline justify-between">
+              <div className="mt-6 mb-3 flex items-center justify-between gap-2">
                 <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">シーン一覧</h2>
+                {isEditable && (
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    onClick={() => setAddOpen(true)}
+                    disabled={!sourceUrl || editLocked}
+                  >
+                    <IconPlus size={13} />
+                    新規切り抜き
+                  </Button>
+                )}
               </div>
 
-              {isProcessing && <ClipsSkeleton />}
+              {isAnalyzing && <ClipsSkeleton />}
+
               {isFailed && (
                 <EmptyState
                   icon={<IconRefresh size={18} />}
@@ -242,6 +356,26 @@ export default function VideoDetailPage() {
                   }
                 />
               )}
+
+              {isReady && clips.length === 0 && (
+                <EmptyState
+                  icon={<IconFilm size={18} />}
+                  title="シーンがありません"
+                  description="自動検出されたシーンはありません。「新規切り抜き」から区間を追加できます。"
+                  actions={
+                    <Button
+                      kind="secondary"
+                      size="sm"
+                      onClick={() => setAddOpen(true)}
+                      disabled={!sourceUrl || editLocked}
+                    >
+                      <IconPlus size={13} />
+                      新規切り抜き
+                    </Button>
+                  }
+                />
+              )}
+
               {isCompleted && clips.length === 0 && (
                 <EmptyState
                   icon={<IconFilm size={18} />}
@@ -254,56 +388,64 @@ export default function VideoDetailPage() {
                     </>
                   }
                   actions={
-                    <>
-                      {failedJob && (
-                        <Button
-                          kind="secondary"
-                          size="sm"
-                          onClick={onRetry}
-                          disabled={retryMutation.isPending}
-                        >
-                          処理を再実行
-                        </Button>
-                      )}
-                      <Button kind="ghost" size="sm" onClick={onDelete}>
-                        動画を削除
-                      </Button>
-                    </>
+                    <Button kind="ghost" size="sm" onClick={onDelete}>
+                      動画を削除
+                    </Button>
                   }
                 />
               )}
-              {isCompleted && clips.length > 0 && <ClipsGrid clips={clips} />}
+
+              {showClips && (
+                <ClipsGrid
+                  clips={clips}
+                  onDelete={isEditable && !editLocked ? onDeleteClip : undefined}
+                  onSelect={
+                    previewActive ? (i) => previewRef.current?.jumpTo(i) : undefined
+                  }
+                />
+              )}
             </div>
 
             {/* Right rail */}
             <aside className="rounded-[10px] border border-border bg-surface p-4">
               <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-fg-4">
-                {isProcessing ? "ステータス" : "サマリー"}
+                {isAnalyzing || isExporting ? "ステータス" : "サマリー"}
               </div>
 
-              {isProcessing ? (
-                <>
-                  <div className="mt-3 mb-2 flex items-center gap-2.5">
-                    <span className="h-2 w-2 rounded-full bg-warn text-warn animate-pulseDot" />
-                    <span className="text-[13px] font-medium">処理中...</span>
-                  </div>
-                  <div className="mb-3.5 text-[12px] leading-[1.6] text-fg-3">
-                    プレーシーンを抽出しています。完了するとシーンが表示されます。
-                  </div>
-                  <div className="mb-2 h-1 overflow-hidden rounded-full bg-subtle-2">
-                    <div className="h-full w-2/5 rounded-full bg-warn animate-shimmer" />
-                  </div>
-                </>
+              {isAnalyzing ? (
+                <BusyRail
+                  title="解析中..."
+                  desc="プレーシーンを抽出しています。完了するとシーンが表示され、編集できます。"
+                />
+              ) : isExporting ? (
+                <BusyRail
+                  title="書き出し中..."
+                  desc="連結動画を生成しています。完了すると再生・ダウンロードできます。"
+                />
               ) : (
                 <>
                   <Stat label="検出シーン" value={`${clips.length}`} unit="件" />
                   <Stat label="プレー時間" value={fmt(sumPlay(clips))} mono />
+                  {isReady && (
+                    <div className="mt-3 text-[12px] leading-[1.6] text-fg-3">
+                      解析が完了しました。区間を編集して「書き出し」すると連結動画が生成されます。
+                    </div>
+                  )}
                 </>
               )}
             </aside>
           </div>
         </div>
       </div>
+
+      <AddClipModal
+        open={addOpen}
+        sourceUrl={sourceUrl}
+        fallbackDuration={video.source_duration}
+        adding={replaceClipsMutation.isPending}
+        onAdd={onAddClip}
+        onClose={() => setAddOpen(false)}
+      />
     </AppShell>
   );
 }
@@ -311,22 +453,36 @@ export default function VideoDetailPage() {
 /* ─── sub-components ─── */
 
 function PlayerBlock({
-  isCompleted,
-  isProcessing,
-  isFailed,
+  mode,
   outputUrl,
+  sourceUrl,
+  clips,
+  previewRef,
 }: {
-  isCompleted: boolean;
-  isProcessing: boolean;
-  isFailed: boolean;
+  mode: PlayerMode;
   outputUrl: string | null;
+  sourceUrl: string | null;
+  clips: ClipResponse[];
+  previewRef: React.Ref<ClipPreviewHandle>;
 }) {
-  if (isCompleted && outputUrl) {
+  if (mode === "output" && outputUrl) {
     return (
       <video
         controls
         className="aspect-video w-full rounded-[10px] bg-[#0e0f12]"
         src={outputUrl}
+      />
+    );
+  }
+  if (mode === "source" && sourceUrl) {
+    // 切り抜きがあれば「プレー区間のみ」の擬似プレビュー、無ければ元動画をそのまま。
+    return clips.length > 0 ? (
+      <ClipPreviewPlayer key={sourceUrl} ref={previewRef} src={sourceUrl} clips={clips} />
+    ) : (
+      <video
+        controls
+        className="aspect-video w-full rounded-[10px] bg-[#0e0f12]"
+        src={sourceUrl}
       />
     );
   }
@@ -341,7 +497,7 @@ function PlayerBlock({
         }}
       />
       <div className="absolute inset-0 grid place-items-center text-white">
-        {isProcessing ? (
+        {mode === "analyzing" ? (
           <div className="text-center">
             <div className="mx-auto h-14 w-14 rounded-full border-2 border-white/20 border-t-white animate-spin360" />
             <div className="mt-3.5 text-[14px] font-medium">処理中</div>
@@ -349,7 +505,15 @@ function PlayerBlock({
               プレーシーンを抽出しています…
             </div>
           </div>
-        ) : isFailed ? (
+        ) : mode === "exporting" ? (
+          <div className="text-center">
+            <div className="mx-auto h-14 w-14 rounded-full border-2 border-white/20 border-t-white animate-spin360" />
+            <div className="mt-3.5 text-[14px] font-medium">書き出し中</div>
+            <div className="mt-1 font-mono text-[11px] text-white/65">
+              連結動画を生成しています…
+            </div>
+          </div>
+        ) : mode === "failed" ? (
           <div className="text-center">
             <div className="text-[14px] font-medium">処理に失敗しました</div>
           </div>
@@ -359,25 +523,72 @@ function PlayerBlock({
   );
 }
 
-function ClipsGrid({ clips }: { clips: ClipResponse[] }) {
+function ClipsGrid({
+  clips,
+  onDelete,
+  onSelect,
+}: {
+  clips: ClipResponse[];
+  onDelete?: (id: string) => void;
+  onSelect?: (index: number) => void;
+}) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
       {clips.map((c, idx) => (
-        <ClipCard key={c.id} clip={c} index={idx + 1} />
+        <ClipCard
+          key={c.id}
+          clip={c}
+          index={idx + 1}
+          onDelete={onDelete}
+          onSelect={onSelect ? () => onSelect(idx) : undefined}
+        />
       ))}
     </div>
   );
 }
 
-function ClipCard({ clip, index }: { clip: ClipResponse; index: number }) {
+function ClipCard({
+  clip,
+  index,
+  onDelete,
+  onSelect,
+}: {
+  clip: ClipResponse;
+  index: number;
+  onDelete?: (id: string) => void;
+  onSelect?: () => void;
+}) {
   const length = Math.round(clip.end_time - clip.start_time);
   return (
-    <div className="flex flex-col overflow-hidden rounded-[10px] border border-border bg-surface">
-      <div className="relative aspect-video">
+    <div className="group flex flex-col overflow-hidden rounded-[10px] border border-border bg-surface">
+      <div
+        onClick={onSelect}
+        className={`relative aspect-video ${onSelect ? "cursor-pointer" : ""}`}
+      >
         <Stripes className="absolute inset-0" />
+        {/* シーン選択（プレビューへジャンプ）可能なときのホバー時の再生オーバーレイ */}
+        {onSelect && (
+          <div className="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/35 group-hover:opacity-100">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-black/55 text-white">
+              <IconPlay size={18} />
+            </span>
+          </div>
+        )}
         <div className="absolute left-2 top-2 rounded bg-white/92 px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-fg">
           #{String(index).padStart(2, "0")}
         </div>
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(clip.id);
+            }}
+            aria-label="この切り抜きを削除"
+            className="absolute right-2 top-2 grid h-6 w-6 cursor-pointer place-items-center rounded-md border-none bg-[#14161a]/[0.78] text-white transition-colors hover:bg-err"
+          >
+            <IconTrash size={13} />
+          </button>
+        )}
         <div className="absolute bottom-2 right-2 rounded bg-[#14161a]/[0.78] px-1.5 py-0.5 font-mono text-[10.5px] text-white">
           {length}s
         </div>
@@ -407,6 +618,21 @@ function ClipsSkeleton() {
         </div>
       ))}
     </div>
+  );
+}
+
+function BusyRail({ title, desc }: { title: string; desc: string }) {
+  return (
+    <>
+      <div className="mt-3 mb-2 flex items-center gap-2.5">
+        <span className="h-2 w-2 rounded-full bg-warn text-warn animate-pulseDot" />
+        <span className="text-[13px] font-medium">{title}</span>
+      </div>
+      <div className="mb-3.5 text-[12px] leading-[1.6] text-fg-3">{desc}</div>
+      <div className="mb-2 h-1 overflow-hidden rounded-full bg-subtle-2">
+        <div className="h-full w-2/5 rounded-full bg-warn animate-shimmer" />
+      </div>
+    </>
   );
 }
 

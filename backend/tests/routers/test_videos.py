@@ -305,6 +305,47 @@ def test_get_output_not_generated_yet_returns_404() -> None:
 
 
 # ---------------------------------------------------------------------------
+# GET /videos/{id}/source （元動画の presigned URL を JSON で返す・認証＋所有者必須）
+#   新規切り抜きのトリミング UI 用。storage_path は常にあるので 404 は所有判定のみ。
+# ---------------------------------------------------------------------------
+def test_get_source_returns_presigned_url() -> None:
+    user = _make_user()
+    client = _authed_client(user)
+    video = _make_video(user_id=user.id, storage_path="videos/src.mp4")
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
+         patch(
+             "app.routers.videos.storage_service.generate_presigned_url",
+             return_value="https://r2.example/source-signed",
+         ) as gen_mock:
+        resp = client.get(f"/videos/{video.id}/source")
+    assert resp.status_code == 200
+    assert resp.json()["url"] == "https://r2.example/source-signed"
+    gen_mock.assert_called_once_with("videos/src.mp4")  # 元動画パスで署名している
+
+
+def test_get_source_requires_auth() -> None:
+    client = TestClient(_make_app())
+    resp = client.get(f"/videos/{uuid.uuid4()}/source")
+    assert resp.status_code == 401
+
+
+def test_get_source_other_user_returns_403() -> None:
+    user = _make_user()
+    client = _authed_client(user)
+    video = _make_video(user_id=uuid.uuid4())  # 別人の動画
+    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
+        resp = client.get(f"/videos/{video.id}/source")
+    assert resp.status_code == 403
+
+
+def test_get_source_not_found_returns_404() -> None:
+    client = _authed_client()
+    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
+        resp = client.get(f"/videos/{uuid.uuid4()}/source")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # DELETE /videos/{id} （削除）
 # ---------------------------------------------------------------------------
 def test_delete_video_returns_204() -> None:

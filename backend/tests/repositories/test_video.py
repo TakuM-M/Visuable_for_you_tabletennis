@@ -14,7 +14,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.models.job import JobStatus
 from app.models.video import VideoStatus
+from app.repositories import job as job_repo
 from app.repositories import user as user_repo
 from app.repositories import video as video_repo
 
@@ -217,3 +219,39 @@ def test_create_with_source_duration_records_it(db, user):
     )
     assert video.source_duration == 88.0
     assert video.duration == 10.0
+
+
+# ----------------------------------------------------------------------
+# get_processing_without_running_job（中断された書き出しの検出）
+# ----------------------------------------------------------------------
+
+def test_get_processing_without_running_job_detects_interrupted_export(db, user):
+    """processing かつ実行中 job なし（＝中断された書き出し）の動画だけを返す"""
+    # 中断された書き出し: job は completed 済みで video だけ processing
+    interrupted = video_repo.create(db, user_id=user.id, title="中断", storage_path="videos/i.mp4")
+    job_done = job_repo.create(db, video_id=interrupted.id)
+    job_repo.update_status(db, job_done.id, JobStatus.completed)
+    video_repo.update_status(db, interrupted.id, VideoStatus.processing)
+
+    # ML 解析中: processing だが実行中 job があるので対象外
+    analyzing = video_repo.create(db, user_id=user.id, title="解析中", storage_path="videos/a.mp4")
+    job_running = job_repo.create(db, video_id=analyzing.id)
+    job_repo.update_status(db, job_running.id, JobStatus.processing)
+    video_repo.update_status(db, analyzing.id, VideoStatus.processing)
+
+    # processing 以外は job が無くても対象外
+    ready = video_repo.create(db, user_id=user.id, title="ready", storage_path="videos/r.mp4")
+    video_repo.update_status(db, ready.id, VideoStatus.ready)
+
+    result = video_repo.get_processing_without_running_job(db)
+    assert [v.id for v in result] == [interrupted.id]
+
+
+def test_get_processing_without_running_job_empty_when_all_running(db, user):
+    """実行中 job を伴う processing 動画しか無ければ空を返す"""
+    video = video_repo.create(db, user_id=user.id, title="t", storage_path="p")
+    job = job_repo.create(db, video_id=video.id)
+    job_repo.update_status(db, job.id, JobStatus.queued)
+    video_repo.update_status(db, video.id, VideoStatus.processing)
+
+    assert video_repo.get_processing_without_running_job(db) == []
