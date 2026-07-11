@@ -2,24 +2,28 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import BackgroundTasks, UploadFile
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
+from app.models.clip import Clip
 from app.models.job import JobStatus
 from app.models.video import Video, VideoStatus
 from app.repositories import job as job_repo
 from app.repositories import video as video_repo
 from app.repositories import clip as clip_repo
 from app.repositories import notification_log as notification_log_repo
+from app.schemas.clip import ClipInput
 from app.services import storage_service
+from app.services.video_clip_service import clip_video
 
 logger = get_logger(__name__)
 
@@ -137,6 +141,7 @@ def _register_video_and_start_ml(
     title: str,
     r2_key: str,
     background_tasks: BackgroundTasks,
+    source_duration: float | None = None,
 ) -> Video:
     """動画をDBに登録し、MLサービスを呼び出す共通処理"""
     video = video_repo.create(
@@ -144,6 +149,7 @@ def _register_video_and_start_ml(
         user_id=user_id,
         title=title,
         storage_path=r2_key,
+        source_duration=source_duration,
     )
     video_repo.update_status(db, video.id, VideoStatus.queued)
     job = job_repo.create(db=db, video_id=video.id)
@@ -158,19 +164,27 @@ def upload_video(
     file: UploadFile,
     background_tasks: BackgroundTasks,
 ) -> Video:
-    """動画アップロード（単一リクエスト）"""
+    """動画アップロード（単一リクエスト）
+
+    NOTE: 現在フロントエンドからは未使用。フロントは大容量対応のため
+    チャンクアップロード（init_chunk_upload / save_chunk / complete_chunk_upload）
+    を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
+    """
     _ensure_under_quota(db, user_id)
     file_id = uuid.uuid4()
     local_path = LOCAL_TMP_DIR / f"{file_id}_{file.filename}"
     r2_key = f"videos/{file_id}.mp4"
 
-    # ローカルに一時保存 → R2にアップロード → ローカル削除
+    # ローカルに一時保存 → R2にアップロード → 元動画長を取得 → ローカル削除
     with local_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     storage_service.upload_file(str(local_path), r2_key)
+    source_duration = _extract_duration(local_path)
     local_path.unlink(missing_ok=True)
 
-    return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks)
+    return _register_video_and_start_ml(
+        db, user_id, title, r2_key, background_tasks, source_duration
+    )
 
 
 def init_chunk_upload(
@@ -237,12 +251,15 @@ def complete_chunk_upload(
             with chunk_path.open("rb") as chunk_f:
                 shutil.copyfileobj(chunk_f, out_f)
 
-    # R2にアップロード → ローカル一時ファイルを削除
+    # R2にアップロード → 元動画長を取得 → ローカル一時ファイルを削除
     storage_service.upload_file(str(merged_path), r2_key)
+    source_duration = _extract_duration(merged_path)
     merged_path.unlink(missing_ok=True)
     shutil.rmtree(upload_dir)
 
-    return _register_video_and_start_ml(db, user_id, title, r2_key, background_tasks)
+    return _register_video_and_start_ml(
+        db, user_id, title, r2_key, background_tasks, source_duration
+    )
 
 
 def delete_video(db: Session, video_id: uuid.UUID) -> bool:
@@ -271,3 +288,139 @@ def delete_video(db: Session, video_id: uuid.UUID) -> bool:
             logger.warning("R2 output削除失敗: %s", e)
 
     return True
+
+
+def replace_clips(
+    db: Session,
+    video: Video,
+    clips_input: list[ClipInput],
+) -> list[Clip]:
+    """切り抜きを一括置換する（新規・編集・削除・並べ替えをまとめて反映）。
+
+    区間の整合性（非負・start<end）は ClipInput 側で検証済み。元動画長が
+    分かる場合は end_time の上限も検証する。新規作成される clip には動画の
+    最新ジョブの id を流用する（clip.job_id は NOT NULL のため）。
+    """
+    if video.source_duration is not None:
+        for c in clips_input:
+            if c.end_time > video.source_duration:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"区間が元動画の長さ（{video.source_duration}秒）を超えています",
+                )
+
+    job = job_repo.get_latest_by_video_id(db, video.id)
+    if job is None:
+        raise HTTPException(status_code=409, detail="解析ジョブが存在しないため編集できません")
+
+    clips_data = [
+        {"start_time": c.start_time, "end_time": c.end_time} for c in clips_input
+    ]
+    return clip_repo.replace_for_video(db, video.id, job.id, clips_data)
+
+
+def rebuild_output(db: Session, video_id: uuid.UUID, clips: list[dict]) -> str:
+    """現在の clip 区間から連結動画を生成して R2 にアップロードし、
+    output_path / duration / status(completed) を更新する。R2 キーを返す。
+
+    書き出しの度に同一キー（outputs/{video_id}/play_scenes.mp4）へ上書きする。
+    FFmpeg などの失敗は例外として送出し、ハンドリングは呼び出し側に委ねる。
+    clips は {"start_time": float, "end_time": float} のリスト。
+    """
+    video = video_repo.get_by_id(db, video_id)
+    if video is None:
+        raise ValueError(f"動画が見つかりません video_id={video_id}")
+
+    output_r2_key = ""
+    if clips:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # R2 から元動画をローカル一時ファイルにダウンロード
+            local_input = os.path.join(tmpdir, "input.mp4")
+            presigned_url = storage_service.generate_presigned_url(video.storage_path)
+            with httpx.Client(timeout=600.0) as client:
+                with client.stream("GET", presigned_url) as response:
+                    response.raise_for_status()
+                    with open(local_input, "wb") as f:
+                        for chunk in response.iter_bytes(chunk_size=65536):
+                            f.write(chunk)
+
+            # FFmpeg でシーンをカット・結合
+            local_output = os.path.join(tmpdir, "play_scenes.mp4")
+            clip_video(local_input, clips, local_output)
+
+            # 処理済み動画を R2 にアップロード
+            output_r2_key = f"outputs/{video_id}/play_scenes.mp4"
+            storage_service.upload_file(local_output, output_r2_key)
+
+    video_repo.update_output_path(db, video_id, output_r2_key)
+
+    # 出力動画の再生時間を取得・保存
+    if output_r2_key:
+        try:
+            output_url = storage_service.generate_presigned_url(output_r2_key, expires_in=7200)
+            output_duration = _extract_duration(output_url)
+            if output_duration is not None:
+                video_repo.update_duration(db, video_id, output_duration)
+        except Exception as e:
+            logger.warning("出力動画の再生時間取得に失敗しました video_id=%s: %s", video_id, e)
+
+    video_repo.update_status(db, video_id, VideoStatus.completed)
+    return output_r2_key
+
+
+def process_export(video_id: uuid.UUID) -> None:
+    """書き出しの背景タスクエントリポイント。
+
+    ルーターは即座に 202 を返し、本関数が自前 DB セッションを開いて重い
+    FFmpeg 処理を担当する。失敗時は ready に戻して再書き出しできるようにする
+    （編集済みの clip は保持される）。
+    """
+    with SessionLocal() as db:
+        try:
+            clips = [
+                {"start_time": c.start_time, "end_time": c.end_time}
+                for c in clip_repo.get_by_video_id(db, video_id)
+            ]
+            rebuild_output(db, video_id, clips)
+            logger.info("書き出し完了 video_id=%s clips=%s件", video_id, len(clips))
+        except Exception as e:
+            logger.exception("書き出し失敗 video_id=%s: %s", video_id, e)
+            video_repo.update_status(db, video_id, VideoStatus.ready)
+
+
+def recover_interrupted_exports() -> None:
+    """再起動で中断された書き出しを ready に戻す（起動時リカバリ）。
+
+    書き出しは BackgroundTasks（プロセス内）で実行されるため、processing の
+    最中にプロセスが落ちると status が processing のまま取り残され、
+    再書き出しもできなくなる。起動直後に実行中 job を持たない processing
+    動画が残っていれば中断された書き出しとみなして ready に戻す
+    （ML 解析中の動画は実行中 job を伴うので対象外。そちらのタイムアウトは
+    job_reaper が処理する）。
+    """
+    with SessionLocal() as db:
+        for video in video_repo.get_processing_without_running_job(db):
+            logger.warning(
+                "中断された書き出しを検知 video_id=%s → ready に戻します", video.id
+            )
+            video_repo.update_status(db, video.id, VideoStatus.ready)
+
+
+def export_video(
+    db: Session,
+    video: Video,
+    background_tasks: BackgroundTasks,
+) -> Video:
+    """ユーザー操作による動画書き出し。現在の clip 区間から出力動画を生成する。
+
+    重い FFmpeg 処理は背景タスクに委譲し、video を processing にして即座に返す。
+    """
+    clips = clip_repo.get_by_video_id(db, video.id)
+    if not clips:
+        raise HTTPException(status_code=400, detail="書き出す切り抜きがありません")
+    if video.status == VideoStatus.processing:
+        raise HTTPException(status_code=409, detail="処理中のため書き出せません")
+
+    video = video_repo.update_status(db, video.id, VideoStatus.processing)
+    background_tasks.add_task(process_export, video.id)
+    return video

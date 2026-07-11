@@ -1,6 +1,11 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryCache,
+  MutationCache,
+} from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { getToken } from "./lib/auth";
+import { isAuthenticated, removeToken } from "./lib/auth";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import LandingPage from "./pages/LandingPage";
@@ -11,11 +16,41 @@ import VerifyEmailPage from "./pages/VerifyEmailPage";
 import ProfilePage from "./pages/ProfilePage";
 
 
-const queryClient = new QueryClient();
+// API レスポンスが 401（認証切れ）なら自動でログアウトしてログイン画面へ送る。
+// Orval 生成の fetch クライアントは 401 でも例外を投げず { status: 401 } を resolve するため、
+// onError ではなく onSuccess 側でステータスを判定する。
+const handleApiResult = (data: unknown) => {
+  if (
+    data &&
+    typeof data === "object" &&
+    (data as { status?: number }).status === 401
+  ) {
+    removeToken();
+    // QueryClient は Router の外で生成されるため navigate が使えない。location で遷移する。
+    if (window.location.pathname !== "/login") {
+      window.location.replace("/login");
+    }
+  }
+};
 
-// ログインしていない場合は /login にリダイレクトするラッパー
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onSuccess: handleApiResult }),
+  mutationCache: new MutationCache({ onSuccess: handleApiResult }),
+});
+
+// 未認証（トークンが無い／期限切れ）の場合は /login にリダイレクトするラッパー
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  return getToken() ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!isAuthenticated()) {
+    removeToken();
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ message: "セッションの有効期限が切れました。再度ログインしてください。" }}
+      />
+    );
+  }
+  return <>{children}</>;
 }
 
 function App() {

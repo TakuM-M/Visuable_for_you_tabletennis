@@ -22,6 +22,19 @@ def get_by_video_id(db: Session, video_id: uuid.UUID) -> list[Job]:
     return db.query(Job).filter(Job.video_id == video_id).all()
 
 
+def get_latest_by_video_id(db: Session, video_id: uuid.UUID) -> Job | None:
+    """動画に紐づく最新のジョブを返す。
+
+    ユーザーが編集で新規作成した clip に流用する job_id を取得するために使う。
+    """
+    return (
+        db.query(Job)
+        .filter(Job.video_id == video_id)
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+
+
 def update_status(
     db: Session,
     job_id: uuid.UUID,

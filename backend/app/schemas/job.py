@@ -21,3 +21,19 @@ class JobResponse(BaseModel):
     next_retry_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class ClipData(BaseModel):
+    """MLサービスが返す1シーンの区間（秒）"""
+
+    start_time: float
+    end_time: float
+
+
+class JobCompleteRequest(BaseModel):
+    """MLサービスからの処理完了コールバックのリクエストボディ。
+
+    job_id はパスパラメータで受け取るためボディには持たない。
+    """
+
+    clips: list[ClipData]

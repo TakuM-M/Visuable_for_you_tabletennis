@@ -38,13 +38,26 @@ export interface ChunkUploadInitResponse {
   upload_id: string;
 }
 
+/**
+ * MLサービスが返す1シーンの区間（秒）
+ */
 export interface ClipData {
   start_time: number;
   end_time: number;
 }
 
 /**
- * 切り抜き動画レスポンス（クリップはMLサービスが生成するためCreateスキーマは不要）
+ * ユーザー編集で送られる 1 区間。連結順は配列内の並び順で決まる。
+ */
+export interface ClipInput {
+  /** @minimum 0 */
+  start_time: number;
+  /** @exclusiveMinimum 0 */
+  end_time: number;
+}
+
+/**
+ * 切り抜き区間レスポンス
  */
 export interface ClipResponse {
   id: string;
@@ -52,8 +65,20 @@ export interface ClipResponse {
   job_id: string;
   start_time: number;
   end_time: number;
+  sort_order: number;
   storage_path: string;
   created_at: string;
+}
+
+/**
+ * 切り抜き一括置換リクエスト（PUT /videos/{id}/clips）。
+
+送られた配列で動画の切り抜きをまるごと置き換える。新規・編集・削除・
+並べ替えをこの 1 リクエストで表現する。
+ */
+export interface ClipsReplaceRequest {
+  /** @maxItems 200 */
+  clips: ClipInput[];
 }
 
 export interface ValidationError {
@@ -66,8 +91,12 @@ export interface HTTPValidationError {
   detail?: ValidationError[];
 }
 
+/**
+ * MLサービスからの処理完了コールバックのリクエストボディ。
+
+job_id はパスパラメータで受け取るためボディには持たない。
+ */
 export interface JobCompleteRequest {
-  job_id: string;
   clips: ClipData[];
 }
 
@@ -145,6 +174,17 @@ export interface UserUpdate {
   password?: string | null;
 }
 
+/**
+ * 連結済み動画の取得用レスポンス。
+
+R2 の presigned URL（短命・推測不可）を返し、フロントは <video src> /
+ダウンロード href にこの URL を直接セットする。認可はこのエンドポイントで
+行い、バイト本体は R2 から直接配信する。
+ */
+export interface VideoOutputResponse {
+  url: string;
+}
+
 export type VideoStatus = typeof VideoStatus[keyof typeof VideoStatus];
 
 
@@ -152,6 +192,7 @@ export const VideoStatus = {
   uploaded: 'uploaded',
   queued: 'queued',
   processing: 'processing',
+  ready: 'ready',
   completed: 'completed',
   failed: 'failed',
 } as const;
@@ -166,6 +207,7 @@ export interface VideoResponse {
   storage_path: string;
   output_path: string | null;
   duration: number | null;
+  source_duration: number | null;
   status: VideoStatus;
   created_at: string;
   updated_at: string;
@@ -179,7 +221,7 @@ export type ChunkUploadVideosUploadUploadIdChunkPostParams = {
 index: number;
 };
 
-export type CompleteJobInternalJobsJobIdCompletePost200 = { [key: string]: unknown };
+export type CompleteJobInternalJobsJobIdCompletePost202 = { [key: string]: unknown };
 
 export type HealthHealthGet200 = { [key: string]: unknown };
 
@@ -494,7 +536,12 @@ export const listVideosVideosGet = async ( options?: RequestInit): Promise<listV
 
 
 /**
- * 動画アップロード
+ * 動画アップロード（単一リクエスト）
+
+NOTE: 現在フロントエンドからは未使用。フロントは大容量対応のためチャンク
+アップロード（/videos/upload/init|chunk|complete、frontend/src/lib/chunkedUpload.ts）
+を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
+自分の current_user.id で作成するため所有者チェックは不要。
  * @summary Upload Video
  */
 export type uploadVideoVideosPostResponse201 = {
@@ -812,11 +859,14 @@ export const deleteVideoVideosVideoIdDelete = async (videoId: string, options?: 
 
 
 /**
- * 連結済み動画のPresigned URLへリダイレクトする
+ * 連結済み動画の presigned URL を返す。
+
+認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+presigned URL でフロントが R2 から直接取得する。
  * @summary Get Output Video
  */
 export type getOutputVideoVideosVideoIdOutputGetResponse200 = {
-  data: unknown
+  data: VideoOutputResponse
   status: 200
 }
 
@@ -862,39 +912,43 @@ export const getOutputVideoVideosVideoIdOutputGet = async (videoId: string, opti
 
 
 /**
- * ジョブ詳細取得
- * @summary Get Job
+ * 元動画（アップロードされた素材）の presigned URL を返す。
+
+新規切り抜きのトリミング UI で元動画全体を再生するために使う。
+認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+presigned URL でフロントが R2 から直接取得する。
+ * @summary Get Source Video
  */
-export type getJobJobsJobIdGetResponse200 = {
-  data: JobResponse
+export type getSourceVideoVideosVideoIdSourceGetResponse200 = {
+  data: VideoOutputResponse
   status: 200
 }
 
-export type getJobJobsJobIdGetResponse422 = {
+export type getSourceVideoVideosVideoIdSourceGetResponse422 = {
   data: HTTPValidationError
   status: 422
 }
 
-export type getJobJobsJobIdGetResponseSuccess = (getJobJobsJobIdGetResponse200) & {
+export type getSourceVideoVideosVideoIdSourceGetResponseSuccess = (getSourceVideoVideosVideoIdSourceGetResponse200) & {
   headers: Headers;
 };
-export type getJobJobsJobIdGetResponseError = (getJobJobsJobIdGetResponse422) & {
+export type getSourceVideoVideosVideoIdSourceGetResponseError = (getSourceVideoVideosVideoIdSourceGetResponse422) & {
   headers: Headers;
 };
 
-export type getJobJobsJobIdGetResponse = (getJobJobsJobIdGetResponseSuccess | getJobJobsJobIdGetResponseError)
+export type getSourceVideoVideosVideoIdSourceGetResponse = (getSourceVideoVideosVideoIdSourceGetResponseSuccess | getSourceVideoVideosVideoIdSourceGetResponseError)
 
-export const getGetJobJobsJobIdGetUrl = (jobId: string,) => {
+export const getGetSourceVideoVideosVideoIdSourceGetUrl = (videoId: string,) => {
 
 
   
 
-  return `/api/jobs/${jobId}`
+  return `/api/videos/${videoId}/source`
 }
 
-export const getJobJobsJobIdGet = async (jobId: string, options?: RequestInit): Promise<getJobJobsJobIdGetResponse> => {
+export const getSourceVideoVideosVideoIdSourceGet = async (videoId: string, options?: RequestInit): Promise<getSourceVideoVideosVideoIdSourceGetResponse> => {
   
-  const res = await fetch(getGetJobJobsJobIdGetUrl(jobId),
+  const res = await fetch(getGetSourceVideoVideosVideoIdSourceGetUrl(videoId),
   {      
     ...options,
     method: 'GET'
@@ -905,8 +959,61 @@ export const getJobJobsJobIdGet = async (jobId: string, options?: RequestInit): 
 
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   
-  const data: getJobJobsJobIdGetResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getJobJobsJobIdGetResponse
+  const data: getSourceVideoVideosVideoIdSourceGetResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getSourceVideoVideosVideoIdSourceGetResponse
+}
+  
+
+
+/**
+ * 現在の切り抜き区間から連結動画を書き出す（生成する）。
+
+重い FFmpeg 処理は背景タスクで実行し、video を processing にして即座に返す。
+完了すると status が completed になり、GET /videos/{id}/output で取得できる。
+ * @summary Export Video
+ */
+export type exportVideoVideosVideoIdExportPostResponse202 = {
+  data: VideoResponse
+  status: 202
+}
+
+export type exportVideoVideosVideoIdExportPostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type exportVideoVideosVideoIdExportPostResponseSuccess = (exportVideoVideosVideoIdExportPostResponse202) & {
+  headers: Headers;
+};
+export type exportVideoVideosVideoIdExportPostResponseError = (exportVideoVideosVideoIdExportPostResponse422) & {
+  headers: Headers;
+};
+
+export type exportVideoVideosVideoIdExportPostResponse = (exportVideoVideosVideoIdExportPostResponseSuccess | exportVideoVideosVideoIdExportPostResponseError)
+
+export const getExportVideoVideosVideoIdExportPostUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}/export`
+}
+
+export const exportVideoVideosVideoIdExportPost = async (videoId: string, options?: RequestInit): Promise<exportVideoVideosVideoIdExportPostResponse> => {
+  
+  const res = await fetch(getExportVideoVideosVideoIdExportPostUrl(videoId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: exportVideoVideosVideoIdExportPostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as exportVideoVideosVideoIdExportPostResponse
 }
   
 
@@ -1012,12 +1119,14 @@ export const retryJobJobsJobIdRetryPost = async (jobId: string, options?: Reques
 
 
 /**
- * MLサービスからの処理完了コールバック
+ * MLサービスからの処理完了コールバック。
+
+重い結合処理は背景タスクへ委譲し、ML 側の read timeout を回避するため即 202 を返す。
  * @summary Complete Job
  */
-export type completeJobInternalJobsJobIdCompletePostResponse200 = {
-  data: CompleteJobInternalJobsJobIdCompletePost200
-  status: 200
+export type completeJobInternalJobsJobIdCompletePostResponse202 = {
+  data: CompleteJobInternalJobsJobIdCompletePost202
+  status: 202
 }
 
 export type completeJobInternalJobsJobIdCompletePostResponse422 = {
@@ -1025,7 +1134,7 @@ export type completeJobInternalJobsJobIdCompletePostResponse422 = {
   status: 422
 }
 
-export type completeJobInternalJobsJobIdCompletePostResponseSuccess = (completeJobInternalJobsJobIdCompletePostResponse200) & {
+export type completeJobInternalJobsJobIdCompletePostResponseSuccess = (completeJobInternalJobsJobIdCompletePostResponse202) & {
   headers: Headers;
 };
 export type completeJobInternalJobsJobIdCompletePostResponseError = (completeJobInternalJobsJobIdCompletePostResponse422) & {
@@ -1109,6 +1218,61 @@ export const listClipsByVideoVideosVideoIdClipsGet = async (videoId: string, opt
   
   const data: listClipsByVideoVideosVideoIdClipsGetResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as listClipsByVideoVideosVideoIdClipsGetResponse
+}
+  
+
+
+/**
+ * 切り抜きを一括置換する（新規・編集・削除・並べ替えをまとめて反映）。
+
+出力動画はこの時点では再生成しない。編集を反映するには
+POST /videos/{id}/export で書き出す。
+ * @summary Replace Clips By Video
+ */
+export type replaceClipsByVideoVideosVideoIdClipsPutResponse200 = {
+  data: ClipResponse[]
+  status: 200
+}
+
+export type replaceClipsByVideoVideosVideoIdClipsPutResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type replaceClipsByVideoVideosVideoIdClipsPutResponseSuccess = (replaceClipsByVideoVideosVideoIdClipsPutResponse200) & {
+  headers: Headers;
+};
+export type replaceClipsByVideoVideosVideoIdClipsPutResponseError = (replaceClipsByVideoVideosVideoIdClipsPutResponse422) & {
+  headers: Headers;
+};
+
+export type replaceClipsByVideoVideosVideoIdClipsPutResponse = (replaceClipsByVideoVideosVideoIdClipsPutResponseSuccess | replaceClipsByVideoVideosVideoIdClipsPutResponseError)
+
+export const getReplaceClipsByVideoVideosVideoIdClipsPutUrl = (videoId: string,) => {
+
+
+  
+
+  return `/api/videos/${videoId}/clips`
+}
+
+export const replaceClipsByVideoVideosVideoIdClipsPut = async (videoId: string,
+    clipsReplaceRequest: ClipsReplaceRequest, options?: RequestInit): Promise<replaceClipsByVideoVideosVideoIdClipsPutResponse> => {
+  
+  const res = await fetch(getReplaceClipsByVideoVideosVideoIdClipsPutUrl(videoId),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      clipsReplaceRequest,)
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: replaceClipsByVideoVideosVideoIdClipsPutResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as replaceClipsByVideoVideosVideoIdClipsPutResponse
 }
   
 

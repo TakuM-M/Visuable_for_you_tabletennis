@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { loginAuthLoginPost } from "../api/generated";
-import { getToken, setToken } from "../lib/auth";
+import { isAuthenticated, setToken } from "../lib/auth";
 
 // バリデーションルール（Zod v4 の書き方）
 const schema = z.object({
@@ -51,7 +51,7 @@ export default function LoginPage() {
     mutation.mutate(values);
   };
 
-  if (getToken()) return <Navigate to="/videos" replace />;
+  if (isAuthenticated()) return <Navigate to="/videos" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">

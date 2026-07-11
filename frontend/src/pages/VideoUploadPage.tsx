@@ -229,7 +229,7 @@ export default function VideoUploadPage() {
                 type="button"
                 kind="ghost"
                 size="sm"
-                onClick={() => navigate("/")}
+                onClick={() => navigate("/videos")}
                 disabled={isUploading}
               >
                 <IconChevL size={13} /> 一覧に戻る

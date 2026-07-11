@@ -37,6 +37,18 @@ class VideoResponse(BaseModel):
     storage_path: str
     output_path: str | None
     duration: float | None
+    source_duration: float | None
     status: VideoStatus
     created_at: datetime
     updated_at: datetime
+
+
+class VideoOutputResponse(BaseModel):
+    """連結済み動画の取得用レスポンス。
+
+    R2 の presigned URL（短命・推測不可）を返し、フロントは <video src> /
+    ダウンロード href にこの URL を直接セットする。認可はこのエンドポイントで
+    行い、バイト本体は R2 から直接配信する。
+    """
+
+    url: str

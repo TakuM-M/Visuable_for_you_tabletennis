@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import Depends, Header, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -7,7 +9,9 @@ from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
+from app.models.video import Video
 from app.repositories import user as user_repo
+from app.repositories import video as video_repo
 
 # Authorization: Bearer <token> ヘッダーからトークンを自動取得する FastAPI の既製品
 # tokenUrl はSwagger UIの「Authorize」ボタンが使うログインエンドポイント
@@ -33,6 +37,25 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="ユーザーが見つかりません")
 
     return user
+
+
+def get_owned_video(
+    video_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Video:
+    """video_id の動画を取得し、ログインユーザーの所有物か検証して返す。
+
+    存在しなければ 404、他人の動画なら 403 を返す。video_id をパスに持つ
+    動画関連エンドポイント（詳細・削除・出力・jobs/clips 一覧）の所有者チェックを
+    一元化するための共通依存。
+    """
+    video = video_repo.get_by_id(db, video_id)
+    if video is None:
+        raise HTTPException(status_code=404, detail="動画が見つかりません")
+    if video.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="この動画への権限がありません")
+    return video
 
 
 def require_internal_api_key(

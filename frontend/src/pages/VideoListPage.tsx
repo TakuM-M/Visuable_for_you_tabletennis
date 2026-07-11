@@ -22,12 +22,18 @@ function fmtDuration(seconds: number | null | undefined) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("ja-JP", {
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).replaceAll("/", "-");
+  const time = d.toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${date} ${time}`;
 }
 
 export default function VideoListPage() {
@@ -68,7 +74,7 @@ export default function VideoListPage() {
           </div>
 
           {/* Table header */}
-          <div className="grid h-8 grid-cols-[1fr_120px_120px_120px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
+          <div className="grid h-8 grid-cols-[1fr_120px_120px_150px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
             <span>タイトル</span>
             <span className="text-right">再生時間</span>
             <span className="text-right">状態</span>
@@ -96,7 +102,7 @@ export default function VideoListPage() {
                 type="button"
                 key={v.id}
                 onClick={() => navigate(`/videos/${v.id}`)}
-                className="grid w-full cursor-pointer grid-cols-[1fr_120px_120px_120px] items-center border-b border-border px-3.5 py-3 text-left hover:bg-subtle"
+                className="grid w-full cursor-pointer grid-cols-[1fr_120px_120px_150px] items-center border-b border-border px-3.5 py-3 text-left hover:bg-subtle"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="h-6 w-9 flex-none overflow-hidden rounded">
@@ -113,7 +119,7 @@ export default function VideoListPage() {
                 <div className="flex justify-end">
                   <StatusBadge status={v.status} />
                 </div>
-                <div className="text-right text-[12px] text-fg-3">{fmtDate(v.created_at)}</div>
+                <div className="text-right text-[12px] text-fg-3">{fmtDateTime(v.created_at)}</div>
               </button>
             ))
           )}

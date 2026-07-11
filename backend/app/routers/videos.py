@@ -1,14 +1,17 @@
-import uuid
-
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_owned_video
 from app.db.session import get_db
 from app.models.user import User
+from app.models.video import Video
 from app.repositories import video as video_repo
-from app.schemas.video import ChunkUploadInitRequest, ChunkUploadInitResponse, VideoResponse
+from app.schemas.video import (
+    ChunkUploadInitRequest,
+    ChunkUploadInitResponse,
+    VideoOutputResponse,
+    VideoResponse,
+)
 
 from app.services import video_service
 from app.services import storage_service
@@ -23,7 +26,13 @@ def upload_video(
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> VideoResponse:
-    """動画アップロード"""
+    """動画アップロード（単一リクエスト）
+
+    NOTE: 現在フロントエンドからは未使用。フロントは大容量対応のためチャンク
+    アップロード（/videos/upload/init|chunk|complete、frontend/src/lib/chunkedUpload.ts）
+    を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
+    自分の current_user.id で作成するため所有者チェックは不要。
+    """
     try:
         video = video_service.upload_video(
             db=db,
@@ -105,41 +114,61 @@ def list_videos(
 
 @router.get("/{video_id}", response_model=VideoResponse)
 def get_video(
-    video_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    video: Video = Depends(get_owned_video),
 ) -> VideoResponse:
     """動画詳細取得"""
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="動画が見つかりません")
     return video
 
-@router.get("/{video_id}/output")
+
+@router.get("/{video_id}/output", response_model=VideoOutputResponse)
 def get_output_video(
-    video_id: uuid.UUID,
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """連結済み動画のPresigned URLへリダイレクトする"""
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="動画が見つかりません")
+    video: Video = Depends(get_owned_video),
+) -> VideoOutputResponse:
+    """連結済み動画の presigned URL を返す。
+
+    認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+    presigned URL でフロントが R2 から直接取得する。
+    """
     if not video.output_path:
         raise HTTPException(status_code=404, detail="連結動画がまだ生成されていません")
 
     url = storage_service.generate_presigned_url(video.output_path)
-    return RedirectResponse(url=url)
+    return VideoOutputResponse(url=url)
+
+
+@router.get("/{video_id}/source", response_model=VideoOutputResponse)
+def get_source_video(
+    video: Video = Depends(get_owned_video),
+) -> VideoOutputResponse:
+    """元動画（アップロードされた素材）の presigned URL を返す。
+
+    新規切り抜きのトリミング UI で元動画全体を再生するために使う。
+    認可（JWT＋所有者）は get_owned_video が担い、バイト本体は払い出した
+    presigned URL でフロントが R2 から直接取得する。
+    """
+    url = storage_service.generate_presigned_url(video.storage_path)
+    return VideoOutputResponse(url=url)
+
+
+@router.post("/{video_id}/export", response_model=VideoResponse, status_code=202)
+def export_video(
+    video: Video = Depends(get_owned_video),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> VideoResponse:
+    """現在の切り抜き区間から連結動画を書き出す（生成する）。
+
+    重い FFmpeg 処理は背景タスクで実行し、video を processing にして即座に返す。
+    完了すると status が completed になり、GET /videos/{id}/output で取得できる。
+    """
+    return video_service.export_video(db, video, background_tasks)
 
 
 @router.delete("/{video_id}", status_code=204)
 def delete_video(
-    video_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    video: Video = Depends(get_owned_video),
     db: Session = Depends(get_db),
 ) -> None:
     """動画削除"""
-    video = video_repo.get_by_id(db, video_id)
-    if video is None:
-        raise HTTPException(status_code=404, detail="動画が見つかりません")
-    video_service.delete_video(db, video_id)
+    video_service.delete_video(db, video.id)
     return None

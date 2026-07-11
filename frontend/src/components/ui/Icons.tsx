@@ -55,3 +55,4 @@ export const IconClose    = (p: Props) => <Svg {...p}><path d="M6 6l12 12M18 6L6
 export const IconCheck    = (p: Props) => <Svg {...p}><path d="M5 12l4.5 4.5L19 7" /></Svg>;
 export const IconRefresh  = (p: Props) => <Svg {...p}><path d="M3 12a9 9 0 0115-6.7L21 8M21 3v5h-5M21 12a9 9 0 01-15 6.7L3 16M3 21v-5h5" /></Svg>;
 export const IconTrash    = (p: Props) => <Svg {...p}><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" /></Svg>;
+export const IconPencil   = (p: Props) => <Svg {...p}><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19l-4 1zM13.5 7.5l3 3" /></Svg>;
