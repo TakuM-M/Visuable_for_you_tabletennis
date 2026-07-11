@@ -73,6 +73,8 @@ export default function VideoUploadPage() {
     if (!files?.length) return;
     const file = files[0];
     setSelectedFile(file);
+    // ドラッグ&ドロップ経路は input の onChange を通らないため、ここでフォーム値に反映する
+    setValue("file", files, { shouldValidate: true });
     if (!titleValue) {
       const stem = file.name.replace(/\.[^.]+$/, "");
       setValue("title", stem);

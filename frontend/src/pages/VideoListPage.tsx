@@ -49,9 +49,9 @@ export default function VideoListPage() {
   return (
     <AppShell>
       <div className="scroll-thin h-full overflow-auto">
-        <div className="mx-auto max-w-[1040px] px-8 pt-7 pb-16">
+        <div className="mx-auto max-w-[1040px] px-4 pt-6 pb-16 sm:px-8 sm:pt-7">
           {/* Page header */}
-          <div className="mb-5 flex items-end justify-between gap-4">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
             <div>
               <div className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-fg-4">
                 Library
@@ -73,8 +73,8 @@ export default function VideoListPage() {
             </div>
           </div>
 
-          {/* Table header */}
-          <div className="grid h-8 grid-cols-[1fr_120px_120px_150px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4">
+          {/* Table header（モバイルでは行を2段組みにするため非表示） */}
+          <div className="hidden h-8 grid-cols-[1fr_120px_120px_150px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4 sm:grid">
             <span>タイトル</span>
             <span className="text-right">再生時間</span>
             <span className="text-right">状態</span>
@@ -102,8 +102,9 @@ export default function VideoListPage() {
                 type="button"
                 key={v.id}
                 onClick={() => navigate(`/videos/${v.id}`)}
-                className="grid w-full cursor-pointer grid-cols-[1fr_120px_120px_150px] items-center border-b border-border px-3.5 py-3 text-left hover:bg-subtle"
+                className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border px-3.5 py-3 text-left hover:bg-subtle sm:grid-cols-[1fr_120px_120px_150px] sm:gap-0"
               >
+                {/* モバイル: 1段目=タイトル+状態バッジ / 2段目=再生時間+日時（order-* で並べ替え） */}
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="h-6 w-9 flex-none overflow-hidden rounded">
                     <Stripes />
@@ -113,13 +114,15 @@ export default function VideoListPage() {
                     <div className="font-mono text-[10.5px] text-fg-4">MP4</div>
                   </div>
                 </div>
-                <div className="text-right font-mono text-[12px] text-fg-2">
+                <div className="order-2 font-mono text-[12px] text-fg-2 sm:order-none sm:text-right">
                   {fmtDuration(v.duration)}
                 </div>
-                <div className="flex justify-end">
+                <div className="order-1 flex justify-end sm:order-none">
                   <StatusBadge status={v.status} />
                 </div>
-                <div className="text-right text-[12px] text-fg-3">{fmtDateTime(v.created_at)}</div>
+                <div className="order-3 text-right text-[12px] text-fg-3 sm:order-none">
+                  {fmtDateTime(v.created_at)}
+                </div>
               </button>
             ))
           )}
