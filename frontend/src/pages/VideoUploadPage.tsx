@@ -12,12 +12,7 @@ import { IconChevL, IconClose, IconUpload } from "../components/ui/Icons";
 
 const schema = z.object({
   title: z.string().min(1, "タイトルを入力してください"),
-  file: z
-    .custom<FileList>(
-      (v) => typeof FileList !== "undefined" && v instanceof FileList,
-      "動画ファイルを選択してください"
-    )
-    .refine((files) => files.length > 0, "動画ファイルを選択してください"),
+  file: z.custom<File>((v) => v instanceof File, "動画ファイルを選択してください"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -41,7 +36,9 @@ export default function VideoUploadPage() {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  const fileRegister = register("file");
+  // file は input に ref を渡さず setValue のみで管理する。RHF の setValue は
+  // 対象 ref が file input だと入力をクリアするため、ref を結び付けると選択値が消える。
+  register("file");
   const titleValue = watch("title");
 
   const mutation = useMutation({
@@ -50,7 +47,7 @@ export default function VideoUploadPage() {
       abortRef.current = controller;
       setProgress(0);
       return chunkedUpload({
-        file: values.file[0],
+        file: values.file,
         title: values.title,
         onProgress: setProgress,
         signal: controller.signal,
@@ -73,8 +70,8 @@ export default function VideoUploadPage() {
     if (!files?.length) return;
     const file = files[0];
     setSelectedFile(file);
-    // ドラッグ&ドロップ経路は input の onChange を通らないため、ここでフォーム値に反映する
-    setValue("file", files, { shouldValidate: true });
+    // input.files の FileList は live オブジェクトで後から空になり得るため、File を切り出して保持する
+    setValue("file", file, { shouldValidate: true });
     if (!titleValue) {
       const stem = file.name.replace(/\.[^.]+$/, "");
       setValue("title", stem);
@@ -176,14 +173,9 @@ export default function VideoUploadPage() {
                 >
                   <input
                     type="file"
-                    name={fileRegister.name}
-                    ref={fileRegister.ref}
                     accept={ACCEPT}
                     className="hidden"
-                    onChange={(e) => {
-                      fileRegister.onChange(e);
-                      onFileChange(e.target.files);
-                    }}
+                    onChange={(e) => onFileChange(e.target.files)}
                   />
                   <div className="mx-auto grid h-9 w-9 place-items-center rounded-lg border border-border bg-surface text-fg-2">
                     <IconUpload size={16} />
