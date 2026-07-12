@@ -1,0 +1,44 @@
+{
+  "evaluated_at": "2026-07-12T16:16:48.317913",
+  "model_path": "models/play_classifier/lstm_model.pth",
+  "model_config_path": "models/play_classifier/ltsm_config.json",
+  "val_dirs": [
+    "data/detect/05_train",
+    "data/detect/07_train",
+    "data/detect/08_train",
+    "data/detect/12_train",
+    "data/detect/14_train"
+  ],
+  "sequence_length": 30,
+  "threshold": 0.5,
+  "smoothing_window": 5,
+  "classifier_raw_micro": {
+    "precision": 0.9179550245959242,
+    "recall": 0.8530612244897959,
+    "f1": 0.8843192011508845,
+    "accuracy": 0.9285303497673446
+  },
+  "classifier_smoothed_micro": {
+    "precision": 0.9186434721490072,
+    "recall": 0.8535510204081632,
+    "f1": 0.8849018280297901,
+    "accuracy": 0.9288963245673655
+  },
+  "pipeline_smoothed_micro": {
+    "precision": 0.9186434721490072,
+    "recall": 0.4277532318769432,
+    "f1": 0.5837101546362976,
+    "accuracy": 0.8105821987400935
+  },
+  "average_precision_raw": 0.954891361166454,
+  "average_precision_smoothed": 0.9552441617587709,
+  "best_threshold_smoothed": 0.45,
+  "best_f1_smoothed": 0.888539511791477,
+  "coverage": {
+    "05_train": 0.4959038776624795,
+    "07_train": 0.47149928149449144,
+    "08_train": 0.4963786424119926,
+    "12_train": 0.47628740077345816,
+    "14_train": 0.4963082602676511
+  }
+}
