@@ -32,6 +32,25 @@ docker compose -f docker-compose.dev.yml exec backend alembic revision --autogen
 docker exec -i tabletennis-postgres psql -U postgres -d tabletennis < backend/app/sql/seed_test_user.sql
 ```
 
+### Production deploy (VPS)
+
+VPS 上で main の最新を反映する手順。**順番が重要**（CI/CD 未整備のため手動。`docs/tasks/chore-cicd-pipeline.md` で自動化予定）。
+
+```bash
+git pull origin main
+docker compose build
+docker compose run --rm backend alembic upgrade head   # 1. 先に DB マイグレーション
+docker compose up -d                                   # 2. コンテナ入れ替え
+docker compose restart nginx                           # 3. 最後に nginx 再起動（必須）
+```
+
+ハマりどころ:
+- **マイグレーションはコンテナ入れ替えより先に**実行する。backend は起動時（lifespan の `recover_interrupted_exports()`）に DB を叩くため、新コード＋旧スキーマだと起動自体が失敗し再起動ループになる。カラム追加程度なら旧コードは新スキーマを無視するだけなので、この順序なら安全。
+- マイグレーション実行は `exec` ではなく `docker compose run --rm backend alembic upgrade head` を使う。backend がクラッシュループ中でも使い捨てコンテナで確実に実行できる。
+- **nginx の再起動を忘れない**。`nginx.conf` は `proxy_pass http://frontend:80` のような静的ホスト名指定で、nginx は起動時に一度だけ名前解決して IP をキャッシュする。`up -d` で backend / frontend が再作成されて IP が変わっても nginx コンテナは再作成されないため、再起動しないと古い IP にプロキシし続けて LP を含む全ページが 502 になる。
+- `.env` は git 管理外。main で新しい環境変数が追加されていたら VPS 上の `.env` に手で追記してから `up` する。
+- デプロイ後は `docker compose ps` と `docker compose logs backend` で `Application startup complete.` を確認する。
+
 ### Backend (FastAPI / uv)
 
 ```bash
