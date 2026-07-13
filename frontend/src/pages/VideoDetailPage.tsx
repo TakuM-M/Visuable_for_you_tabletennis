@@ -113,6 +113,11 @@ export default function VideoDetailPage() {
   });
   const outputUrl =
     outputRes?.status === 200 ? (outputRes.data as { url: string }).url : null;
+  // ダウンロードは Content-Disposition: attachment 付き URL を使う。
+  // presigned URL はクロスオリジンで <a download> 属性が効かないため、
+  // ヘッダ側で attachment を指定しないとモバイルで再生画面が開くだけになる。
+  const outputDownloadUrl =
+    outputRes?.status === 200 ? (outputRes.data.download_url ?? null) : null;
 
   const { data: sourceRes } = useQuery({
     queryKey: ["source", id],
@@ -291,8 +296,8 @@ export default function VideoDetailPage() {
                       : "書き出し"}
                 </Button>
               )}
-              {isCompleted && outputUrl && (
-                <a href={outputUrl} download className="no-underline">
+              {isCompleted && outputDownloadUrl && (
+                <a href={outputDownloadUrl} download className="no-underline">
                   <Button kind="secondary" size="sm">
                     <IconDownload size={13} />
                     ダウンロード

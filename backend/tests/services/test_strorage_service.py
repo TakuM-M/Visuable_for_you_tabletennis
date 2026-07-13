@@ -30,6 +30,20 @@ def test_generate_presigned_url_passes_params():
         ExpiresIn=3600,
     )
     
+def test_generate_presigned_url_with_download_filename():
+    """download_filename 指定時は Content-Disposition: attachment が付き、
+    日本語ファイル名は RFC 5987 (filename*) でパーセントエンコードされる"""
+    client = Mock()
+    client.generate_presigned_url.return_value = "http://signed"
+    with patch("app.services.storage_service._get_client", return_value=client):
+        storage_service.generate_presigned_url(
+            "outputs/a.mp4", download_filename="試合 vs 田中.mp4"
+        )
+    params = client.generate_presigned_url.call_args.kwargs["Params"]
+    disposition = params["ResponseContentDisposition"]
+    assert disposition.startswith('attachment; filename="video.mp4"; ')
+    assert "filename*=UTF-8''%E8%A9%A6%E5%90%88%20vs%20%E7%94%B0%E4%B8%AD.mp4" in disposition
+
 def test_delete_file_calls_delete_object():
     client = Mock()
     with patch("app.services.storage_service._get_client", return_value=client):

@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
@@ -30,11 +31,24 @@ def upload_file(local_path: str, r2_key: str) -> None:
     _get_client().upload_file(local_path, R2_BUCKET_NAME, r2_key)
 
 
-def generate_presigned_url(r2_key: str, expires_in: int = 3600) -> str:
-    """期限付きダウンロードURLを生成する"""
+def generate_presigned_url(
+    r2_key: str, expires_in: int = 3600, download_filename: str | None = None
+) -> str:
+    """期限付きダウンロードURLを生成する
+
+    download_filename を指定すると Content-Disposition: attachment 付きの URL になり、
+    ブラウザはインライン再生ではなくファイル保存として扱う（モバイルでの
+    ダウンロードに必須）。日本語ファイル名は RFC 5987 (filename*) で渡す。
+    """
+    params: dict[str, str] = {"Bucket": R2_BUCKET_NAME, "Key": r2_key}
+    if download_filename is not None:
+        params["ResponseContentDisposition"] = (
+            "attachment; filename=\"video.mp4\"; "
+            f"filename*=UTF-8''{quote(download_filename)}"
+        )
     return _get_client().generate_presigned_url(
         "get_object",
-        Params={"Bucket": R2_BUCKET_NAME, "Key": r2_key},
+        Params=params,
         ExpiresIn=expires_in,
     )
 

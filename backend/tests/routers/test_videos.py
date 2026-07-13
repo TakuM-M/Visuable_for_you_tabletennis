@@ -264,11 +264,18 @@ def test_get_output_returns_presigned_url() -> None:
     with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
          patch(
              "app.routers.videos.storage_service.generate_presigned_url",
-             return_value="https://r2.example/signed",
-         ):
+             side_effect=["https://r2.example/signed", "https://r2.example/signed-dl"],
+         ) as mock_presign:
         resp = client.get(f"/videos/{video.id}/output")
     assert resp.status_code == 200
-    assert resp.json()["url"] == "https://r2.example/signed"
+    body = resp.json()
+    assert body["url"] == "https://r2.example/signed"
+    # download_url は attachment 付き（download_filename 指定で生成される）
+    assert body["download_url"] == "https://r2.example/signed-dl"
+    assert (
+        mock_presign.call_args_list[1].kwargs["download_filename"]
+        == f"{video.title}.mp4"
+    )
 
 
 def test_get_output_requires_auth() -> None:
