@@ -49,6 +49,11 @@ class VideoOutputResponse(BaseModel):
     R2 の presigned URL（短命・推測不可）を返し、フロントは <video src> /
     ダウンロード href にこの URL を直接セットする。認可はこのエンドポイントで
     行い、バイト本体は R2 から直接配信する。
+
+    url はインライン再生用、download_url は Content-Disposition: attachment 付きで
+    ブラウザに保存させる用（クロスオリジン URL では <a download> が無視されるため、
+    ヘッダ側で attachment を指定しないとモバイルで再生画面が開くだけになる）。
     """
 
     url: str
+    download_url: str | None = None

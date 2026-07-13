@@ -133,7 +133,10 @@ def get_output_video(
         raise HTTPException(status_code=404, detail="連結動画がまだ生成されていません")
 
     url = storage_service.generate_presigned_url(video.output_path)
-    return VideoOutputResponse(url=url)
+    download_url = storage_service.generate_presigned_url(
+        video.output_path, download_filename=f"{video.title}.mp4"
+    )
+    return VideoOutputResponse(url=url, download_url=download_url)
 
 
 @router.get("/{video_id}/source", response_model=VideoOutputResponse)

@@ -1,7 +1,5 @@
 """共有テスト fixture。
 
-このプロジェクトのテスト戦略:
-
 - **mock テスト**: services / routers のロジックをテストする際、DB アクセスを
   `unittest.mock.patch` でニセモノに差し替える（既存の test_video_quota.py 等）。
   この conftest.py の fixture は使わない。
