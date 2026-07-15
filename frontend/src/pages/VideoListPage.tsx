@@ -10,7 +10,7 @@ import StatusBadge from "../components/ui/StatusBadge";
 import Button from "../components/ui/Button";
 import Stripes from "../components/ui/Stripes";
 import EmptyState from "../components/ui/EmptyState";
-import { IconFilm, IconPlus, IconSearch } from "../components/ui/Icons";
+import { IconFilm, IconPlus} from "../components/ui/Icons";
 
 /**
  * Format seconds → mm:ss; "—" when missing.
@@ -62,10 +62,6 @@ export default function VideoListPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button kind="secondary" size="sm">
-                <IconSearch size={13} />
-                絞り込み
-              </Button>
               <Button kind="primary" size="sm" onClick={() => navigate("/videos/new")}>
                 <IconPlus size={13} />
                 動画を追加

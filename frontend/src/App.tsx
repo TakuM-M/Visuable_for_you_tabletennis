@@ -41,7 +41,7 @@ const queryClient = new QueryClient({
 // 未認証（トークンが無い／期限切れ）の場合は /login にリダイレクトするラッパー
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
-    removeToken();
+    removeToken(); // localStorage に残っている期限切れトークンを削除
     return (
       <Navigate
         to="/login"
