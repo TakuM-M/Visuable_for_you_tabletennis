@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+from app.models.job import JobStatus
 from app.models.video import VideoStatus
 from app.services import video_service
 
@@ -193,32 +194,6 @@ def test_save_chunk_writes_chunk_file(tmp_path) -> None:
     assert (tmp_path / "up1" / "0").read_bytes() == b"chunk0"
 
 
-def test_complete_chunk_upload_merges_and_registers(tmp_path) -> None:
-    db, bt = MagicMock(), MagicMock()
-    upload_id = "up1"
-    upload_dir = tmp_path / upload_id
-    upload_dir.mkdir()
-    (upload_dir / "meta.json").write_text(
-        json.dumps({"title": "t", "filename": "v.mp4", "total_chunks": 2})
-    )
-    (upload_dir / "0").write_bytes(b"aa")
-    (upload_dir / "1").write_bytes(b"bb")
-    video = _make_video()
-
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
-         patch("app.services.video_service.settings.user_video_quota", 10), \
-         patch("app.services.video_service.storage_service.upload_file") as upload, \
-         patch("app.services.video_service._extract_duration", return_value=10.0), \
-         patch("app.services.video_service._register_video_and_start_ml", return_value=video) as register:
-        result = video_service.complete_chunk_upload(db, uuid.uuid4(), upload_id, bt)
-
-    assert result is video
-    upload.assert_called_once()
-    register.assert_called_once()
-    assert not upload_dir.exists()  # 結合後にクリーンアップされる
-
-
 def test_complete_chunk_upload_raises_when_dir_missing(tmp_path) -> None:
     db, bt = MagicMock(), MagicMock()
     with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
@@ -244,6 +219,99 @@ def test_complete_chunk_upload_raises_when_chunk_missing(tmp_path) -> None:
         with pytest.raises(FileNotFoundError):
             video_service.complete_chunk_upload(db, uuid.uuid4(), upload_id, bt)
 
+def test_complete_chunk_upload_schedules_background_task(tmp_path) -> None:
+    db, bt = MagicMock(), MagicMock()
+    upload_id = "up1"
+    upload_dir = tmp_path / upload_id
+    upload_dir.mkdir()
+    (upload_dir / "meta.json").write_text(
+        json.dumps({"title": "t", "filename": "v.mp4", "total_chunks": 2})
+    )
+    (upload_dir / "0").write_bytes(b"aa")
+    (upload_dir / "1").write_bytes(b"bb")
+    video = _make_video()
+    
+    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
+         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
+         patch("app.services.video_service.settings.user_video_quota", 10), \
+         patch("app.services.video_service.storage_service.upload_file") as upload_file, \
+         patch("app.services.video_service.video_repo.create", return_value=video) as video_create, \
+         patch("app.services.video_service.video_repo.update_status", return_value=video) as video_update_status, \
+         patch("app.services.video_service.job_repo.create", return_value=SimpleNamespace(id=uuid.uuid4())) as job_create:
+        result = video_service.complete_chunk_upload(db, uuid.uuid4(), upload_id, bt)
+    
+    assert result is video
+    upload_file.assert_not_called()
+    video_create.assert_called_once()
+    video_update_status.assert_called_once_with(db, video.id, VideoStatus.queued)
+    job_create.assert_called_once()
+    bt.add_task.assert_called_once() # バックグラウンドタスクがスケジュールされる
+
+
+def test_process_chunk_upload_merges_and_uploads(tmp_path) -> None:
+    upload_id = "up1"
+    upload_dir = tmp_path / upload_id
+    upload_dir.mkdir()
+    (upload_dir / "meta.json").write_text(
+        json.dumps({"title": "t", "filename": "v.mp4", "total_chunks": 2})
+    )
+    (upload_dir / "0").write_bytes(b"aa")
+    (upload_dir / "1").write_bytes(b"bb")
+    r2_key = "videos/f1.mp4"
+    video_id, job_id = uuid.uuid4(), uuid.uuid4()
+    db = MagicMock()
+
+    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
+         patch("app.services.video_service.SessionLocal") as sl, \
+         patch("app.services.video_service.storage_service.upload_file") as upload_file, \
+         patch("app.services.video_service._extract_duration", return_value=10.0), \
+         patch("app.services.video_service.video_repo.update_source_duration") as update_source_duration, \
+         patch("app.services.video_service.video_repo.update_status") as video_update_status, \
+         patch("app.services.video_service.call_ml_service") as ml:
+        sl.return_value.__enter__.return_value = db
+        video_service.process_chunk_upload(upload_id, r2_key, str(video_id), str(job_id))
+
+    # 結合ファイルが R2 に上がる
+    upload_file.assert_called_once()
+    assert upload_file.call_args.args[1] == r2_key
+    # 元動画長が保存される
+    update_source_duration.assert_called_once_with(db, video_id, 10.0)
+    # 一時ファイル（チャンク・結合ファイル）が残らない
+    assert list(tmp_path.iterdir()) == []
+    # ML キックは背景内で直接呼ばれる
+    ml.assert_called_once_with(r2_key, str(job_id), str(video_id))
+    # processing への遷移は call_ml_service の責務なのでここでは行わない
+    video_update_status.assert_not_called()
+
+
+def test_process_chunk_upload_marks_failed_on_error(tmp_path) -> None:
+    upload_id = "up1"
+    upload_dir = tmp_path / upload_id
+    upload_dir.mkdir()
+    (upload_dir / "meta.json").write_text(
+        json.dumps({"title": "t", "filename": "v.mp4", "total_chunks": 2})
+    )
+    (upload_dir / "0").write_bytes(b"aa")
+    (upload_dir / "1").write_bytes(b"bb")
+    r2_key = "videos/f1.mp4"
+    video_id, job_id = uuid.uuid4(), uuid.uuid4()
+    db = MagicMock()
+
+    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
+         patch("app.services.video_service.SessionLocal") as sl, \
+         patch("app.services.video_service.storage_service.upload_file", side_effect=RuntimeError("R2 down")), \
+         patch("app.services.video_service.video_repo.update_status") as video_update_status, \
+         patch("app.services.video_service.job_repo.update_status") as job_update_status, \
+         patch("app.services.video_service.call_ml_service") as ml:
+        sl.return_value.__enter__.return_value = db
+        # 例外は外に漏れず、関数内で処理される
+        video_service.process_chunk_upload(upload_id, r2_key, str(video_id), str(job_id))
+
+    # video / job とも failed になる
+    video_update_status.assert_called_once_with(db, video_id, VideoStatus.failed)
+    assert job_update_status.call_args.kwargs["status"] is JobStatus.failed
+    # 失敗したら ML はキックしない
+    ml.assert_not_called()
 
 # --- delete_video -----------------------------------------------------------
 

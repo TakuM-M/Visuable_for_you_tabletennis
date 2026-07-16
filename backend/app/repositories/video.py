@@ -107,6 +107,19 @@ def update_duration(
     db.refresh(video)
     return video
 
+def update_source_duration(
+    db: Session,
+    video_id: uuid.UUID,
+    source_duration: float,
+) -> Video | None:
+    video = get_by_id(db, video_id)
+    if video is None:
+        return None
+    video.source_duration = source_duration
+    db.commit()
+    db.refresh(video)
+    return video
+
 def delete(db: Session, video_id: uuid.UUID) -> bool:
     video = get_by_id(db, video_id)
     if video is None:

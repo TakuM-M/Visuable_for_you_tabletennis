@@ -33,7 +33,7 @@ class QuotaExceededError(Exception):
 
 
 def _ensure_under_quota(db: Session, user_id: uuid.UUID) -> None:
-    """user_video_quota を超えていれば QuotaExceededError を raise する"""
+    """user_video_quota 1ユーザーあたりの動画本数上限を超えていれば QuotaExceededError を raise する"""
     if video_repo.count_by_user_id(db, user_id) >= settings.user_video_quota:
         raise QuotaExceededError(
             f"動画本数上限 {settings.user_video_quota} 本に到達しました"
@@ -225,8 +225,10 @@ def complete_chunk_upload(
     upload_id: str,
     background_tasks: BackgroundTasks,
 ) -> Video:
-    """全チャンクを結合して動画を登録し、ML処理を開始する"""
+    """r2_keyを決定し映像の結合・アップロード・MLサービスはバックグラウンドで実行。"""
+    # クォーター確認（完了時点での動画本数をチェックする）
     _ensure_under_quota(db, user_id)
+    
     upload_dir = LOCAL_TMP_DIR / upload_id
     if not upload_dir.exists():
         raise FileNotFoundError(f"Upload {upload_id} not found")
@@ -240,26 +242,62 @@ def complete_chunk_upload(
         if not (upload_dir / str(i)).exists():
             raise FileNotFoundError(f"Chunk {i} is missing")
 
-    # チャンクを結合（ローカル一時ファイル）
     file_id = uuid.uuid4()
     r2_key = f"videos/{file_id}.mp4"
-    merged_path = LOCAL_TMP_DIR / f"{file_id}_merged.mp4"
-
-    with merged_path.open("wb") as out_f:
-        for i in range(total_chunks):
-            chunk_path = upload_dir / str(i)
-            with chunk_path.open("rb") as chunk_f:
-                shutil.copyfileobj(chunk_f, out_f)
-
-    # R2にアップロード → 元動画長を取得 → ローカル一時ファイルを削除
-    storage_service.upload_file(str(merged_path), r2_key)
-    source_duration = _extract_duration(merged_path)
-    merged_path.unlink(missing_ok=True)
-    shutil.rmtree(upload_dir)
-
-    return _register_video_and_start_ml(
-        db, user_id, title, r2_key, background_tasks, source_duration
+    
+    # video作成
+    video = video_repo.create(
+        db=db,
+        user_id=user_id,
+        title=title,
+        storage_path=r2_key,
     )
+    video_repo.update_status(db, video.id, VideoStatus.queued)
+    job = job_repo.create(db=db, video_id=video.id)
+    background_tasks.add_task(process_chunk_upload, upload_id, r2_key, str(video.id), str(job.id))
+    
+    return video
+
+
+def process_chunk_upload(
+    upload_id: str, 
+    r2_key: str, 
+    video_id: str, 
+    job_id: str) -> None:
+    """結合した動画をR2にアップロードし、MLサービスを呼び出す。BackgroundTasksで実行される。"""
+    try:
+        merged_path = LOCAL_TMP_DIR / f"{upload_id}_merged.mp4"
+        upload_dir = LOCAL_TMP_DIR / upload_id
+        
+        meta = json.loads((upload_dir / "meta.json").read_text())
+        total_chunks = meta["total_chunks"]
+        
+        with merged_path.open("wb") as out_f:
+            for i in range(total_chunks):
+                chunk_path = upload_dir / str(i)
+                with chunk_path.open("rb") as chunk_f:
+                    shutil.copyfileobj(chunk_f, out_f)
+        
+        storage_service.upload_file(str(merged_path), r2_key)
+        duration = _extract_duration(merged_path)
+        if duration is not None:
+            with SessionLocal() as db:
+                video_repo.update_source_duration(db, uuid.UUID(video_id), duration)
+        merged_path.unlink(missing_ok=True)
+        shutil.rmtree(upload_dir)
+        
+        call_ml_service(r2_key, str(job_id), str(video_id))
+        logger.info("チャンクアップロード処理完了 video_id=%s job_id=%s", video_id, job_id)
+    except Exception as e:
+        logger.exception("チャンクアップロード処理失敗 video_id=%s: %s", video_id, e)
+        with SessionLocal() as db:
+            job_repo.update_status(
+                db=db,
+                job_id=uuid.UUID(job_id),
+                status=JobStatus.failed,
+                error_message=f"チャンクアップロード処理失敗: {e}",
+            )
+            video_repo.update_status(db, uuid.UUID(video_id), VideoStatus.failed)
 
 
 def delete_video(db: Session, video_id: uuid.UUID) -> bool:
