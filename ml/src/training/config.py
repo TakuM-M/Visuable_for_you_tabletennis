@@ -1,12 +1,14 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+
 # =====================================================
 # モデル訓練パイプライン設定
 # =====================================================
 @dataclass
 class ModelConfig:
     """モデルの設定"""
+
     hidden_size: int = 128
     num_layers: int = 2
     dropout: float = 0.4
@@ -24,13 +26,14 @@ class ModelConfig:
 @dataclass
 class DatasetConfig:
     """データセットの設定（複数CSV対応）"""
+
     # 動画データディレクトリのリスト
     train_data_dirs: list  # 例: ['data/video1', 'data/video2']
     val_data_dirs: Optional[list] = None
 
     # CSVファイル名
-    csv_filename: str = 'player_pose_data.csv'
-    label_filename: str = 'play_labels.csv'
+    csv_filename: str = "player_pose_data.csv"
+    label_filename: str = "play_labels.csv"
 
     # データセット設定
     sequence_length: int = 30
@@ -55,6 +58,7 @@ class DatasetConfig:
 @dataclass
 class OptimizerConfig:
     """最適化器の設定"""
+
     learning_rate: float = 1e-3
     weight_decay: float = 1e-4
     scheduler_patience: int = 5
@@ -78,9 +82,10 @@ class OptimizerConfig:
 @dataclass
 class TrainingConfig:
     """学習の設定"""
+
     epochs: int = 50
     save_every: int = 10
-    device: str = 'cuda'
+    device: str = "cuda"
     use_tensorboard: bool = True
     early_stopping_patience: Optional[int] = None
 
@@ -90,29 +95,33 @@ class TrainingConfig:
             raise ValueError("epochs must be at least 1")
         if self.save_every < 1:
             raise ValueError("save_every must be at least 1")
-        if self.device not in ['cuda', 'cpu', 'mps']:
+        if self.device not in ["cuda", "cpu", "mps"]:
             raise ValueError(f"Unsupported device: {self.device}")
-        if self.early_stopping_patience is not None and self.early_stopping_patience < 1:
+        if (
+            self.early_stopping_patience is not None
+            and self.early_stopping_patience < 1
+        ):
             raise ValueError("early_stopping_patience must be at least 1")
 
 
 @dataclass
 class TrainingPipelineConfig:
     """学習パイプライン全体の設定"""
+
     model: ModelConfig
     dataset: DatasetConfig
     optimizer: OptimizerConfig
     training: TrainingConfig
-    output_dir: str = 'output/training'
+    output_dir: str = "output/training"
 
     @classmethod
     def create_default(
         cls,
         train_data_dirs: list,
         val_data_dirs: Optional[list] = None,
-        output_dir: str = 'output/training',
-        device: str = 'cuda'
-    ) -> 'TrainingPipelineConfig':
+        output_dir: str = "output/training",
+        device: str = "cuda",
+    ) -> "TrainingPipelineConfig":
         """
         デフォルト設定でTrainingPipelineConfigを作成
 
@@ -128,10 +137,9 @@ class TrainingPipelineConfig:
         return cls(
             model=ModelConfig(),
             dataset=DatasetConfig(
-                train_data_dirs=train_data_dirs,
-                val_data_dirs=val_data_dirs
+                train_data_dirs=train_data_dirs, val_data_dirs=val_data_dirs
             ),
             optimizer=OptimizerConfig(),
             training=TrainingConfig(device=device),
-            output_dir=output_dir
+            output_dir=output_dir,
         )

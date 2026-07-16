@@ -2,6 +2,7 @@
 トラッキング結果出力モジュール
 フレームごとのキーポイント保存する
 """
+
 import csv
 import numpy as np
 from pathlib import Path
@@ -14,6 +15,7 @@ from src.core.data_classes import PersonTrack, KEYPOINT_NAMES
 @dataclass
 class FrameData:
     """フレームデータ"""
+
     frame_num: int
     timestamp: float
     persons: List[PersonTrack]
@@ -26,7 +28,7 @@ class TrackingExporter:
         self,
         min_consecutive_frames: int = 30,
         max_frame_gap: int = 5,
-        min_confidence: float = 0.3
+        min_confidence: float = 0.3,
     ):
         """
         出力器の初期化
@@ -50,12 +52,7 @@ class TrackingExporter:
         self.LEFT_HIP_IDX = KEYPOINT_NAMES.index("left_hip")
         self.RIGHT_HIP_IDX = KEYPOINT_NAMES.index("right_hip")
 
-    def add_frame(
-        self,
-        frame_num: int,
-        timestamp: float,
-        persons: List[PersonTrack]
-    ):
+    def add_frame(self, frame_num: int, timestamp: float, persons: List[PersonTrack]):
         """
         フレームデータを追加
 
@@ -64,16 +61,14 @@ class TrackingExporter:
             timestamp: タイムスタンプ（秒）
             persons: トラッキング結果
         """
-        self.frame_data_list.append(FrameData(
-            frame_num=frame_num,
-            timestamp=timestamp,
-            persons=persons
-        ))
+        self.frame_data_list.append(
+            FrameData(frame_num=frame_num, timestamp=timestamp, persons=persons)
+        )
 
     def filter_by_consecutive_frames(
         self,
         min_consecutive_frames: Optional[int] = None,
-        max_frame_gap: Optional[int] = None
+        max_frame_gap: Optional[int] = None,
     ) -> None:
         """
         連続して出現している区間のみを保持し、断片的な出現を除外する
@@ -113,7 +108,7 @@ class TrackingExporter:
             consecutive_segments = []
             current_segment = [frame_nums_sorted[0]]
             for i in range(1, len(frame_nums_sorted)):
-                frame_gap = frame_nums_sorted[i] - frame_nums_sorted[i-1]
+                frame_gap = frame_nums_sorted[i] - frame_nums_sorted[i - 1]
 
                 if frame_gap <= max_frame_gap:
                     # ほぼ連続とみなす
@@ -147,18 +142,23 @@ class TrackingExporter:
                 frame_num = frame_data.frame_num
 
                 # このトラッキングIDのこのフレームが有効な区間に含まれるかチェック
-                if track_id in valid_frame_sets and frame_num in valid_frame_sets[track_id]:
+                if (
+                    track_id in valid_frame_sets
+                    and frame_num in valid_frame_sets[track_id]
+                ):
                     filtered_persons.append(person)
                 else:
                     removed_count += 1
 
             # このフレームに有効な人物がいる場合のみ保持
             if filtered_persons:
-                filtered_frame_data_list.append(FrameData(
-                    frame_num=frame_data.frame_num,
-                    timestamp=frame_data.timestamp,
-                    persons=filtered_persons
-                ))
+                filtered_frame_data_list.append(
+                    FrameData(
+                        frame_num=frame_data.frame_num,
+                        timestamp=frame_data.timestamp,
+                        persons=filtered_persons,
+                    )
+                )
 
         self.frame_data_list = filtered_frame_data_list
 
@@ -168,10 +168,7 @@ class TrackingExporter:
         print(f"  削除されたデータ数: {removed_count}")
         print(f"  保持されたトラッキングID: {sorted(valid_frame_sets.keys())}")
 
-    def normalize_poses(
-        self,
-        min_confidence: Optional[float] = None
-    ) -> Dict[str, any]:
+    def normalize_poses(self, min_confidence: Optional[float] = None) -> Dict[str, any]:
         """
         保持している全フレームの骨格データを正規化する（訓練データと同じ方法）
 
@@ -254,10 +251,10 @@ class TrackingExporter:
 
         # 統計情報
         stats = {
-            'total_persons': total_persons,
-            'valid_count': valid_count,
-            'invalid_count': invalid_count,
-            'scale_factors': scale_factors
+            "total_persons": total_persons,
+            "valid_count": valid_count,
+            "invalid_count": invalid_count,
+            "scale_factors": scale_factors,
         }
 
         print(f"正規化完了:")
@@ -269,14 +266,14 @@ class TrackingExporter:
             print(f"  腰幅統計:")
             print(f"    平均: {np.mean(scale_factors):.2f}px")
             print(f"    標準偏差: {np.std(scale_factors):.2f}px")
-            print(f"    範囲: {np.min(scale_factors):.2f} - {np.max(scale_factors):.2f}px")
+            print(
+                f"    範囲: {np.min(scale_factors):.2f} - {np.max(scale_factors):.2f}px"
+            )
 
         return stats
 
     def _compute_hip_center_and_width(
-        self,
-        keypoints: np.ndarray,
-        min_confidence: float
+        self, keypoints: np.ndarray, min_confidence: float
     ) -> tuple:
         """
         腰の中心座標と腰幅を計算（訓練データと同じ方法）
@@ -292,8 +289,7 @@ class TrackingExporter:
         right_hip = keypoints[self.RIGHT_HIP_IDX]
 
         # 両方の腰が検出されているかチェック
-        if (left_hip[2] >= min_confidence and
-            right_hip[2] >= min_confidence):
+        if left_hip[2] >= min_confidence and right_hip[2] >= min_confidence:
             # 腰の中心を計算
             center_x = (left_hip[0] + right_hip[0]) / 2.0
             center_y = (left_hip[1] + right_hip[1]) / 2.0
@@ -309,7 +305,7 @@ class TrackingExporter:
 
         # 両方検出されていない、または腰幅が0の場合は無効
         return ((0.0, 0.0), 1.0, False)
-    
+
     def get_all_track_ids(self) -> List[int]:
         """
         保持している全てのトラッキングIDを取得
@@ -323,10 +319,7 @@ class TrackingExporter:
                 track_ids.add(person.track_id)
         return sorted(track_ids)
 
-    def get_pose_data_for_dataset(
-        self,
-        track_id: Optional[int] = None
-    ) -> tuple:
+    def get_pose_data_for_dataset(self, track_id: Optional[int] = None) -> tuple:
         """
         InMemoryPoseSequenceDatasetへの入力用データを取得
 
@@ -356,7 +349,10 @@ class TrackingExporter:
                     continue
 
                 # 正規化座標を使用（学習データと同じ形式）
-                if not person.is_normalized_valid or person.normalized_keypoints is None:
+                if (
+                    not person.is_normalized_valid
+                    or person.normalized_keypoints is None
+                ):
                     continue  # 正規化に失敗したフレームはスキップ
                 keypoints_xy = person.normalized_keypoints.flatten()  # (17, 2) -> (34,)
                 pose_list.append(keypoints_xy)
@@ -371,9 +367,7 @@ class TrackingExporter:
         return pose_data, frames
 
     def export_csv(
-        self,
-        output_path: str,
-        player_roles: Optional[Dict[int, str]] = None
+        self, output_path: str, player_roles: Optional[Dict[int, str]] = None
     ):
         """
         全人物のトラッキング結果をCSV出力
@@ -386,28 +380,33 @@ class TrackingExporter:
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         # CSVヘッダーを作成
-        header = ["track_id", "frame", "timestamp", "role", "confidence", "bbox_x1", "bbox_y1", "bbox_x2", "bbox_y2"]
+        header = [
+            "track_id",
+            "frame",
+            "timestamp",
+            "role",
+            "confidence",
+            "bbox_x1",
+            "bbox_y1",
+            "bbox_x2",
+            "bbox_y2",
+        ]
 
         # 生座標のキーポイントカラムを追加
         for kp_name in KEYPOINT_NAMES:
-            header.extend([
-                f"{kp_name}_x",
-                f"{kp_name}_y",
-                f"{kp_name}_conf"
-            ])
+            header.extend([f"{kp_name}_x", f"{kp_name}_y", f"{kp_name}_conf"])
 
         # 正規化座標のカラムを追加（normalize_poses実行後のみ）
         if self.is_normalized:
             for kp_name in KEYPOINT_NAMES:
-                header.extend([
-                    f"{kp_name}_norm_x",
-                    f"{kp_name}_norm_y"
-                ])
+                header.extend([f"{kp_name}_norm_x", f"{kp_name}_norm_y"])
             # 正規化メタデータ
-            header.extend(["hip_center_x", "hip_center_y", "scale_factor", "is_normalized_valid"])
+            header.extend(
+                ["hip_center_x", "hip_center_y", "scale_factor", "is_normalized_valid"]
+            )
 
         # CSV書き込み
-        with open(output_file, 'w', newline='', encoding='utf-8') as f:
+        with open(output_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(header)
 
@@ -428,32 +427,33 @@ class TrackingExporter:
                         person.bbox[0],
                         person.bbox[1],
                         person.bbox[2],
-                        person.bbox[3]
+                        person.bbox[3],
                     ]
 
                     # 生座標のキーポイントを追加
                     for kp in person.keypoints:
-                        row.extend([
-                            f"{kp[0]:.2f}",
-                            f"{kp[1]:.2f}",
-                            f"{kp[2]:.3f}"
-                        ])
+                        row.extend([f"{kp[0]:.2f}", f"{kp[1]:.2f}", f"{kp[2]:.3f}"])
 
                     # 正規化座標を追加（normalize_poses実行後のみ）
                     if self.is_normalized:
                         if person.normalized_keypoints is not None:
                             for norm_kp in person.normalized_keypoints:
-                                row.extend([
-                                    f"{norm_kp[0]:.6f}",
-                                    f"{norm_kp[1]:.6f}"
-                                ])
+                                row.extend([f"{norm_kp[0]:.6f}", f"{norm_kp[1]:.6f}"])
                             # 正規化メタデータ
-                            row.extend([
-                                f"{person.hip_center[0]:.2f}" if person.hip_center else "0.0",
-                                f"{person.hip_center[1]:.2f}" if person.hip_center else "0.0",
-                                f"{person.scale_factor:.2f}" if person.scale_factor else "0.0",
-                                "1" if person.is_normalized_valid else "0"
-                            ])
+                            row.extend(
+                                [
+                                    f"{person.hip_center[0]:.2f}"
+                                    if person.hip_center
+                                    else "0.0",
+                                    f"{person.hip_center[1]:.2f}"
+                                    if person.hip_center
+                                    else "0.0",
+                                    f"{person.scale_factor:.2f}"
+                                    if person.scale_factor
+                                    else "0.0",
+                                    "1" if person.is_normalized_valid else "0",
+                                ]
+                            )
                         else:
                             # 正規化失敗時は0で埋める
                             for _ in range(17):

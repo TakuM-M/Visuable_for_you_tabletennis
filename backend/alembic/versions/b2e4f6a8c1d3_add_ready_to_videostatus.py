@@ -5,14 +5,15 @@ Revises: a1f3c7d5e2b9
 Create Date: 2026-06-08 00:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'b2e4f6a8c1d3'
-down_revision: Union[str, None] = 'a1f3c7d5e2b9'
+revision: str = "b2e4f6a8c1d3"
+down_revision: Union[str, None] = "a1f3c7d5e2b9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -22,7 +23,9 @@ def upgrade() -> None:
     # ALTER TYPE ... ADD VALUE はトランザクション内で実行できないため
     # autocommit_block でラップする。
     with op.get_context().autocommit_block():
-        op.execute("ALTER TYPE videostatus ADD VALUE IF NOT EXISTS 'ready' AFTER 'processing'")
+        op.execute(
+            "ALTER TYPE videostatus ADD VALUE IF NOT EXISTS 'ready' AFTER 'processing'"
+        )
 
 
 def downgrade() -> None:

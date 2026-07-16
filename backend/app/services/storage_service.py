@@ -43,7 +43,7 @@ def generate_presigned_url(
     params: dict[str, str] = {"Bucket": R2_BUCKET_NAME, "Key": r2_key}
     if download_filename is not None:
         params["ResponseContentDisposition"] = (
-            "attachment; filename=\"video.mp4\"; "
+            'attachment; filename="video.mp4"; '
             f"filename*=UTF-8''{quote(download_filename)}"
         )
     return _get_client().generate_presigned_url(

@@ -3,6 +3,7 @@ CSVベースの骨格シーケンスデータセット
 
 正規化されたCSVファイルから骨格シーケンスデータを読み込む
 """
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -25,7 +26,7 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
         sequence_length: int = 30,
         stride: int = 1,
         keypoint_features: Optional[List[str]] = None,
-        augmentor=None
+        augmentor=None,
     ):
         """
         CSV骨格シーケンスデータセットを初期化
@@ -50,7 +51,7 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
             sequence_length=sequence_length,
             stride=stride,
             keypoint_features=keypoint_features,
-            augmentor=augmentor
+            augmentor=augmentor,
         )
 
         # データを読み込み
@@ -77,25 +78,18 @@ class CSVPoseSequenceDataset(BasePoseSequenceDataset):
         if self.label_path and self.label_path.exists():
             labels_df = pd.read_csv(self.label_path)
             # フレーム番号でマージ
-            data_df = data_df.merge(
-                labels_df,
-                on='frame',
-                how='left'
-            )
-            data_df['label'] = data_df['label'].fillna(0).astype(int)
+            data_df = data_df.merge(labels_df, on="frame", how="left")
+            data_df["label"] = data_df["label"].fillna(0).astype(int)
         else:
             # ラベルがない場合は全て0（非プレイ）としてマーク
-            data_df['label'] = 0
+            data_df["label"] = 0
 
         # 特徴量カラムを作成
         feature_columns = []
         for kp_name in self.keypoint_names:
-            feature_columns.extend([
-                f'{kp_name}_norm_x',
-                f'{kp_name}_norm_y'
-            ])
+            feature_columns.extend([f"{kp_name}_norm_x", f"{kp_name}_norm_y"])
 
         # 特徴量を抽出
         self.features = data_df[feature_columns].values.astype(np.float32)
-        self.labels = data_df['label'].values.astype(np.int64)
-        self.frames = data_df['frame'].values.astype(np.int64)
+        self.labels = data_df["label"].values.astype(np.int64)
+        self.frames = data_df["frame"].values.astype(np.int64)

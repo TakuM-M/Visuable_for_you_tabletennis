@@ -5,6 +5,7 @@ collect_storage_metrics は DB集計（生の集計SQL）と R2集計（外部�
   - DB集計の正しさ＝SQLの正しさなので「実DB」(db fixture)で検証する
   - R2 はネットワーク越しの外部依存なので必ず Mock に差し替える
 """
+
 from unittest.mock import Mock, patch
 
 from app.repositories import user as user_repo
@@ -21,15 +22,18 @@ def _client_with_pages(pages):
 
 def test_collect_sums_r2_objects(db):
     """R2 の各ページの Size を合計し、オブジェクト数を数える"""
-    fake = _client_with_pages([
-        {"Contents": [{"Size": 100}, {"Size": 200}]},
-        {"Contents": [{"Size": 50}]},
-    ])
+    fake = _client_with_pages(
+        [
+            {"Contents": [{"Size": 100}, {"Size": 200}]},
+            {"Contents": [{"Size": 50}]},
+        ]
+    )
     with patch("app.services.storage_service._get_client", return_value=fake):
         result = metrics_service.collect_storage_metrics(db)
     assert result.r2_total_bytes == 350
     assert result.r2_object_count == 3
-    
+
+
 def test_collect_counts_videos_per_user(db, user):
     """DB の動画件数とユーザー別件数（user→2本 / other→1本）が正しいか"""
     # 別ユーザーを作る（email はユニークなので fixture の owner@ と別アドレスに）
@@ -52,8 +56,11 @@ def test_collect_counts_videos_per_user(db, user):
     assert result.db_video_count == 3
     assert result.videos_per_user == {str(user.id): 2, str(other.id): 1}
 
+
 def test_collect_survives_r2_failure(db, video):
-    with patch("app.services.storage_service._get_client", side_effect=Exception("boom")):
+    with patch(
+        "app.services.storage_service._get_client", side_effect=Exception("boom")
+    ):
         result = metrics_service.collect_storage_metrics(db)
     # R2失敗でも例外が外に漏れず、DB側の集計は返る
     assert result.r2_total_bytes == 0

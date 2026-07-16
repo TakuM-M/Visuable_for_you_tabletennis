@@ -3,6 +3,7 @@
 動画を再生しながらプレー中/プレー外のラベルを手動で付けるGUIツール。
 タイムライン、シーンリスト、マウス操作、キーボードショートカットに対応。
 """
+
 import tkinter as tk
 from tkinter import ttk
 import cv2
@@ -19,8 +20,9 @@ from PIL import Image, ImageTk
 class VideoHandler:
     """OpenCV動画の読み込みとフレーム変換を担当"""
 
-    def __init__(self, video_path: str, fps_divisor: float = 1.0,
-                 target_fps: float | None = None):
+    def __init__(
+        self, video_path: str, fps_divisor: float = 1.0, target_fps: float | None = None
+    ):
         self.path = Path(video_path)
         if not self.path.exists():
             raise FileNotFoundError(f"動画が見つかりません: {video_path}")
@@ -60,7 +62,9 @@ class VideoHandler:
             return frame
         return None
 
-    def frame_to_photo(self, frame: np.ndarray, max_w: int, max_h: int) -> ImageTk.PhotoImage:
+    def frame_to_photo(
+        self, frame: np.ndarray, max_w: int, max_h: int
+    ) -> ImageTk.PhotoImage:
         """OpenCVフレームをTkinter PhotoImageに変換（アスペクト比維持でリサイズ）"""
         h, w = frame.shape[:2]
         scale = min(max_w / w, max_h / h, 1.0)
@@ -94,11 +98,13 @@ class SceneDataModel:
     def _load_existing_labels(self):
         try:
             df = pd.read_csv(self.output_path)
-            if 'start_frame' in df.columns and 'end_frame' in df.columns:
+            if "start_frame" in df.columns and "end_frame" in df.columns:
                 for _, row in df.iterrows():
-                    self.play_scenes.append((int(row['start_frame']), int(row['end_frame'])))
-            elif 'label' in df.columns:
-                play_frames = df[df['label'] == 1]['frame'].values
+                    self.play_scenes.append(
+                        (int(row["start_frame"]), int(row["end_frame"]))
+                    )
+            elif "label" in df.columns:
+                play_frames = df[df["label"] == 1]["frame"].values
                 if len(play_frames) > 0:
                     start = play_frames[0]
                     prev = play_frames[0]
@@ -136,7 +142,9 @@ class SceneDataModel:
     def set_start(self, frame: int):
         self.temp_start_frame = frame
 
-    def complete_scene(self, end_frame: int) -> tuple[str | None, tuple[int, int] | None]:
+    def complete_scene(
+        self, end_frame: int
+    ) -> tuple[str | None, tuple[int, int] | None]:
         """仮開始フレームから終了フレームまでのシーンを完成。(エラー, シーン)を返す"""
         if self.temp_start_frame is None:
             return "先に's'でプレー開始を記録してください", None
@@ -157,17 +165,19 @@ class SceneDataModel:
         """CSV保存（フレーム単位 + シーン単位）"""
         labels = np.zeros(self.total_frames, dtype=int)
         for start, end in self.play_scenes:
-            labels[start:end + 1] = 1
+            labels[start : end + 1] = 1
 
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame({'frame': range(self.total_frames), 'label': labels}).to_csv(
+        pd.DataFrame({"frame": range(self.total_frames), "label": labels}).to_csv(
             self.output_path, index=False
         )
 
         scenes_path = self.output_path.parent / f"{self.output_path.stem}_scenes.csv"
-        scenes_df = pd.DataFrame(self.play_scenes, columns=['start_frame', 'end_frame'])
+        scenes_df = pd.DataFrame(self.play_scenes, columns=["start_frame", "end_frame"])
         if not scenes_df.empty:
-            scenes_df['duration_sec'] = (scenes_df['end_frame'] - scenes_df['start_frame']) / self.fps
+            scenes_df["duration_sec"] = (
+                scenes_df["end_frame"] - scenes_df["start_frame"]
+            ) / self.fps
         scenes_df.to_csv(scenes_path, index=False)
 
         print(f"ラベル保存: {self.output_path}")
@@ -187,8 +197,13 @@ class TimelineCanvas(tk.Canvas):
     POS_COLOR = "#F44336"
 
     def __init__(self, parent, on_seek, **kwargs):
-        super().__init__(parent, height=self.TIMELINE_HEIGHT, bg=self.BG_COLOR,
-                         highlightthickness=0, **kwargs)
+        super().__init__(
+            parent,
+            height=self.TIMELINE_HEIGHT,
+            bg=self.BG_COLOR,
+            highlightthickness=0,
+            **kwargs,
+        )
         self._on_seek = on_seek
         self._fps = 30.0
         self._total_frames = 1
@@ -198,8 +213,13 @@ class TimelineCanvas(tk.Canvas):
     def set_fps(self, fps: float):
         self._fps = fps
 
-    def redraw(self, current_frame: int, total_frames: int,
-               scenes: list[tuple[int, int]], temp_start: int | None):
+    def redraw(
+        self,
+        current_frame: int,
+        total_frames: int,
+        scenes: list[tuple[int, int]],
+        temp_start: int | None,
+    ):
         self._total_frames = max(total_frames, 1)
         self.delete("all")
         w = self.winfo_width()
@@ -212,15 +232,23 @@ class TimelineCanvas(tk.Canvas):
         for s, e in scenes:
             x1 = self._frame_to_x(s, w)
             x2 = self._frame_to_x(e, w)
-            self.create_rectangle(x1, 4, max(x2, x1 + 2), h - 4,
-                                  fill=self.SCENE_COLOR, outline="")
+            self.create_rectangle(
+                x1, 4, max(x2, x1 + 2), h - 4, fill=self.SCENE_COLOR, outline=""
+            )
 
         # 仮開始フレーム〜現在位置
         if temp_start is not None:
             tx = self._frame_to_x(temp_start, w)
             cx = self._frame_to_x(current_frame, w)
-            self.create_rectangle(tx, 4, max(cx, tx + 2), h - 4,
-                                  fill=self.TEMP_COLOR, outline="", stipple="gray50")
+            self.create_rectangle(
+                tx,
+                4,
+                max(cx, tx + 2),
+                h - 4,
+                fill=self.TEMP_COLOR,
+                outline="",
+                stipple="gray50",
+            )
             self.create_line(tx, 0, tx, h, fill=self.TEMP_COLOR, width=2)
 
         # 時間ラベル
@@ -231,8 +259,14 @@ class TimelineCanvas(tk.Canvas):
             while t < duration_sec:
                 x = self._frame_to_x(int(t * self._fps), w)
                 self.create_line(x, h - 8, x, h - 4, fill="#aaaaaa")
-                self.create_text(x, h - 2, text=self._format_time(t),
-                                 fill="#aaaaaa", font=("", 8), anchor="s")
+                self.create_text(
+                    x,
+                    h - 2,
+                    text=self._format_time(t),
+                    fill="#aaaaaa",
+                    font=("", 8),
+                    anchor="s",
+                )
                 t += interval
 
         # 現在位置（最後に描画して最前面に）
@@ -324,8 +358,11 @@ class AnnotationGUI:
 
     def _build_video_canvas(self, parent):
         self.video_canvas = tk.Canvas(
-            parent, width=self.VIDEO_MAX_W, height=self.VIDEO_MAX_H,
-            bg="black", highlightthickness=0
+            parent,
+            width=self.VIDEO_MAX_W,
+            height=self.VIDEO_MAX_H,
+            bg="black",
+            highlightthickness=0,
         )
         self.video_canvas.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
@@ -341,9 +378,13 @@ class AnnotationGUI:
             ("<", lambda: self._step_frames(-1)),
         ]
         for text, cmd in btns:
-            ttk.Button(frame, text=text, width=4, command=cmd).pack(side=tk.LEFT, padx=1)
+            ttk.Button(frame, text=text, width=4, command=cmd).pack(
+                side=tk.LEFT, padx=1
+            )
 
-        self.play_btn = ttk.Button(frame, text="Play", width=6, command=self._toggle_play)
+        self.play_btn = ttk.Button(
+            frame, text="Play", width=6, command=self._toggle_play
+        )
         self.play_btn.pack(side=tk.LEFT, padx=2)
 
         btns2 = [
@@ -353,27 +394,37 @@ class AnnotationGUI:
             (">|", lambda: self._seek_to(self.video.total_frames - 1)),
         ]
         for text, cmd in btns2:
-            ttk.Button(frame, text=text, width=4, command=cmd).pack(side=tk.LEFT, padx=1)
+            ttk.Button(frame, text=text, width=4, command=cmd).pack(
+                side=tk.LEFT, padx=1
+            )
 
         # スピード
         ttk.Label(frame, text="  Speed:").pack(side=tk.LEFT)
         self.speed_var = tk.StringVar(value="1.0x")
         speed_combo = ttk.Combobox(
-            frame, textvariable=self.speed_var,
+            frame,
+            textvariable=self.speed_var,
             values=[f"{s}x" for s in self.SPEEDS],
-            width=5, state="readonly"
+            width=5,
+            state="readonly",
         )
         speed_combo.pack(side=tk.LEFT, padx=2)
         speed_combo.bind("<<ComboboxSelected>>", self._on_speed_change)
 
         # アノテーションボタン
         ttk.Separator(frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(frame, text="Start [s]", command=self._on_mark_start).pack(side=tk.LEFT, padx=2)
-        ttk.Button(frame, text="End [e]", command=self._on_mark_end).pack(side=tk.LEFT, padx=2)
+        ttk.Button(frame, text="Start [s]", command=self._on_mark_start).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(frame, text="End [e]", command=self._on_mark_end).pack(
+            side=tk.LEFT, padx=2
+        )
 
         # フレーム情報
         self.info_var = tk.StringVar(value="")
-        ttk.Label(frame, textvariable=self.info_var, font=("Menlo", 11)).pack(side=tk.RIGHT, padx=6)
+        ttk.Label(frame, textvariable=self.info_var, font=("Menlo", 11)).pack(
+            side=tk.RIGHT, padx=6
+        )
 
     def _build_timeline(self, parent):
         self.timeline = TimelineCanvas(parent, on_seek=self._seek_to)
@@ -390,22 +441,34 @@ class AnnotationGUI:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.scene_listbox = tk.Listbox(
-            list_frame, yscrollcommand=scrollbar.set,
-            bg="#1e1e1e", fg="white", selectbackground="#4CAF50",
-            font=("Menlo", 10), activestyle="none"
+            list_frame,
+            yscrollcommand=scrollbar.set,
+            bg="#1e1e1e",
+            fg="white",
+            selectbackground="#4CAF50",
+            font=("Menlo", 10),
+            activestyle="none",
         )
         self.scene_listbox.pack(fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.scene_listbox.yview)
 
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X, padx=4, pady=4)
-        ttk.Button(btn_frame, text="Jump", command=self._on_jump_to_scene).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Delete", command=self._on_delete_selected).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Delete Last [d]", command=self._on_delete_last).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Jump", command=self._on_jump_to_scene).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(btn_frame, text="Delete", command=self._on_delete_selected).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(
+            btn_frame, text="Delete Last [d]", command=self._on_delete_last
+        ).pack(side=tk.LEFT, padx=2)
 
     def _build_status_bar(self, parent):
         self.status_var = tk.StringVar(value="Ready")
-        status = ttk.Label(parent, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+        status = ttk.Label(
+            parent, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W
+        )
         status.pack(fill=tk.X, padx=4, pady=(0, 4))
 
     # ---- キーバインド ----
@@ -467,7 +530,9 @@ class AnnotationGUI:
         if self.is_playing:
             return
         step = n * self.video.frame_step
-        self.current_frame = max(0, min(self.current_frame + step, self.video.total_frames - 1))
+        self.current_frame = max(
+            0, min(self.current_frame + step, self.video.total_frames - 1)
+        )
         self._update_display()
 
     def _step_seconds(self, sec: float):
@@ -475,11 +540,15 @@ class AnnotationGUI:
         if sec < 0:
             frames = -frames
         target = self.current_frame + frames
-        self.current_frame = max(0, min(self._snap_to_step(target), self.video.total_frames - 1))
+        self.current_frame = max(
+            0, min(self._snap_to_step(target), self.video.total_frames - 1)
+        )
         self._update_display()
 
     def _seek_to(self, frame: int):
-        self.current_frame = max(0, min(self._snap_to_step(frame), self.video.total_frames - 1))
+        self.current_frame = max(
+            0, min(self._snap_to_step(frame), self.video.total_frames - 1)
+        )
         self._update_display()
 
     def _on_speed_change(self, event=None):
@@ -498,19 +567,25 @@ class AnnotationGUI:
             ch = max(self.video_canvas.winfo_height(), 240)
             self._photo = self.video.frame_to_photo(frame, cw, ch)
             self.video_canvas.delete("all")
-            self.video_canvas.create_image(cw // 2, ch // 2, image=self._photo, anchor=tk.CENTER)
+            self.video_canvas.create_image(
+                cw // 2, ch // 2, image=self._photo, anchor=tk.CENTER
+            )
 
             # プレー中オーバーレイ
             if self.model.is_frame_in_play(self.current_frame):
-                self.video_canvas.create_rectangle(cw - 100, 10, cw - 10, 40,
-                                                   fill="#4CAF50", outline="")
-                self.video_canvas.create_text(cw - 55, 25, text="PLAY",
-                                              fill="white", font=("", 12, "bold"))
+                self.video_canvas.create_rectangle(
+                    cw - 100, 10, cw - 10, 40, fill="#4CAF50", outline=""
+                )
+                self.video_canvas.create_text(
+                    cw - 55, 25, text="PLAY", fill="white", font=("", 12, "bold")
+                )
             elif self.model.temp_start_frame is not None:
-                self.video_canvas.create_rectangle(cw - 120, 10, cw - 10, 40,
-                                                   fill="#FFC107", outline="")
-                self.video_canvas.create_text(cw - 65, 25, text="MARKING",
-                                              fill="black", font=("", 12, "bold"))
+                self.video_canvas.create_rectangle(
+                    cw - 120, 10, cw - 10, 40, fill="#FFC107", outline=""
+                )
+                self.video_canvas.create_text(
+                    cw - 65, 25, text="MARKING", fill="black", font=("", 12, "bold")
+                )
 
         # フレーム情報
         t = self.current_frame / self.video.fps
@@ -522,8 +597,10 @@ class AnnotationGUI:
 
         # タイムライン
         self.timeline.redraw(
-            self.current_frame, self.video.total_frames,
-            self.model.play_scenes, self.model.temp_start_frame
+            self.current_frame,
+            self.video.total_frames,
+            self.model.play_scenes,
+            self.model.temp_start_frame,
         )
 
     @staticmethod
@@ -615,8 +692,13 @@ class LabelMaker:
         maker.run()
     """
 
-    def __init__(self, video_path: str, output_path: str = None,
-                 fps_divisor: float = 1.0, target_fps: float | None = None):
+    def __init__(
+        self,
+        video_path: str,
+        output_path: str = None,
+        fps_divisor: float = 1.0,
+        target_fps: float | None = None,
+    ):
         self.video = VideoHandler(video_path, fps_divisor, target_fps=target_fps)
 
         if output_path:
@@ -637,8 +719,10 @@ class LabelMaker:
         print(f"動画: {self.video.path.name}")
         print(f"総フレーム数: {self.video.total_frames} | FPS: {self.video.fps:.1f}")
         if self.video.frame_step > 1:
-            print(f"target_fps: {self.video.effective_fps:.1f} "
-                  f"(frame_step={self.video.frame_step})")
+            print(
+                f"target_fps: {self.video.effective_fps:.1f} "
+                f"(frame_step={self.video.frame_step})"
+            )
         print(f"既存シーン: {len(self.model.play_scenes)}")
         print(f"{'=' * 60}\n")
 

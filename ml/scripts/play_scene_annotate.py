@@ -17,6 +17,7 @@ Usage:
     - 'j': 前のフレーム（一時停止中）
     - 'q': 保存して終了
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -30,7 +31,7 @@ from src.annotation.label_maker import LabelMaker
 
 def main():
     parser = argparse.ArgumentParser(
-        description='卓球動画のプレーシーンアノテーションツール',
+        description="卓球動画のプレーシーンアノテーションツール",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 操作方法:
@@ -46,31 +47,28 @@ def main():
   python scripts/annotate.py data/raw/video.MOV
   python scripts/annotate.py data/raw/video.MOV -o data/labels/video_labels.csv
   python scripts/annotate.py data/raw/video.MOV --fps-divisor 2  # 半分速度で再生
-        """
+        """,
     )
 
+    parser.add_argument("video", type=str, help="動画ファイルのパス")
     parser.add_argument(
-        'video',
-        type=str,
-        help='動画ファイルのパス'
-    )
-    parser.add_argument(
-        '-o', '--output',
+        "-o",
+        "--output",
         type=str,
         default=None,
-        help='出力CSVパス（デフォルト: 動画名_labels.csv）'
+        help="出力CSVパス（デフォルト: 動画名_labels.csv）",
     )
     parser.add_argument(
-        '--fps-divisor',
+        "--fps-divisor",
         type=float,
         default=1.0,
-        help='表示速度の倍率（2なら半分速度、0.5なら2倍速）'
+        help="表示速度の倍率（2なら半分速度、0.5なら2倍速）",
     )
     parser.add_argument(
-        '--target-fps',
+        "--target-fps",
         type=float,
         default=15.0,
-        help='アノテーション対象のFPS（デフォルト: 15.0、ポーズ抽出と同じ値にする）'
+        help="アノテーション対象のFPS（デフォルト: 15.0、ポーズ抽出と同じ値にする）",
     )
 
     args = parser.parse_args()
@@ -89,6 +87,7 @@ def main():
     except Exception as e:
         print(f"\nエラーが発生しました: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

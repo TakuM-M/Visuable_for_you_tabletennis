@@ -38,9 +38,7 @@ def get_by_user_id(db: Session, user_id: uuid.UUID) -> list[Video]:
 
 
 def count_by_user_id(db: Session, user_id: uuid.UUID) -> int:
-    return (
-        db.query(func.count(Video.id)).filter(Video.user_id == user_id).scalar() or 0
-    )
+    return db.query(func.count(Video.id)).filter(Video.user_id == user_id).scalar() or 0
 
 
 def get_expired(db: Session, threshold: datetime) -> list[Video]:
@@ -81,6 +79,7 @@ def update_status(
     db.refresh(video)
     return video
 
+
 def update_output_path(
     db: Session,
     video_id: uuid.UUID,
@@ -93,6 +92,7 @@ def update_output_path(
     db.commit()
     db.refresh(video)
     return video
+
 
 def update_duration(
     db: Session,
@@ -107,6 +107,7 @@ def update_duration(
     db.refresh(video)
     return video
 
+
 def update_source_duration(
     db: Session,
     video_id: uuid.UUID,
@@ -119,6 +120,7 @@ def update_source_duration(
     db.commit()
     db.refresh(video)
     return video
+
 
 def delete(db: Session, video_id: uuid.UUID) -> bool:
     video = get_by_id(db, video_id)

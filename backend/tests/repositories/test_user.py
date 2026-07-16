@@ -4,6 +4,7 @@ conftest.py の `db` fixture を引数で受け取ると、テスト用 PostgreS
 接続済みの SQLAlchemy Session が渡される。各テスト終了時に全テーブルが
 truncate されるので、テスト同士は独立。
 """
+
 import uuid
 
 import pytest
@@ -58,9 +59,7 @@ def test_get_by_email_finds_existing_user(db):
 
 def test_email_unique_constraint_is_enforced(db):
     """users.email の UNIQUE 制約により、同じメールで 2 人は作れない"""
-    user_repo.create(
-        db, email="dup@example.com", password_hash="x", display_name="One"
-    )
+    user_repo.create(db, email="dup@example.com", password_hash="x", display_name="One")
     with pytest.raises(IntegrityError):
         user_repo.create(
             db, email="dup@example.com", password_hash="y", display_name="Two"
@@ -84,9 +83,7 @@ def test_update_changes_display_name_and_password(db):
     user = user_repo.create(
         db, email="frank@example.com", password_hash="old_hash", display_name="Frank"
     )
-    user_repo.update(
-        db, user.id, display_name="Franklin", password_hash="new_hash"
-    )
+    user_repo.update(db, user.id, display_name="Franklin", password_hash="new_hash")
     db.refresh(user)
     assert user.display_name == "Franklin"
     assert user.password_hash == "new_hash"

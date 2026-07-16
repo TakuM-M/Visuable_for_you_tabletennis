@@ -47,9 +47,13 @@ def _extract_duration(local_path: Path) -> float | None:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 str(local_path),
             ],
             capture_output=True,
@@ -60,6 +64,7 @@ def _extract_duration(local_path: Path) -> float | None:
     except Exception as e:
         logger.warning("ffprobe による再生時間取得に失敗しました: %s", e)
         return None
+
 
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
 LOCAL_TMP_DIR = Path("/app/uploads/tmp")
@@ -94,7 +99,9 @@ def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
         video_repo.update_status(db, uuid.UUID(video_id), VideoStatus.processing)
 
     try:
-        video_download_url = storage_service.generate_presigned_url(r2_key, expires_in=7200)
+        video_download_url = storage_service.generate_presigned_url(
+            r2_key, expires_in=7200
+        )
         if USE_RUNPOD:
             with httpx.Client(timeout=30.0) as client:
                 response = client.post(
@@ -201,11 +208,15 @@ def init_chunk_upload(
     upload_dir.mkdir(parents=True, exist_ok=True)
     # メタデータを保存
     meta_path = upload_dir / "meta.json"
-    meta_path.write_text(json.dumps({
-        "title": title,
-        "filename": filename,
-        "total_chunks": total_chunks,
-    }))
+    meta_path.write_text(
+        json.dumps(
+            {
+                "title": title,
+                "filename": filename,
+                "total_chunks": total_chunks,
+            }
+        )
+    )
     return upload_id
 
 
@@ -228,7 +239,7 @@ def complete_chunk_upload(
     """r2_keyを決定し映像の結合・アップロード・MLサービスはバックグラウンドで実行。"""
     # クォーター確認（完了時点での動画本数をチェックする）
     _ensure_under_quota(db, user_id)
-    
+
     upload_dir = LOCAL_TMP_DIR / upload_id
     if not upload_dir.exists():
         raise FileNotFoundError(f"Upload {upload_id} not found")
@@ -244,7 +255,7 @@ def complete_chunk_upload(
 
     file_id = uuid.uuid4()
     r2_key = f"videos/{file_id}.mp4"
-    
+
     # video作成
     video = video_repo.create(
         db=db,
@@ -254,30 +265,30 @@ def complete_chunk_upload(
     )
     video_repo.update_status(db, video.id, VideoStatus.queued)
     job = job_repo.create(db=db, video_id=video.id)
-    background_tasks.add_task(process_chunk_upload, upload_id, r2_key, str(video.id), str(job.id))
-    
+    background_tasks.add_task(
+        process_chunk_upload, upload_id, r2_key, str(video.id), str(job.id)
+    )
+
     return video
 
 
 def process_chunk_upload(
-    upload_id: str, 
-    r2_key: str, 
-    video_id: str, 
-    job_id: str) -> None:
+    upload_id: str, r2_key: str, video_id: str, job_id: str
+) -> None:
     """結合した動画をR2にアップロードし、MLサービスを呼び出す。BackgroundTasksで実行される。"""
     try:
         merged_path = LOCAL_TMP_DIR / f"{upload_id}_merged.mp4"
         upload_dir = LOCAL_TMP_DIR / upload_id
-        
+
         meta = json.loads((upload_dir / "meta.json").read_text())
         total_chunks = meta["total_chunks"]
-        
+
         with merged_path.open("wb") as out_f:
             for i in range(total_chunks):
                 chunk_path = upload_dir / str(i)
                 with chunk_path.open("rb") as chunk_f:
                     shutil.copyfileobj(chunk_f, out_f)
-        
+
         storage_service.upload_file(str(merged_path), r2_key)
         duration = _extract_duration(merged_path)
         if duration is not None:
@@ -285,9 +296,11 @@ def process_chunk_upload(
                 video_repo.update_source_duration(db, uuid.UUID(video_id), duration)
         merged_path.unlink(missing_ok=True)
         shutil.rmtree(upload_dir)
-        
+
         call_ml_service(r2_key, str(job_id), str(video_id))
-        logger.info("チャンクアップロード処理完了 video_id=%s job_id=%s", video_id, job_id)
+        logger.info(
+            "チャンクアップロード処理完了 video_id=%s job_id=%s", video_id, job_id
+        )
     except Exception as e:
         logger.exception("チャンクアップロード処理失敗 video_id=%s: %s", video_id, e)
         with SessionLocal() as db:
@@ -349,7 +362,9 @@ def replace_clips(
 
     job = job_repo.get_latest_by_video_id(db, video.id)
     if job is None:
-        raise HTTPException(status_code=409, detail="解析ジョブが存在しないため編集できません")
+        raise HTTPException(
+            status_code=409, detail="解析ジョブが存在しないため編集できません"
+        )
 
     clips_data = [
         {"start_time": c.start_time, "end_time": c.end_time} for c in clips_input
@@ -395,12 +410,16 @@ def rebuild_output(db: Session, video_id: uuid.UUID, clips: list[dict]) -> str:
     # 出力動画の再生時間を取得・保存
     if output_r2_key:
         try:
-            output_url = storage_service.generate_presigned_url(output_r2_key, expires_in=7200)
+            output_url = storage_service.generate_presigned_url(
+                output_r2_key, expires_in=7200
+            )
             output_duration = _extract_duration(output_url)
             if output_duration is not None:
                 video_repo.update_duration(db, video_id, output_duration)
         except Exception as e:
-            logger.warning("出力動画の再生時間取得に失敗しました video_id=%s: %s", video_id, e)
+            logger.warning(
+                "出力動画の再生時間取得に失敗しました video_id=%s: %s", video_id, e
+            )
 
     video_repo.update_status(db, video_id, VideoStatus.completed)
     return output_r2_key
@@ -443,13 +462,13 @@ def recover_interrupted_exports() -> None:
             )
             video_repo.update_status(db, video.id, VideoStatus.ready)
 
-          
+
 def recover_interrupted_to_failed() -> None:
     """再起動で中断され、status=queued のまま取り残されたジョブを failed に戻す。
-    
+
     状況として、アップロード完了後のプロセスが落ちた場合に、status=queued のまま取り残されることがある。
     これを failed に戻すことで、失敗として表示され、再実行できるようにする。
-    
+
     起動直後に呼ばれる限り、現存しているBackgroundTasksはないため、誤検出を避けている。
     """
     with SessionLocal() as db:

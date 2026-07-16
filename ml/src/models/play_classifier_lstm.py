@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Optional, Tuple
 
+
 class PlayClassifierLSTM(nn.Module):
     """
     プレー検知用LSTMモデル
@@ -49,14 +50,14 @@ class PlayClassifierLSTM(nn.Module):
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0,
-            bidirectional=True
+            bidirectional=True,
         )
 
         # Attention機構（シーケンス全体のコンテキストを生成）
         self.attention = nn.Sequential(
             nn.Linear(self.lstm_output_size, hidden_size),
             nn.Tanh(),
-            nn.Linear(hidden_size, 1)
+            nn.Linear(hidden_size, 1),
         )
 
         # 分類器（LSTM出力 + Attentionコンテキストを結合して分類）
@@ -72,9 +73,7 @@ class PlayClassifierLSTM(nn.Module):
         )
 
     def forward(
-        self,
-        x: torch.Tensor,
-        lengths: Optional[torch.Tensor] = None
+        self, x: torch.Tensor, lengths: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
         順伝播
@@ -114,7 +113,9 @@ class PlayClassifierLSTM(nn.Module):
         # Attention機構: シーケンス全体のコンテキストベクトルを生成
         attention_weights = self.attention(lstm_out)  # (batch, seq, 1)
         attention_weights = torch.softmax(attention_weights, dim=1)
-        context = torch.sum(lstm_out * attention_weights, dim=1, keepdim=True)  # (batch, 1, hidden*2)
+        context = torch.sum(
+            lstm_out * attention_weights, dim=1, keepdim=True
+        )  # (batch, 1, hidden*2)
         context = context.expand_as(lstm_out)  # (batch, seq, hidden*2)
 
         # LSTM出力とコンテキストを結合して各フレームごとに分類
@@ -124,9 +125,7 @@ class PlayClassifierLSTM(nn.Module):
         return out
 
     def predict(
-        self,
-        x: torch.Tensor,
-        threshold: float = 0.5
+        self, x: torch.Tensor, threshold: float = 0.5
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         推論用メソッド
@@ -147,9 +146,7 @@ class PlayClassifierLSTM(nn.Module):
         return probs, preds
 
     def get_attention_weights(
-        self,
-        x: torch.Tensor,
-        lengths: Optional[torch.Tensor] = None
+        self, x: torch.Tensor, lengths: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
         Attention重みを取得（可視化用）

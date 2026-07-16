@@ -1,4 +1,5 @@
 """/admin/metrics エンドポイントの認証とレスポンス形のテスト"""
+
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -28,9 +29,7 @@ def test_metrics_rejects_wrong_key() -> None:
     app = _make_app()
     client = TestClient(app)
     with patch("app.core.deps.settings.internal_api_key", "secret"):
-        resp = client.get(
-            "/admin/metrics", headers={"X-Internal-Api-Key": "wrong"}
-        )
+        resp = client.get("/admin/metrics", headers={"X-Internal-Api-Key": "wrong"})
     assert resp.status_code == 401
 
 
@@ -39,9 +38,7 @@ def test_metrics_rejects_when_key_unset() -> None:
     app = _make_app()
     client = TestClient(app)
     with patch("app.core.deps.settings.internal_api_key", ""):
-        resp = client.get(
-            "/admin/metrics", headers={"X-Internal-Api-Key": "anything"}
-        )
+        resp = client.get("/admin/metrics", headers={"X-Internal-Api-Key": "anything"})
     assert resp.status_code == 401
 
 
@@ -55,15 +52,18 @@ def test_metrics_returns_collected_data() -> None:
         db_video_count=1,
         videos_per_user={"user-uuid": 1},
     )
-    with patch("app.core.deps.settings.internal_api_key", "secret"), \
-         patch("app.routers.admin.metrics_service.collect_storage_metrics", return_value=fake), \
-         patch("app.routers.admin.get_db", return_value=iter([None])):
+    with (
+        patch("app.core.deps.settings.internal_api_key", "secret"),
+        patch(
+            "app.routers.admin.metrics_service.collect_storage_metrics",
+            return_value=fake,
+        ),
+        patch("app.routers.admin.get_db", return_value=iter([None])),
+    ):
         # get_db Depends は generator 形式なので Depends override の方が綺麗だが
         # 今回は collect_storage_metrics をモックしているので DB は使われない
         app.dependency_overrides[admin.get_db] = lambda: None
-        resp = client.get(
-            "/admin/metrics", headers={"X-Internal-Api-Key": "secret"}
-        )
+        resp = client.get("/admin/metrics", headers={"X-Internal-Api-Key": "secret"})
 
     assert resp.status_code == 200
     body = resp.json()

@@ -18,6 +18,7 @@
     `from app.services import job_service` で import しているので、
     patch 先は app.routers.jobs.job_repo.* / app.routers.jobs.job_service.* になる。
 """
+
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -121,8 +122,10 @@ def test_list_jobs_by_video_returns_jobs() -> None:
     video = _make_video(user_id=user.id)
     items = [_make_job(video_id=video.id), _make_job(video_id=video.id)]
 
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.jobs.job_repo.get_by_video_id", return_value=items):
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.jobs.job_repo.get_by_video_id", return_value=items),
+    ):
         client = _authed_client(user)
         resp = client.get(f"/videos/{video.id}/jobs")
 
@@ -136,8 +139,10 @@ def test_list_jobs_by_video_empty_returns_empty_list() -> None:
     """ジョブが1件も無い動画でも、エラーではなく空配列 [] を返す。"""
     user = _make_user()
     video = _make_video(user_id=user.id)
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.jobs.job_repo.get_by_video_id", return_value=[]):
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.jobs.job_repo.get_by_video_id", return_value=[]),
+    ):
         client = _authed_client(user)
         resp = client.get(f"/videos/{video.id}/jobs")
 
@@ -183,8 +188,10 @@ def test_retry_job_returns_200() -> None:
 
     # retry_job は副作用（DB 更新・background_tasks 登録）だけで戻り値を使わないので、
     # patch すると自動で MagicMock になり「何もしない・例外も投げない」関数になる。
-    with patch("app.routers.jobs.job_service.retry_job") as retry, \
-         patch("app.routers.jobs.job_repo.get_by_id", return_value=job):
+    with (
+        patch("app.routers.jobs.job_service.retry_job") as retry,
+        patch("app.routers.jobs.job_repo.get_by_id", return_value=job),
+    ):
         client = _authed_client()
         resp = client.post(f"/jobs/{job.id}/retry")
 
@@ -201,7 +208,9 @@ def test_retry_job_propagates_service_error_409() -> None:
     """
     with patch(
         "app.routers.jobs.job_service.retry_job",
-        side_effect=HTTPException(status_code=409, detail="失敗したジョブのみ再実行できます"),
+        side_effect=HTTPException(
+            status_code=409, detail="失敗したジョブのみ再実行できます"
+        ),
     ):
         client = _authed_client()
         resp = client.post(f"/jobs/{uuid.uuid4()}/retry")

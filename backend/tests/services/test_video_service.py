@@ -4,6 +4,7 @@ ffprobe / R2 / ML(httpx) / DB を差し替え、再生時間取得・ML ディ�
 アップロード・チャンク結合・削除の各分岐を検証する。
 ファイル I/O を伴う関数は LOCAL_TMP_DIR を pytest の tmp_path に差し替えて隔離する。
 """
+
 import io
 import json
 import subprocess
@@ -51,6 +52,7 @@ def _httpx_client_cm(chunks=(b"data",)) -> MagicMock:
 
 # --- _extract_duration ------------------------------------------------------
 
+
 def test_extract_duration_returns_float_on_success() -> None:
     with patch(
         "app.services.video_service.subprocess.run",
@@ -69,14 +71,20 @@ def test_extract_duration_returns_none_on_failure() -> None:
 
 # --- call_ml_service --------------------------------------------------------
 
+
 def test_call_ml_service_posts_to_mock_when_not_runpod() -> None:
     job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.job_repo.update_status"), \
-         patch("app.services.video_service.video_repo.update_status"), \
-         patch("app.services.video_service.storage_service.generate_presigned_url", return_value="http://dl"), \
-         patch("app.services.video_service.USE_RUNPOD", False), \
-         patch("app.services.video_service.httpx") as mock_httpx:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.job_repo.update_status"),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            return_value="http://dl",
+        ),
+        patch("app.services.video_service.USE_RUNPOD", False),
+        patch("app.services.video_service.httpx") as mock_httpx,
+    ):
         sl.return_value.__enter__.return_value = MagicMock()
         client = mock_httpx.Client.return_value.__enter__.return_value
         video_service.call_ml_service("videos/a.mp4", job_id, video_id)
@@ -87,13 +95,18 @@ def test_call_ml_service_posts_to_mock_when_not_runpod() -> None:
 
 def test_call_ml_service_posts_to_runpod_when_enabled() -> None:
     job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.job_repo.update_status"), \
-         patch("app.services.video_service.video_repo.update_status"), \
-         patch("app.services.video_service.storage_service.generate_presigned_url", return_value="http://dl"), \
-         patch("app.services.video_service.USE_RUNPOD", True), \
-         patch("app.services.video_service.RUNPOD_ENDPOINT_ID", "ep"), \
-         patch("app.services.video_service.httpx") as mock_httpx:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.job_repo.update_status"),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            return_value="http://dl",
+        ),
+        patch("app.services.video_service.USE_RUNPOD", True),
+        patch("app.services.video_service.RUNPOD_ENDPOINT_ID", "ep"),
+        patch("app.services.video_service.httpx") as mock_httpx,
+    ):
         sl.return_value.__enter__.return_value = MagicMock()
         client = mock_httpx.Client.return_value.__enter__.return_value
         client.post.return_value.json.return_value = {"id": "rp-1"}
@@ -105,12 +118,16 @@ def test_call_ml_service_posts_to_runpod_when_enabled() -> None:
 
 def test_call_ml_service_delegates_failure_to_handler() -> None:
     job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.job_repo.update_status"), \
-         patch("app.services.video_service.video_repo.update_status"), \
-         patch("app.services.video_service.storage_service.generate_presigned_url",
-               side_effect=RuntimeError("R2 down")), \
-         patch("app.services.job_service.handle_ml_failure") as handle:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.job_repo.update_status"),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            side_effect=RuntimeError("R2 down"),
+        ),
+        patch("app.services.job_service.handle_ml_failure") as handle,
+    ):
         sl.return_value.__enter__.return_value = MagicMock()
         video_service.call_ml_service("videos/a.mp4", job_id, video_id)
 
@@ -120,13 +137,16 @@ def test_call_ml_service_delegates_failure_to_handler() -> None:
 
 # --- _register_video_and_start_ml ------------------------------------------
 
+
 def test_register_video_creates_records_and_schedules_ml() -> None:
     db, bt = MagicMock(), MagicMock()
     video = _make_video()
     job = SimpleNamespace(id=uuid.uuid4())
-    with patch("app.services.video_service.video_repo.create", return_value=video), \
-         patch("app.services.video_service.video_repo.update_status"), \
-         patch("app.services.video_service.job_repo.create", return_value=job):
+    with (
+        patch("app.services.video_service.video_repo.create", return_value=video),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch("app.services.video_service.job_repo.create", return_value=job),
+    ):
         result = video_service._register_video_and_start_ml(
             db, uuid.uuid4(), "t", "videos/a.mp4", bt
         )
@@ -137,15 +157,21 @@ def test_register_video_creates_records_and_schedules_ml() -> None:
 
 # --- upload_video -----------------------------------------------------------
 
+
 def test_upload_video_saves_uploads_and_registers(tmp_path) -> None:
     db, bt = MagicMock(), MagicMock()
     video = _make_video()
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
-         patch("app.services.video_service.settings.user_video_quota", 10), \
-         patch("app.services.video_service.storage_service.upload_file") as upload, \
-         patch("app.services.video_service._extract_duration", return_value=10.0), \
-         patch("app.services.video_service._register_video_and_start_ml", return_value=video) as register:
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.video_repo.count_by_user_id", return_value=0),
+        patch("app.services.video_service.settings.user_video_quota", 10),
+        patch("app.services.video_service.storage_service.upload_file") as upload,
+        patch("app.services.video_service._extract_duration", return_value=10.0),
+        patch(
+            "app.services.video_service._register_video_and_start_ml",
+            return_value=video,
+        ) as register,
+    ):
         result = video_service.upload_video(db, uuid.uuid4(), "t", _upload_file(), bt)
 
     assert result is video
@@ -155,10 +181,14 @@ def test_upload_video_saves_uploads_and_registers(tmp_path) -> None:
 
 def test_upload_video_raises_when_quota_exceeded(tmp_path) -> None:
     db, bt = MagicMock(), MagicMock()
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=10), \
-         patch("app.services.video_service.settings.user_video_quota", 10), \
-         patch("app.services.video_service.storage_service.upload_file") as upload:
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch(
+            "app.services.video_service.video_repo.count_by_user_id", return_value=10
+        ),
+        patch("app.services.video_service.settings.user_video_quota", 10),
+        patch("app.services.video_service.storage_service.upload_file") as upload,
+    ):
         with pytest.raises(video_service.QuotaExceededError):
             video_service.upload_video(db, uuid.uuid4(), "t", _upload_file(), bt)
 
@@ -167,12 +197,17 @@ def test_upload_video_raises_when_quota_exceeded(tmp_path) -> None:
 
 # --- init_chunk_upload / save_chunk / complete_chunk_upload -----------------
 
+
 def test_init_chunk_upload_writes_meta(tmp_path) -> None:
     db = MagicMock()
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
-         patch("app.services.video_service.settings.user_video_quota", 10):
-        upload_id = video_service.init_chunk_upload(db, uuid.uuid4(), "タイトル", "v.mp4", 3)
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.video_repo.count_by_user_id", return_value=0),
+        patch("app.services.video_service.settings.user_video_quota", 10),
+    ):
+        upload_id = video_service.init_chunk_upload(
+            db, uuid.uuid4(), "タイトル", "v.mp4", 3
+        )
 
     meta_path = tmp_path / upload_id / "meta.json"
     assert meta_path.exists()
@@ -196,9 +231,11 @@ def test_save_chunk_writes_chunk_file(tmp_path) -> None:
 
 def test_complete_chunk_upload_raises_when_dir_missing(tmp_path) -> None:
     db, bt = MagicMock(), MagicMock()
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
-         patch("app.services.video_service.settings.user_video_quota", 10):
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.video_repo.count_by_user_id", return_value=0),
+        patch("app.services.video_service.settings.user_video_quota", 10),
+    ):
         with pytest.raises(FileNotFoundError):
             video_service.complete_chunk_upload(db, uuid.uuid4(), "missing", bt)
 
@@ -213,11 +250,14 @@ def test_complete_chunk_upload_raises_when_chunk_missing(tmp_path) -> None:
     )
     (upload_dir / "0").write_bytes(b"aa")  # chunk 1 が欠落
 
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
-         patch("app.services.video_service.settings.user_video_quota", 10):
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.video_repo.count_by_user_id", return_value=0),
+        patch("app.services.video_service.settings.user_video_quota", 10),
+    ):
         with pytest.raises(FileNotFoundError):
             video_service.complete_chunk_upload(db, uuid.uuid4(), upload_id, bt)
+
 
 def test_complete_chunk_upload_schedules_background_task(tmp_path) -> None:
     db, bt = MagicMock(), MagicMock()
@@ -230,22 +270,31 @@ def test_complete_chunk_upload_schedules_background_task(tmp_path) -> None:
     (upload_dir / "0").write_bytes(b"aa")
     (upload_dir / "1").write_bytes(b"bb")
     video = _make_video()
-    
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.video_repo.count_by_user_id", return_value=0), \
-         patch("app.services.video_service.settings.user_video_quota", 10), \
-         patch("app.services.video_service.storage_service.upload_file") as upload_file, \
-         patch("app.services.video_service.video_repo.create", return_value=video) as video_create, \
-         patch("app.services.video_service.video_repo.update_status", return_value=video) as video_update_status, \
-         patch("app.services.video_service.job_repo.create", return_value=SimpleNamespace(id=uuid.uuid4())) as job_create:
+
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.video_repo.count_by_user_id", return_value=0),
+        patch("app.services.video_service.settings.user_video_quota", 10),
+        patch("app.services.video_service.storage_service.upload_file") as upload_file,
+        patch(
+            "app.services.video_service.video_repo.create", return_value=video
+        ) as video_create,
+        patch(
+            "app.services.video_service.video_repo.update_status", return_value=video
+        ) as video_update_status,
+        patch(
+            "app.services.video_service.job_repo.create",
+            return_value=SimpleNamespace(id=uuid.uuid4()),
+        ) as job_create,
+    ):
         result = video_service.complete_chunk_upload(db, uuid.uuid4(), upload_id, bt)
-    
+
     assert result is video
     upload_file.assert_not_called()
     video_create.assert_called_once()
     video_update_status.assert_called_once_with(db, video.id, VideoStatus.queued)
     job_create.assert_called_once()
-    bt.add_task.assert_called_once() # バックグラウンドタスクがスケジュールされる
+    bt.add_task.assert_called_once()  # バックグラウンドタスクがスケジュールされる
 
 
 def test_process_chunk_upload_merges_and_uploads(tmp_path) -> None:
@@ -261,15 +310,23 @@ def test_process_chunk_upload_merges_and_uploads(tmp_path) -> None:
     video_id, job_id = uuid.uuid4(), uuid.uuid4()
     db = MagicMock()
 
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.storage_service.upload_file") as upload_file, \
-         patch("app.services.video_service._extract_duration", return_value=10.0), \
-         patch("app.services.video_service.video_repo.update_source_duration") as update_source_duration, \
-         patch("app.services.video_service.video_repo.update_status") as video_update_status, \
-         patch("app.services.video_service.call_ml_service") as ml:
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.storage_service.upload_file") as upload_file,
+        patch("app.services.video_service._extract_duration", return_value=10.0),
+        patch(
+            "app.services.video_service.video_repo.update_source_duration"
+        ) as update_source_duration,
+        patch(
+            "app.services.video_service.video_repo.update_status"
+        ) as video_update_status,
+        patch("app.services.video_service.call_ml_service") as ml,
+    ):
         sl.return_value.__enter__.return_value = db
-        video_service.process_chunk_upload(upload_id, r2_key, str(video_id), str(job_id))
+        video_service.process_chunk_upload(
+            upload_id, r2_key, str(video_id), str(job_id)
+        )
 
     # 結合ファイルが R2 に上がる
     upload_file.assert_called_once()
@@ -297,15 +354,24 @@ def test_process_chunk_upload_marks_failed_on_error(tmp_path) -> None:
     video_id, job_id = uuid.uuid4(), uuid.uuid4()
     db = MagicMock()
 
-    with patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path), \
-         patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.storage_service.upload_file", side_effect=RuntimeError("R2 down")), \
-         patch("app.services.video_service.video_repo.update_status") as video_update_status, \
-         patch("app.services.video_service.job_repo.update_status") as job_update_status, \
-         patch("app.services.video_service.call_ml_service") as ml:
+    with (
+        patch("app.services.video_service.LOCAL_TMP_DIR", tmp_path),
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch(
+            "app.services.video_service.storage_service.upload_file",
+            side_effect=RuntimeError("R2 down"),
+        ),
+        patch(
+            "app.services.video_service.video_repo.update_status"
+        ) as video_update_status,
+        patch("app.services.video_service.job_repo.update_status") as job_update_status,
+        patch("app.services.video_service.call_ml_service") as ml,
+    ):
         sl.return_value.__enter__.return_value = db
         # 例外は外に漏れず、関数内で処理される
-        video_service.process_chunk_upload(upload_id, r2_key, str(video_id), str(job_id))
+        video_service.process_chunk_upload(
+            upload_id, r2_key, str(video_id), str(job_id)
+        )
 
     # video / job とも failed になる
     video_update_status.assert_called_once_with(db, video_id, VideoStatus.failed)
@@ -313,12 +379,16 @@ def test_process_chunk_upload_marks_failed_on_error(tmp_path) -> None:
     # 失敗したら ML はキックしない
     ml.assert_not_called()
 
+
 # --- delete_video -----------------------------------------------------------
+
 
 def test_delete_video_returns_false_when_missing() -> None:
     db = MagicMock()
-    with patch("app.services.video_service.video_repo.get_by_id", return_value=None), \
-         patch("app.services.video_service.storage_service.delete_file") as delete_file:
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=None),
+        patch("app.services.video_service.storage_service.delete_file") as delete_file,
+    ):
         assert video_service.delete_video(db, uuid.uuid4()) is False
     delete_file.assert_not_called()
 
@@ -327,13 +397,17 @@ def test_delete_video_removes_records_and_r2_files() -> None:
     db = MagicMock()
     video = _make_video(storage_path="videos/a.mp4", output_path="outputs/a.mp4")
     jobs = [SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())]
-    with patch("app.services.video_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.video_service.job_repo.get_by_video_id", return_value=jobs), \
-         patch("app.services.video_service.notification_log_repo.delete_by_job_id") as del_logs, \
-         patch("app.services.video_service.clip_repo.delete_by_video_id") as del_clips, \
-         patch("app.services.video_service.job_repo.delete_by_video_id") as del_jobs, \
-         patch("app.services.video_service.video_repo.delete") as del_video, \
-         patch("app.services.video_service.storage_service.delete_file") as delete_file:
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=video),
+        patch("app.services.video_service.job_repo.get_by_video_id", return_value=jobs),
+        patch(
+            "app.services.video_service.notification_log_repo.delete_by_job_id"
+        ) as del_logs,
+        patch("app.services.video_service.clip_repo.delete_by_video_id") as del_clips,
+        patch("app.services.video_service.job_repo.delete_by_video_id") as del_jobs,
+        patch("app.services.video_service.video_repo.delete") as del_video,
+        patch("app.services.video_service.storage_service.delete_file") as delete_file,
+    ):
         result = video_service.delete_video(db, video.id)
 
     assert result is True
@@ -348,12 +422,14 @@ def test_delete_video_removes_records_and_r2_files() -> None:
 def test_delete_video_skips_output_when_no_output_path() -> None:
     db = MagicMock()
     video = _make_video(storage_path="videos/a.mp4", output_path=None)
-    with patch("app.services.video_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.video_service.job_repo.get_by_video_id", return_value=[]), \
-         patch("app.services.video_service.clip_repo.delete_by_video_id"), \
-         patch("app.services.video_service.job_repo.delete_by_video_id"), \
-         patch("app.services.video_service.video_repo.delete"), \
-         patch("app.services.video_service.storage_service.delete_file") as delete_file:
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=video),
+        patch("app.services.video_service.job_repo.get_by_video_id", return_value=[]),
+        patch("app.services.video_service.clip_repo.delete_by_video_id"),
+        patch("app.services.video_service.job_repo.delete_by_video_id"),
+        patch("app.services.video_service.video_repo.delete"),
+        patch("app.services.video_service.storage_service.delete_file") as delete_file,
+    ):
         video_service.delete_video(db, video.id)
 
     delete_file.assert_called_once_with("videos/a.mp4")
@@ -362,26 +438,38 @@ def test_delete_video_skips_output_when_no_output_path() -> None:
 def test_delete_video_is_resilient_to_r2_errors() -> None:
     db = MagicMock()
     video = _make_video(storage_path="videos/a.mp4", output_path=None)
-    with patch("app.services.video_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.video_service.job_repo.get_by_video_id", return_value=[]), \
-         patch("app.services.video_service.clip_repo.delete_by_video_id"), \
-         patch("app.services.video_service.job_repo.delete_by_video_id"), \
-         patch("app.services.video_service.video_repo.delete"), \
-         patch("app.services.video_service.storage_service.delete_file",
-               side_effect=RuntimeError("R2 down")):
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=video),
+        patch("app.services.video_service.job_repo.get_by_video_id", return_value=[]),
+        patch("app.services.video_service.clip_repo.delete_by_video_id"),
+        patch("app.services.video_service.job_repo.delete_by_video_id"),
+        patch("app.services.video_service.video_repo.delete"),
+        patch(
+            "app.services.video_service.storage_service.delete_file",
+            side_effect=RuntimeError("R2 down"),
+        ),
+    ):
         # R2 削除が失敗しても DB 削除は完了しているので True
         assert video_service.delete_video(db, video.id) is True
 
 
 # --- replace_clips ----------------------------------------------------------
 
+
 def test_replace_clips_calls_repo_with_latest_job() -> None:
     db = MagicMock()
     video = _make_video(source_duration=None)
     job = SimpleNamespace(id=uuid.uuid4())
     clips_input = [SimpleNamespace(start_time=0.0, end_time=5.0)]
-    with patch("app.services.video_service.job_repo.get_latest_by_video_id", return_value=job), \
-         patch("app.services.video_service.clip_repo.replace_for_video", return_value=["c"]) as repl:
+    with (
+        patch(
+            "app.services.video_service.job_repo.get_latest_by_video_id",
+            return_value=job,
+        ),
+        patch(
+            "app.services.video_service.clip_repo.replace_for_video", return_value=["c"]
+        ) as repl,
+    ):
         result = video_service.replace_clips(db, video, clips_input)
 
     assert result == ["c"]
@@ -404,7 +492,9 @@ def test_replace_clips_409_when_no_job() -> None:
     db = MagicMock()
     video = _make_video(source_duration=None)
     clips_input = [SimpleNamespace(start_time=0.0, end_time=5.0)]
-    with patch("app.services.video_service.job_repo.get_latest_by_video_id", return_value=None):
+    with patch(
+        "app.services.video_service.job_repo.get_latest_by_video_id", return_value=None
+    ):
         with pytest.raises(HTTPException) as exc:
             video_service.replace_clips(db, video, clips_input)
     assert exc.value.status_code == 409
@@ -412,19 +502,25 @@ def test_replace_clips_409_when_no_job() -> None:
 
 # --- rebuild_output ---------------------------------------------------------
 
+
 def test_rebuild_output_with_clips_uploads_and_completes() -> None:
     db = MagicMock()
     video = _make_video(storage_path="videos/a.mp4")
     clips = [{"start_time": 0.0, "end_time": 5.0}]
-    with patch("app.services.video_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.video_service.storage_service.generate_presigned_url", return_value="http://signed"), \
-         patch("app.services.video_service.storage_service.upload_file") as upload, \
-         patch("httpx.Client", return_value=_httpx_client_cm()), \
-         patch("app.services.video_service.clip_video") as clipv, \
-         patch("app.services.video_service._extract_duration", return_value=12.0), \
-         patch("app.services.video_service.video_repo.update_output_path"), \
-         patch("app.services.video_service.video_repo.update_duration") as vdur, \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=video),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            return_value="http://signed",
+        ),
+        patch("app.services.video_service.storage_service.upload_file") as upload,
+        patch("httpx.Client", return_value=_httpx_client_cm()),
+        patch("app.services.video_service.clip_video") as clipv,
+        patch("app.services.video_service._extract_duration", return_value=12.0),
+        patch("app.services.video_service.video_repo.update_output_path"),
+        patch("app.services.video_service.video_repo.update_duration") as vdur,
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         key = video_service.rebuild_output(db, video.id, clips)
 
     clipv.assert_called_once()
@@ -437,11 +533,13 @@ def test_rebuild_output_with_clips_uploads_and_completes() -> None:
 def test_rebuild_output_empty_clips_sets_empty_output() -> None:
     db = MagicMock()
     video = _make_video()
-    with patch("app.services.video_service.video_repo.get_by_id", return_value=video), \
-         patch("app.services.video_service.clip_video") as clipv, \
-         patch("app.services.video_service.storage_service.upload_file") as upload, \
-         patch("app.services.video_service.video_repo.update_output_path") as out_path, \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=video),
+        patch("app.services.video_service.clip_video") as clipv,
+        patch("app.services.video_service.storage_service.upload_file") as upload,
+        patch("app.services.video_service.video_repo.update_output_path") as out_path,
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         key = video_service.rebuild_output(db, video.id, [])
 
     clipv.assert_not_called()
@@ -453,12 +551,18 @@ def test_rebuild_output_empty_clips_sets_empty_output() -> None:
 
 # --- process_export ---------------------------------------------------------
 
+
 def test_process_export_rebuilds_from_current_clips() -> None:
     video_id = uuid.uuid4()
     clip_objs = [SimpleNamespace(start_time=0.0, end_time=5.0)]
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.clip_repo.get_by_video_id", return_value=clip_objs), \
-         patch("app.services.video_service.rebuild_output") as rebuild:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch(
+            "app.services.video_service.clip_repo.get_by_video_id",
+            return_value=clip_objs,
+        ),
+        patch("app.services.video_service.rebuild_output") as rebuild,
+    ):
         sl.return_value.__enter__.return_value = MagicMock()
         video_service.process_export(video_id)
 
@@ -470,10 +574,15 @@ def test_process_export_rebuilds_from_current_clips() -> None:
 def test_process_export_sets_ready_on_failure() -> None:
     video_id = uuid.uuid4()
     db = MagicMock()
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.clip_repo.get_by_video_id", return_value=[]), \
-         patch("app.services.video_service.rebuild_output", side_effect=RuntimeError("boom")), \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.clip_repo.get_by_video_id", return_value=[]),
+        patch(
+            "app.services.video_service.rebuild_output",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         sl.return_value.__enter__.return_value = db
         video_service.process_export(video_id)
 
@@ -483,11 +592,19 @@ def test_process_export_sets_ready_on_failure() -> None:
 
 # --- export_video -----------------------------------------------------------
 
+
 def test_export_video_schedules_background_task() -> None:
     db, bt = MagicMock(), MagicMock()
     video = _make_video(status=VideoStatus.ready)
-    with patch("app.services.video_service.clip_repo.get_by_video_id", return_value=[SimpleNamespace()]), \
-         patch("app.services.video_service.video_repo.update_status", return_value=video) as vupd:
+    with (
+        patch(
+            "app.services.video_service.clip_repo.get_by_video_id",
+            return_value=[SimpleNamespace()],
+        ),
+        patch(
+            "app.services.video_service.video_repo.update_status", return_value=video
+        ) as vupd,
+    ):
         video_service.export_video(db, video, bt)
 
     vupd.assert_called_once_with(db, video.id, VideoStatus.processing)
@@ -506,7 +623,10 @@ def test_export_video_400_when_no_clips() -> None:
 def test_export_video_409_when_processing() -> None:
     db, bt = MagicMock(), MagicMock()
     video = _make_video(status=VideoStatus.processing)
-    with patch("app.services.video_service.clip_repo.get_by_video_id", return_value=[SimpleNamespace()]):
+    with patch(
+        "app.services.video_service.clip_repo.get_by_video_id",
+        return_value=[SimpleNamespace()],
+    ):
         with pytest.raises(HTTPException) as exc:
             video_service.export_video(db, video, bt)
     assert exc.value.status_code == 409
@@ -514,12 +634,18 @@ def test_export_video_409_when_processing() -> None:
 
 # --- recover_interrupted_exports --------------------------------------------
 
+
 def test_recover_interrupted_exports_resets_to_ready() -> None:
     videos = [SimpleNamespace(id=uuid.uuid4()), SimpleNamespace(id=uuid.uuid4())]
     db = MagicMock()
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.video_repo.get_processing_without_running_job", return_value=videos), \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch(
+            "app.services.video_service.video_repo.get_processing_without_running_job",
+            return_value=videos,
+        ),
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         sl.return_value.__enter__.return_value = db
         video_service.recover_interrupted_exports()
 
@@ -531,40 +657,55 @@ def test_recover_interrupted_exports_resets_to_ready() -> None:
 
 
 def test_recover_interrupted_exports_noop_when_none() -> None:
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.video_repo.get_processing_without_running_job", return_value=[]), \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch(
+            "app.services.video_service.video_repo.get_processing_without_running_job",
+            return_value=[],
+        ),
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         sl.return_value.__enter__.return_value = MagicMock()
         video_service.recover_interrupted_exports()
 
     vupd.assert_not_called()
-    
+
 
 def test_recover_interrupted_to_failed_marks_orphaned_queued_as_failed() -> None:
     job = SimpleNamespace(id=uuid.uuid4(), video_id=uuid.uuid4())
     db = MagicMock()
-    
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.job_repo.get_queued_started_null_jobs", return_value=[job]), \
-         patch("app.services.video_service.job_repo.update_status") as jupd, \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch(
+            "app.services.video_service.job_repo.get_queued_started_null_jobs",
+            return_value=[job],
+        ),
+        patch("app.services.video_service.job_repo.update_status") as jupd,
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         sl.return_value.__enter__.return_value = db
         video_service.recover_interrupted_to_failed()
-    
+
     assert jupd.call_args.kwargs["status"] is JobStatus.failed
     vupd.assert_called_once_with(db, job.video_id, VideoStatus.failed)
-    
-    
+
+
 def test_recover_interrupted_to_failed_noop_when_none() -> None:
     job = SimpleNamespace(id=uuid.uuid4(), video_id=uuid.uuid4())
     db = MagicMock()
-    
-    with patch("app.services.video_service.SessionLocal") as sl, \
-         patch("app.services.video_service.job_repo.get_queued_started_null_jobs", return_value=[]), \
-         patch("app.services.video_service.job_repo.update_status") as jupd, \
-         patch("app.services.video_service.video_repo.update_status") as vupd:
+
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch(
+            "app.services.video_service.job_repo.get_queued_started_null_jobs",
+            return_value=[],
+        ),
+        patch("app.services.video_service.job_repo.update_status") as jupd,
+        patch("app.services.video_service.video_repo.update_status") as vupd,
+    ):
         sl.return_value.__enter__.return_value = db
         video_service.recover_interrupted_to_failed()
-    
+
     jupd.assert_not_called()
     vupd.assert_not_called()

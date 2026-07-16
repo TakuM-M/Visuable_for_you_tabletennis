@@ -5,6 +5,7 @@
 ここで「本人=返す / 他人=403 / 不在=404」の3系統を担保し、
 各ルーターテスト側では happy path と配線（403/404 への波及）を確認する。
 """
+
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch

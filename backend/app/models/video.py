@@ -12,8 +12,8 @@ from app.models.base import Base
 
 class VideoStatus(str, enum.Enum):
     uploaded = "uploaded"
-    queued = "queued" # ML 処理キュー（待ち行列）登録
-    processing = "processing" # ML 処理中
+    queued = "queued"  # ML 処理キュー（待ち行列）登録
+    processing = "processing"  # ML 処理中
     ready = "ready"  # ML 解析完了・編集可能・未書き出し
     completed = "completed"  # 書き出し済み（output_path あり）
     failed = "failed"

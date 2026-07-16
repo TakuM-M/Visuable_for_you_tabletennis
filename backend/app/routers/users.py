@@ -25,7 +25,10 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
         )
     else:
         if existing_users.email_verified:
-            raise HTTPException(status_code=400, detail="このメールアドレスは既に使用されています",)
+            raise HTTPException(
+                status_code=400,
+                detail="このメールアドレスは既に使用されています",
+            )
         else:
             user_repo.update(
                 db=db,
@@ -34,7 +37,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
                 password_hash=hash_password(body.password),
             )
             user = existing_users
-    auth_service.send_verification_email(user) 
+    auth_service.send_verification_email(user)
     return user
 
 
@@ -43,8 +46,13 @@ def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """ログイン中のユーザー情報を取得"""
     return current_user
 
+
 @router.patch("/me", response_model=UserResponse)
-def update(body: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> UserResponse:
+def update(
+    body: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
     """ユーザー情報を更新"""
     if body.password:
         password_hash = hash_password(body.password)
@@ -57,6 +65,6 @@ def update(body: UserUpdate, db: Session = Depends(get_db), current_user: User =
         display_name=body.display_name or current_user.display_name,
         password_hash=password_hash,
     )
-    
+
     updated_user = user_repo.get_by_id(db, current_user.id)
     return updated_user

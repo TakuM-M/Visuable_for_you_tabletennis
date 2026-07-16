@@ -7,6 +7,7 @@
 
 class PipelineError(Exception):
     """パイプライン処理の基底例外クラス"""
+
     pass
 
 
@@ -27,6 +28,7 @@ class TableDetectionError(PipelineError):
 
 class VideoProcessingError(PipelineError):
     """動画処理に失敗した場合の例外"""
+
     pass
 
 

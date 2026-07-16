@@ -71,9 +71,7 @@ def _send_failure_notification(
     )
 
 
-def handle_ml_failure(
-    db: Session, job_id: uuid.UUID, error_message: str
-) -> None:
+def handle_ml_failure(db: Session, job_id: uuid.UUID, error_message: str) -> None:
     """ML 処理関連の失敗を共通ハンドリングする。
 
     リトライ枠が残っていれば next_retry_at を設定して failed に遷移。
@@ -129,9 +127,7 @@ def retry_job(
         raise HTTPException(status_code=403, detail="このジョブへの権限がありません")
 
     if job.status != JobStatus.failed:
-        raise HTTPException(
-            status_code=409, detail="失敗したジョブのみ再実行できます"
-        )
+        raise HTTPException(status_code=409, detail="失敗したジョブのみ再実行できます")
 
     job_repo.reset_for_manual_retry(db, job_id)
     video_repo.update_status(db, video.id, VideoStatus.queued)
@@ -160,7 +156,7 @@ def process_complete_job(
 def complete_job(
     db: Session,
     job_id: uuid.UUID,
-    clips: list[dict],   # {"start_time": float, "end_time": float} のリスト
+    clips: list[dict],  # {"start_time": float, "end_time": float} のリスト
 ) -> None:
     """ML 解析完了コールバックの本処理。
 

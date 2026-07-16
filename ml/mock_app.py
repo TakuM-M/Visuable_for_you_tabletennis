@@ -5,6 +5,7 @@
 5秒後に偽のクリップタイムスタンプをバックエンドに返す。
 動画のカット・結合はバックエンドが行う。
 """
+
 import asyncio
 import os
 import subprocess
@@ -26,9 +27,13 @@ def get_video_duration(video_path: str) -> float:
     """ffprobeで動画の長さ（秒）を取得する（ローカルパス・HTTP URL両対応）"""
     result = subprocess.run(
         [
-            "ffprobe", "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             video_path,
         ],
         capture_output=True,
@@ -75,7 +80,9 @@ async def run_mock_processing(job_id: str, video_path: str, callback_url: str) -
                 timeout=30.0,
             )
             response.raise_for_status()
-        print(f"コールバック送信完了 job_id={job_id} status={response.status_code} clips={len(clips)}件")
+        print(
+            f"コールバック送信完了 job_id={job_id} status={response.status_code} clips={len(clips)}件"
+        )
     except Exception as e:
         print(f"コールバック送信失敗 job_id={job_id}: {e}")
 

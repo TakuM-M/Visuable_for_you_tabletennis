@@ -7,6 +7,7 @@
   - 本体内で呼ぶ service / repo / storage は patch で差し替える
     （patch 先は「使われている場所」= app.routers.videos.* を指定する）。
 """
+
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -83,8 +84,8 @@ def test_upload_video_returns_201() -> None:
     ) as upload:
         resp = client.post(
             "/videos",
-            data={"title": "新動画"},                          # Form(...) フィールド
-            files={"file": ("a.mp4", b"dummy", "video/mp4")},   # File(...) フィールド
+            data={"title": "新動画"},  # Form(...) フィールド
+            files={"file": ("a.mp4", b"dummy", "video/mp4")},  # File(...) フィールド
         )
 
     assert resp.status_code == 201
@@ -200,9 +201,7 @@ def test_list_videos_returns_user_videos() -> None:
     user = _make_user()
     client = _authed_client(user)
     items = [_make_video(user_id=user.id), _make_video(user_id=user.id)]
-    with patch(
-        "app.routers.videos.video_repo.get_by_user_id", return_value=items
-    ):
+    with patch("app.routers.videos.video_repo.get_by_user_id", return_value=items):
         resp = client.get("/videos")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
@@ -261,11 +260,13 @@ def test_get_output_returns_presigned_url() -> None:
     user = _make_user()
     client = _authed_client(user)
     video = _make_video(user_id=user.id, output_path="outputs/done.mp4")
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch(
-             "app.routers.videos.storage_service.generate_presigned_url",
-             side_effect=["https://r2.example/signed", "https://r2.example/signed-dl"],
-         ) as mock_presign:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch(
+            "app.routers.videos.storage_service.generate_presigned_url",
+            side_effect=["https://r2.example/signed", "https://r2.example/signed-dl"],
+        ) as mock_presign,
+    ):
         resp = client.get(f"/videos/{video.id}/output")
     assert resp.status_code == 200
     body = resp.json()
@@ -319,11 +320,13 @@ def test_get_source_returns_presigned_url() -> None:
     user = _make_user()
     client = _authed_client(user)
     video = _make_video(user_id=user.id, storage_path="videos/src.mp4")
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch(
-             "app.routers.videos.storage_service.generate_presigned_url",
-             return_value="https://r2.example/source-signed",
-         ) as gen_mock:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch(
+            "app.routers.videos.storage_service.generate_presigned_url",
+            return_value="https://r2.example/source-signed",
+        ) as gen_mock,
+    ):
         resp = client.get(f"/videos/{video.id}/source")
     assert resp.status_code == 200
     assert resp.json()["url"] == "https://r2.example/source-signed"
@@ -359,8 +362,10 @@ def test_delete_video_returns_204() -> None:
     user = _make_user()
     client = _authed_client(user)
     video = _make_video(user_id=user.id)
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.videos.video_service.delete_video") as delete:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.videos.video_service.delete_video") as delete,
+    ):
         resp = client.delete(f"/videos/{video.id}")
     assert resp.status_code == 204
     delete.assert_called_once()
@@ -369,8 +374,10 @@ def test_delete_video_returns_204() -> None:
 def test_delete_video_not_found_returns_404() -> None:
     """存在しない動画の削除は 404。service の削除は呼ばれない。"""
     client = _authed_client()
-    with patch("app.core.deps.video_repo.get_by_id", return_value=None), \
-         patch("app.routers.videos.video_service.delete_video") as delete:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=None),
+        patch("app.routers.videos.video_service.delete_video") as delete,
+    ):
         resp = client.delete(f"/videos/{uuid.uuid4()}")
     assert resp.status_code == 404
     delete.assert_not_called()
@@ -381,8 +388,10 @@ def test_delete_video_other_user_returns_403() -> None:
     user = _make_user()
     client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4())  # 別人の動画
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.videos.video_service.delete_video") as delete:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.videos.video_service.delete_video") as delete,
+    ):
         resp = client.delete(f"/videos/{video.id}")
     assert resp.status_code == 403
     delete.assert_not_called()
@@ -400,10 +409,12 @@ def test_export_video_returns_202() -> None:
     processing = _make_video(
         id=video.id, user_id=user.id, status=VideoStatus.processing
     )
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch(
-             "app.routers.videos.video_service.export_video", return_value=processing
-         ) as export:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch(
+            "app.routers.videos.video_service.export_video", return_value=processing
+        ) as export,
+    ):
         resp = client.post(f"/videos/{video.id}/export")
     assert resp.status_code == 202
     assert resp.json()["status"] == "processing"
@@ -415,8 +426,10 @@ def test_export_video_other_user_returns_403() -> None:
     user = _make_user()
     client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4())
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.videos.video_service.export_video") as export:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.videos.video_service.export_video") as export,
+    ):
         resp = client.post(f"/videos/{video.id}/export")
     assert resp.status_code == 403
     export.assert_not_called()
@@ -424,8 +437,10 @@ def test_export_video_other_user_returns_403() -> None:
 
 def test_export_video_not_found_returns_404() -> None:
     client = _authed_client()
-    with patch("app.core.deps.video_repo.get_by_id", return_value=None), \
-         patch("app.routers.videos.video_service.export_video") as export:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=None),
+        patch("app.routers.videos.video_service.export_video") as export,
+    ):
         resp = client.post(f"/videos/{uuid.uuid4()}/export")
     assert resp.status_code == 404
     export.assert_not_called()

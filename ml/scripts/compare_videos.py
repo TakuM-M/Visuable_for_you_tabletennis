@@ -22,6 +22,7 @@ Usage:
     - ←          : 2秒前へスキップ
     - q          : 終了
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -320,10 +321,12 @@ def main():
     # predictions の各フレームに対応する時間を事前計算
     pred_times = None
     if predictions is not None:
-        pred_times = np.array([
-            pred_frame_to_time(int(f), frame_to_time, source_fps)
-            for f in predictions["frame"]
-        ])
+        pred_times = np.array(
+            [
+                pred_frame_to_time(int(f), frame_to_time, source_fps)
+                for f in predictions["frame"]
+            ]
+        )
 
     cap_orig = cv2.VideoCapture(str(orig_path))
     cap_poses = cv2.VideoCapture(str(poses_path))
@@ -342,8 +345,12 @@ def main():
     duration_orig = total_orig / fps_orig if fps_orig > 0 else 0
     duration_poses = total_poses / fps_poses if fps_poses > 0 else 0
 
-    print(f"元動画   : {orig_path.name} ({total_orig} frames, {fps_orig:.1f} fps, {duration_orig:.1f}s)")
-    print(f"Poses動画: {poses_path.name} ({total_poses} frames, {fps_poses:.1f} fps, {duration_poses:.1f}s)")
+    print(
+        f"元動画   : {orig_path.name} ({total_orig} frames, {fps_orig:.1f} fps, {duration_orig:.1f}s)"
+    )
+    print(
+        f"Poses動画: {poses_path.name} ({total_poses} frames, {fps_poses:.1f} fps, {duration_poses:.1f}s)"
+    )
     if predictions is not None:
         print(
             f"Predictions: {len(predictions)} rows, "

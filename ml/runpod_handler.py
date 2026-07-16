@@ -1,6 +1,7 @@
 """
 RunPod Serverless Handler for Table Tennis Play Scene Detection
 """
+
 import json
 import os
 import tempfile
@@ -29,9 +30,14 @@ print(f"設定ファイル読み込み完了: {CONFIG_PATH}")
 models = config_dict["models"]
 TABLE_MODEL_PATH = os.getenv("TABLE_MODEL_PATH", models["table_detection"])
 POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", models["pose_estimation"])
-PLAY_CLASSIFIER_MODEL_PATH = os.getenv("PLAY_CLASSIFIER_MODEL_PATH", models["play_classifier"])
-PLAY_CLASSIFIER_CONFIG_PATH = os.getenv("PLAY_CLASSIFIER_CONFIG_PATH", models.get("play_classifier_config"))
+PLAY_CLASSIFIER_MODEL_PATH = os.getenv(
+    "PLAY_CLASSIFIER_MODEL_PATH", models["play_classifier"]
+)
+PLAY_CLASSIFIER_CONFIG_PATH = os.getenv(
+    "PLAY_CLASSIFIER_CONFIG_PATH", models.get("play_classifier_config")
+)
 DEVICE = os.getenv("ML_DEVICE", config_dict.get("device", "cuda"))
+
 
 def _build_pipeline_config() -> InferencePipelineConfig:
     """JSON設定からInferencePipelineConfigを構築"""
@@ -99,9 +105,11 @@ def _build_pipeline_config() -> InferencePipelineConfig:
         save_intermediate_files=pl.get("save_intermediate_files", False),
     )
 
+
 print(f"モデルロード開始 (device={DEVICE})")
 _pipeline = InferencePipeline(_build_pipeline_config())
 print("モデルロード完了")
+
 
 def handler(job: dict) -> dict:
     """
@@ -120,7 +128,7 @@ def handler(job: dict) -> dict:
     job_id: str = inp["job_id"]
     callback_url: str = inp["callback_url"]
     clips: list[dict] = []
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         video_path = f"{tmpdir}/input.mp4"
 

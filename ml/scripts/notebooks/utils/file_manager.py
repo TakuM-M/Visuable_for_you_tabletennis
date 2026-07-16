@@ -25,7 +25,9 @@ class ColabFileManager:
             project_root: プロジェクトのルートディレクトリ。
                          Noneの場合は自動検出を試みる。
         """
-        self.project_root = Path(project_root) if project_root else self._detect_project_root()
+        self.project_root = (
+            Path(project_root) if project_root else self._detect_project_root()
+        )
         self.is_colab = self._check_colab_environment()
 
     @staticmethod
@@ -33,6 +35,7 @@ class ColabFileManager:
         """Google Colab環境かどうかをチェック"""
         try:
             import google.colab
+
             return True
         except ImportError:
             return False
@@ -43,7 +46,7 @@ class ColabFileManager:
         current = Path.cwd()
 
         # プロジェクトのマーカーファイル/ディレクトリを探す
-        markers = ['src', '.git', 'setup.py', 'pyproject.toml']
+        markers = ["src", ".git", "setup.py", "pyproject.toml"]
 
         while current != current.parent:
             if any((current / marker).exists() for marker in markers):
@@ -69,7 +72,8 @@ class ColabFileManager:
 
         try:
             from google.colab import drive
-            drive.mount('/content/drive', force_remount=force_remount)
+
+            drive.mount("/content/drive", force_remount=force_remount)
             print("✓ Google Driveをマウントしました")
             return True
         except Exception as e:
@@ -89,6 +93,7 @@ class ColabFileManager:
 
         try:
             from google.colab import files
+
             uploaded = files.upload()
             print(f"✓ {len(uploaded)}個のファイルをアップロードしました")
             return uploaded
@@ -117,6 +122,7 @@ class ColabFileManager:
 
         try:
             from google.colab import files
+
             files.download(str(file_path))
             print(f"✓ ファイルをダウンロード: {file_path}")
             return True
@@ -139,7 +145,9 @@ class ColabFileManager:
             if self.download_file(file_path):
                 success_count += 1
 
-        print(f"\n✓ {success_count}/{len(file_paths)}個のファイルをダウンロードしました")
+        print(
+            f"\n✓ {success_count}/{len(file_paths)}個のファイルをダウンロードしました"
+        )
         return success_count
 
     def change_to_project_root(self) -> bool:
@@ -157,7 +165,9 @@ class ColabFileManager:
             print(f"✗ ディレクトリの変更に失敗: {e}")
             return False
 
-    def ensure_directory(self, dir_path: Union[str, Path], relative: bool = True) -> Path:
+    def ensure_directory(
+        self, dir_path: Union[str, Path], relative: bool = True
+    ) -> Path:
         """
         ディレクトリが存在することを保証（なければ作成）
 
@@ -192,9 +202,9 @@ class ColabFileManager:
         else:
             return Path(*paths)
 
-    def check_file_exists(self, file_path: Union[str, Path],
-                         relative: bool = True,
-                         verbose: bool = True) -> bool:
+    def check_file_exists(
+        self, file_path: Union[str, Path], relative: bool = True, verbose: bool = True
+    ) -> bool:
         """
         ファイルの存在をチェック
 
@@ -221,8 +231,9 @@ class ColabFileManager:
 
         return exists
 
-    def check_files_exist(self, file_paths: List[Union[str, Path]],
-                         relative: bool = True) -> Dict[str, bool]:
+    def check_files_exist(
+        self, file_paths: List[Union[str, Path]], relative: bool = True
+    ) -> Dict[str, bool]:
         """
         複数のファイルの存在をチェック
 
@@ -261,7 +272,7 @@ class ConfigLoader:
             raise FileNotFoundError(f"設定ファイルが見つかりません: {config_path}")
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
             print(f"✓ 設定ファイルを読み込みました: {config_path}")
             return config
@@ -269,9 +280,9 @@ class ConfigLoader:
             raise ValueError(f"JSON形式が不正です: {e}")
 
     @staticmethod
-    def save_json(config: Dict[str, Any],
-                  config_path: Union[str, Path],
-                  indent: int = 2) -> bool:
+    def save_json(
+        config: Dict[str, Any], config_path: Union[str, Path], indent: int = 2
+    ) -> bool:
         """
         JSON設定ファイルを保存する
 
@@ -289,7 +300,7 @@ class ConfigLoader:
             # ディレクトリが存在しなければ作成
             config_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(config_path, 'w', encoding='utf-8') as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=indent, ensure_ascii=False)
 
             print(f"✓ 設定ファイルを保存しました: {config_path}")
@@ -324,8 +335,9 @@ class DatasetPathManager:
         """
         self.fm = file_manager
 
-    def get_video_paths(self, video_names: List[str],
-                       base_dir: str = "data/detect") -> Dict[str, Dict[str, Path]]:
+    def get_video_paths(
+        self, video_names: List[str], base_dir: str = "data/detect"
+    ) -> Dict[str, Dict[str, Path]]:
         """
         動画データのパスを取得
 
@@ -342,16 +354,17 @@ class DatasetPathManager:
             video_dir = self.fm.get_path(base_dir, video_name)
 
             paths[video_name] = {
-                'dir': video_dir,
-                'original_csv': video_dir / 'original_pose_data.csv',
-                'augment_csv': video_dir / 'augment_pose_data.csv',
-                'label': video_dir / 'play_labels.csv'
+                "dir": video_dir,
+                "original_csv": video_dir / "original_pose_data.csv",
+                "augment_csv": video_dir / "augment_pose_data.csv",
+                "label": video_dir / "play_labels.csv",
             }
 
         return paths
 
-    def check_video_data(self, video_names: List[str],
-                        base_dir: str = "data/detect") -> None:
+    def check_video_data(
+        self, video_names: List[str], base_dir: str = "data/detect"
+    ) -> None:
         """
         動画データの存在をチェックして表示
 
@@ -369,19 +382,23 @@ class DatasetPathManager:
             print(f"\n{video_name}:")
 
             # ディレクトリ
-            dir_exists = file_paths['dir'].exists()
+            dir_exists = file_paths["dir"].exists()
             print(f"  Dir: {'✓' if dir_exists else '✗'} {file_paths['dir']}")
 
             # オリジナルCSV
-            csv_exists = file_paths['original_csv'].exists()
-            print(f"  CSV (Original): {'✓' if csv_exists else '✗'} {file_paths['original_csv']}")
+            csv_exists = file_paths["original_csv"].exists()
+            print(
+                f"  CSV (Original): {'✓' if csv_exists else '✗'} {file_paths['original_csv']}"
+            )
 
             # 拡張CSV
-            aug_exists = file_paths['augment_csv'].exists()
-            print(f"  CSV (Augmented): {'✓' if aug_exists else '✗'} {file_paths['augment_csv']}")
+            aug_exists = file_paths["augment_csv"].exists()
+            print(
+                f"  CSV (Augmented): {'✓' if aug_exists else '✗'} {file_paths['augment_csv']}"
+            )
 
             # ラベル
-            label_exists = file_paths['label'].exists()
+            label_exists = file_paths["label"].exists()
             print(f"  Label: {'✓' if label_exists else '✗'} {file_paths['label']}")
 
         print("=" * 60)
@@ -399,10 +416,13 @@ class ModelFileManager:
         """
         self.fm = file_manager
 
-    def save_to_drive(self, source_dir: Union[str, Path],
-                     drive_path: str,
-                     files_to_copy: Optional[List[str]] = None,
-                     use_timestamp: bool = True) -> tuple[int, str]:
+    def save_to_drive(
+        self,
+        source_dir: Union[str, Path],
+        drive_path: str,
+        files_to_copy: Optional[List[str]] = None,
+        use_timestamp: bool = True,
+    ) -> tuple[int, str]:
         """
         ファイルをGoogle Driveにコピー
 
@@ -448,9 +468,12 @@ class ModelFileManager:
 
         return success_count, drive_path
 
-    def load_from_drive(self, drive_path: str,
-                       destination_dir: Union[str, Path],
-                       files_to_load: Optional[List[str]] = None) -> int:
+    def load_from_drive(
+        self,
+        drive_path: str,
+        destination_dir: Union[str, Path],
+        files_to_load: Optional[List[str]] = None,
+    ) -> int:
         """
         Google Driveからファイルを読み込み
 

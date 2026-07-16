@@ -13,6 +13,7 @@
 
     docker compose -f docker-compose.dev.yml exec backend uv run pytest
 """
+
 from urllib.parse import urlparse
 
 import pytest
@@ -46,18 +47,20 @@ def _replace_db_name(url: str, db_name: str) -> str:
 @pytest.fixture(scope="session")
 def engine() -> Engine:
     """
-      1. postgres システム DB に管理者として接続
-      2. 既存接続を切ってから tabletennis_test を DROP → CREATE
-      3. テスト DB に再接続し、Base.metadata.create_all で全テーブル作成
+    1. postgres システム DB に管理者として接続
+    2. 既存接続を切ってから tabletennis_test を DROP → CREATE
+    3. テスト DB に再接続し、Base.metadata.create_all で全テーブル作成
     """
     # 管理者権限としてシステムに接続するための engine
     admin_url = _replace_db_name(settings.database_url, "postgres")
     admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     with admin_engine.connect() as conn:
-        conn.execute(sa.text(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-            f"WHERE datname = '{TEST_DB_NAME}' AND pid <> pg_backend_pid()"
-        ))
+        conn.execute(
+            sa.text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                f"WHERE datname = '{TEST_DB_NAME}' AND pid <> pg_backend_pid()"
+            )
+        )
         conn.execute(sa.text(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}"'))
         conn.execute(sa.text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
     admin_engine.dispose()
@@ -65,7 +68,7 @@ def engine() -> Engine:
     # 本物のテストの engine
     test_engine = create_engine(_replace_db_name(settings.database_url, TEST_DB_NAME))
     Base.metadata.create_all(test_engine)
-    yield test_engine # テストの実行
+    yield test_engine  # テストの実行
     test_engine.dispose()
 
 

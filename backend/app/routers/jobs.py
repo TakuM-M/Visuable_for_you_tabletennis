@@ -60,7 +60,9 @@ def complete_job(
 
     重い結合処理は背景タスクへ委譲し、ML 側の read timeout を回避するため即 202 を返す。
     """
-    clips = [{"start_time": c.start_time, "end_time": c.end_time} for c in request.clips]
+    clips = [
+        {"start_time": c.start_time, "end_time": c.end_time} for c in request.clips
+    ]
     background_tasks.add_task(job_service.process_complete_job, job_id, clips)
     logger.info("ジョブ完了コールバック受信 job_id=%s clips=%s件", job_id, len(clips))
     return {"message": "受付完了"}

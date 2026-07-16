@@ -15,9 +15,7 @@ logger = get_logger(__name__)
 
 def reap_timeouts() -> None:
     """started_at が job_timeout_hours より古い queued / processing ジョブを失敗扱いにする"""
-    threshold = datetime.now(timezone.utc) - timedelta(
-        hours=settings.job_timeout_hours
-    )
+    threshold = datetime.now(timezone.utc) - timedelta(hours=settings.job_timeout_hours)
     with SessionLocal() as db:
         jobs = job_repo.get_timed_out_jobs(db, threshold)
         for job in jobs:
@@ -36,8 +34,7 @@ def dispatch_retries() -> None:
         )
         # 再キック対象を確定してからセッションを閉じるため、必要情報をコピー
         targets = [
-            (str(job.id), str(job.video_id), job.video.storage_path)
-            for job in jobs
+            (str(job.id), str(job.video_id), job.video.storage_path) for job in jobs
         ]
         for job in jobs:
             job_repo.prepare_for_auto_retry(db, job.id)
