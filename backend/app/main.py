@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
     # 起動時に tmp を一度掃除し、中断された書き出しを ready に戻す
     job_reaper.clean_tmp_dir()
     video_service.recover_interrupted_exports()
+    video_service.recover_interrupted_to_failed()
     scheduler.start()
     logger.info("APScheduler 起動")
     try:

@@ -442,7 +442,27 @@ def recover_interrupted_exports() -> None:
                 "中断された書き出しを検知 video_id=%s → ready に戻します", video.id
             )
             video_repo.update_status(db, video.id, VideoStatus.ready)
-
+            
+def recover_interrupted_to_failed() -> None:
+    """再起動で中断され、status=queued のまま取り残されたジョブを failed に戻す。
+    
+    状況として、アップロード完了後のプロセスが落ちた場合に、status=queued のまま取り残されることがある。
+    これを failed に戻すことで、失敗として表示され、再実行できるようにする。
+    
+    起動直後に呼ばれる限り、現存しているBackgroundTasksはないため、誤検出を避けている。
+    """
+    with SessionLocal() as db:
+        for job in job_repo.get_queued_started_null_jobs(db):
+            logger.warning(
+                "中断されたジョブを検知 job_id=%s → failed に戻します", job.id
+            )
+            job_repo.update_status(
+                db=db,
+                job_id=job.id,
+                status=JobStatus.failed,
+                error_message="プロセス再起動で中断されました",
+            )
+            video_repo.update_status(db, job.video_id, VideoStatus.failed)
 
 def export_video(
     db: Session,
