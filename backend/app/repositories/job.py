@@ -87,6 +87,7 @@ def get_timed_out_jobs(db: Session, threshold: datetime) -> list[Job]:
         .all()
     )
     
+    
 def get_queued_started_null_jobs(db: Session) -> list[Job]:
     """status : queued started_at : null のジョブを取得する"""
     return (
