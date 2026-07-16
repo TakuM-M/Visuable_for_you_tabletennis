@@ -442,7 +442,8 @@ def recover_interrupted_exports() -> None:
                 "中断された書き出しを検知 video_id=%s → ready に戻します", video.id
             )
             video_repo.update_status(db, video.id, VideoStatus.ready)
-            
+
+          
 def recover_interrupted_to_failed() -> None:
     """再起動で中断され、status=queued のまま取り残されたジョブを failed に戻す。
     
@@ -463,6 +464,7 @@ def recover_interrupted_to_failed() -> None:
                 error_message="プロセス再起動で中断されました",
             )
             video_repo.update_status(db, job.video_id, VideoStatus.failed)
+
 
 def export_video(
     db: Session,
