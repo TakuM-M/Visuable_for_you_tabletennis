@@ -538,3 +538,33 @@ def test_recover_interrupted_exports_noop_when_none() -> None:
         video_service.recover_interrupted_exports()
 
     vupd.assert_not_called()
+    
+
+def test_recover_interrupted_to_failed_marks_orphaned_queued_as_failed() -> None:
+    job = SimpleNamespace(id=uuid.uuid4(), video_id=uuid.uuid4())
+    db = MagicMock()
+    
+    with patch("app.services.video_service.SessionLocal") as sl, \
+         patch("app.services.video_service.job_repo.get_queued_started_null_jobs", return_value=[job]), \
+         patch("app.services.video_service.job_repo.update_status") as jupd, \
+         patch("app.services.video_service.video_repo.update_status") as vupd:
+        sl.return_value.__enter__.return_value = db
+        video_service.recover_interrupted_to_failed()
+    
+    assert jupd.call_args.kwargs["status"] is JobStatus.failed
+    vupd.assert_called_once_with(db, job.video_id, VideoStatus.failed)
+    
+    
+def test_recover_interrupted_to_failed_noop_when_none() -> None:
+    job = SimpleNamespace(id=uuid.uuid4(), video_id=uuid.uuid4())
+    db = MagicMock()
+    
+    with patch("app.services.video_service.SessionLocal") as sl, \
+         patch("app.services.video_service.job_repo.get_queued_started_null_jobs", return_value=[]), \
+         patch("app.services.video_service.job_repo.update_status") as jupd, \
+         patch("app.services.video_service.video_repo.update_status") as vupd:
+        sl.return_value.__enter__.return_value = db
+        video_service.recover_interrupted_to_failed()
+    
+    jupd.assert_not_called()
+    vupd.assert_not_called()

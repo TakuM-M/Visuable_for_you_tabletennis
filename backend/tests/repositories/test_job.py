@@ -160,6 +160,20 @@ def test_get_timed_out_jobs_excludes_completed_jobs(db, video):
 
     threshold = datetime.now(timezone.utc) - timedelta(hours=24)
     assert job_repo.get_timed_out_jobs(db, threshold) == []
+    
+    
+def test_get_queued_started_null_jobs_returns_only_queued_with_null_started_at(db, video):
+    """status : queued started_at : null のジョブを取得する"""
+    job1 = job_repo.create(db, video_id=video.id)  # queued / started_at=None
+    job2 = job_repo.create(db, video_id=video.id)  # queued / started_at!=None
+    job3 = job_repo.create(db, video_id=video.id)  # processing / started_at=None
+    job2.started_at = datetime.now(timezone.utc)
+    job3.status = JobStatus.processing
+    db.commit()
+    
+    result = job_repo.get_queued_started_null_jobs(db)
+    assert len(result) == 1
+    assert result[0].id == job1.id
 
 
 # ----------------------------------------------------------------------
