@@ -435,22 +435,32 @@ def test_delete_video_skips_output_when_no_output_path() -> None:
     delete_file.assert_called_once_with("videos/a.mp4")
 
 
-def test_delete_video_is_resilient_to_r2_errors() -> None:
+def test_delete_video_keeps_db_records_when_r2_delete_fails() -> None:
+    """R2 削除に失敗したら例外を送出し、DB の行（R2 キーへの唯一のポインタ）を残す。
+
+    先に DB を消すと、R2 削除失敗時にキーを知る手段が失われ、誰からも
+    参照されないオブジェクトが R2 に残り続ける（オーファン化）ため。
+    """
     db = MagicMock()
     video = _make_video(storage_path="videos/a.mp4", output_path=None)
     with (
         patch("app.services.video_service.video_repo.get_by_id", return_value=video),
         patch("app.services.video_service.job_repo.get_by_video_id", return_value=[]),
-        patch("app.services.video_service.clip_repo.delete_by_video_id"),
-        patch("app.services.video_service.job_repo.delete_by_video_id"),
-        patch("app.services.video_service.video_repo.delete"),
+        patch("app.services.video_service.clip_repo.delete_by_video_id") as del_clips,
+        patch("app.services.video_service.job_repo.delete_by_video_id") as del_jobs,
+        patch("app.services.video_service.video_repo.delete") as del_video,
         patch(
             "app.services.video_service.storage_service.delete_file",
             side_effect=RuntimeError("R2 down"),
         ),
     ):
-        # R2 削除が失敗しても DB 削除は完了しているので True
-        assert video_service.delete_video(db, video.id) is True
+        with pytest.raises(RuntimeError):
+            video_service.delete_video(db, video.id)
+
+    # DB の削除には一切到達しない（再削除の手がかりが残る）
+    del_clips.assert_not_called()
+    del_jobs.assert_not_called()
+    del_video.assert_not_called()
 
 
 # --- replace_clips ----------------------------------------------------------

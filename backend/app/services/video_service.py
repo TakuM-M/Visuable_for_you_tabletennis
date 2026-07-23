@@ -317,8 +317,14 @@ def delete_video(db: Session, video_id: uuid.UUID) -> bool:
     video = video_repo.get_by_id(db, video_id)
     if video is None:
         return False
-    storage_r2_key = video.storage_path
-    output_r2_key = video.output_path if video.output_path else None
+
+    # R2 → DB の順で削除する。DB の行は R2 キーを指す唯一のポインタであり、
+    # 先に DB を消すと R2 削除失敗時にオブジェクトが誰からも参照されないまま
+    # 残り続ける（オーファン化）。R2 削除に失敗した場合は例外を送出して行を残し、
+    # 後から再削除できるようにする（R2 の削除は対象が無くても成功するため再実行は安全）。
+    storage_service.delete_file(video.storage_path)
+    if video.output_path:
+        storage_service.delete_file(video.output_path)
 
     jobs = job_repo.get_by_video_id(db, video_id)
     for job in jobs:
@@ -326,17 +332,6 @@ def delete_video(db: Session, video_id: uuid.UUID) -> bool:
     clip_repo.delete_by_video_id(db, video_id)
     job_repo.delete_by_video_id(db, video_id)
     video_repo.delete(db, video_id)
-
-    # R2からファイルを削除
-    try:
-        storage_service.delete_file(storage_r2_key)
-    except Exception as e:
-        logger.warning("R2 元動画削除失敗: %s", e)
-    if output_r2_key:
-        try:
-            storage_service.delete_file(output_r2_key)
-        except Exception as e:
-            logger.warning("R2 output削除失敗: %s", e)
 
     return True
 
