@@ -30,15 +30,13 @@ def create(
 
 def get_by_video_id(db: Session, video_id: uuid.UUID) -> list[Clip]:
     return (
-        db.query(Clip)
-        .filter(Clip.video_id == video_id)
-        .order_by(Clip.sort_order)
-        .all()
+        db.query(Clip).filter(Clip.video_id == video_id).order_by(Clip.sort_order).all()
     )
 
 
 def get_by_job_id(db: Session, job_id: uuid.UUID) -> list[Clip]:
     return db.query(Clip).filter(Clip.job_id == job_id).all()
+
 
 def delete_by_video_id(db: Session, video_id: uuid.UUID) -> int:
     clips = get_by_video_id(db, video_id)

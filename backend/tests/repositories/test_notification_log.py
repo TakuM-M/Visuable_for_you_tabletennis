@@ -2,6 +2,7 @@
 
 user / job への FK を持つ。status のデフォルトと update_status の部分更新が要点。
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -73,9 +74,10 @@ def test_update_status_without_sent_at_keeps_it_none(db, notification_log):
 
 
 def test_update_status_returns_none_for_unknown_id(db):
-    assert nlog_repo.update_status(
-        db=db, log_id=999999, status=NotificationStatus.sent
-    ) is None
+    assert (
+        nlog_repo.update_status(db=db, log_id=999999, status=NotificationStatus.sent)
+        is None
+    )
 
 
 def test_get_by_job_id_returns_only_that_jobs_logs(db, user, video, job):

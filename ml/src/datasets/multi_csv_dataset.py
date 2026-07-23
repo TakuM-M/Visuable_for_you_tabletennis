@@ -18,7 +18,7 @@ class MultiCSVPoseDataset(Dataset):
         csv_label_pairs: List[Tuple[str, str]],
         sequence_length: int = 30,
         stride: int = 5,
-        augmentor=None
+        augmentor=None,
     ):
         """
         複数CSVデータセットを初期化
@@ -45,21 +45,19 @@ class MultiCSVPoseDataset(Dataset):
 
         # 全データセットを読み込み
         for i, (csv_path, label_path) in enumerate(csv_label_pairs):
-            print(f"  [{i+1}/{len(csv_label_pairs)}] {Path(csv_path).name}")
+            print(f"  [{i + 1}/{len(csv_label_pairs)}] {Path(csv_path).name}")
 
             dataset = CSVPoseSequenceDataset(
                 csv_path=csv_path,
                 label_path=label_path,
                 sequence_length=sequence_length,
                 stride=stride,
-                augmentor=augmentor
+                augmentor=augmentor,
             )
 
             self.datasets.append(dataset)
             self.dataset_lengths.append(len(dataset))
-            self.cumulative_lengths.append(
-                self.cumulative_lengths[-1] + len(dataset)
-            )
+            self.cumulative_lengths.append(self.cumulative_lengths[-1] + len(dataset))
 
             print(f"    -> {len(dataset)} sequences")
 
@@ -70,7 +68,6 @@ class MultiCSVPoseDataset(Dataset):
         print(f"  Total sequences: {self.total_length}")
         print(f"  Sequence length: {sequence_length}")
         print(f"  Stride: {stride}")
-
 
     def __len__(self) -> int:
         """データセットの長さを返す"""
@@ -87,7 +84,9 @@ class MultiCSVPoseDataset(Dataset):
             (features, labels, metadata) タプル
         """
         if idx < 0 or idx >= self.total_length:
-            raise IndexError(f"インデックス {idx} が範囲外です [0, {self.total_length})")
+            raise IndexError(
+                f"インデックス {idx} が範囲外です [0, {self.total_length})"
+            )
 
         # このインデックスがどのデータセットに属するか検索
         dataset_idx = 0
@@ -103,26 +102,26 @@ class MultiCSVPoseDataset(Dataset):
         features, labels, metadata = self.datasets[dataset_idx][local_idx]
 
         # メタデータに動画情報を追加
-        metadata['dataset_idx'] = dataset_idx
-        metadata['csv_path'] = str(self.csv_label_pairs[dataset_idx][0])
+        metadata["dataset_idx"] = dataset_idx
+        metadata["csv_path"] = str(self.csv_label_pairs[dataset_idx][0])
 
         return features, labels, metadata
 
     def get_statistics(self) -> Dict:
         """データセットの統計情報を取得"""
         stats = {
-            'total_sequences': self.total_length,
-            'num_videos': len(self.datasets),
-            'sequence_length': self.sequence_length,
-            'stride': self.stride,
-            'videos': []
+            "total_sequences": self.total_length,
+            "num_videos": len(self.datasets),
+            "sequence_length": self.sequence_length,
+            "stride": self.stride,
+            "videos": [],
         }
 
         for i, (csv_path, label_path) in enumerate(self.csv_label_pairs):
             video_stats = self.datasets[i].get_statistics()
-            video_stats['csv_path'] = str(csv_path)
-            video_stats['label_path'] = str(label_path)
-            stats['videos'].append(video_stats)
+            video_stats["csv_path"] = str(csv_path)
+            video_stats["label_path"] = str(label_path)
+            stats["videos"].append(video_stats)
 
         return stats
 
@@ -130,12 +129,12 @@ class MultiCSVPoseDataset(Dataset):
     def from_directories(
         cls,
         data_dirs: List[str],
-        csv_filename: str = 'normalized_pose_data.csv',
-        label_filename: str = 'play_labels.csv',
+        csv_filename: str = "normalized_pose_data.csv",
+        label_filename: str = "play_labels.csv",
         sequence_length: int = 30,
         stride: int = 5,
-        augmentor=None
-    ) -> 'MultiCSVPoseDataset':
+        augmentor=None,
+    ) -> "MultiCSVPoseDataset":
         """
         ディレクトリリストからMultiCSVPoseDatasetを作成
 
@@ -173,5 +172,5 @@ class MultiCSVPoseDataset(Dataset):
             csv_label_pairs=csv_label_pairs,
             sequence_length=sequence_length,
             stride=stride,
-            augmentor=augmentor
+            augmentor=augmentor,
         )

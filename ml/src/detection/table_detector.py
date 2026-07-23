@@ -11,6 +11,7 @@ class TableDetector:
     卓球台検出クラス
     Tracking_Class: Ping Pong Table (卓球台)
     """
+
     TABLE_CLASS_NAME = "Ping Pong Table"
 
     def __init__(
@@ -41,10 +42,7 @@ class TableDetector:
         self._cache_frame_idx: int = -1
 
     def detect_table_frame(
-        self,
-        frame: np.ndarray,
-        frame_idx: int = 0,
-        force_detect: bool = False
+        self, frame: np.ndarray, frame_idx: int = 0, force_detect: bool = False
     ) -> Optional[TableInfo]:
         """
         単一フレームから卓球台のバウンディングボックスを検出
@@ -59,26 +57,28 @@ class TableDetector:
         """
         # キャッシュチェック
         # 過去の有効フレーム数内にあればキャッシュを返す
-        if (not force_detect and
-            self._cached_table_info is not None and
-            abs(frame_idx - self._cache_frame_idx) < self.cache_valid_frames):
+        if (
+            not force_detect
+            and self._cached_table_info is not None
+            and abs(frame_idx - self._cache_frame_idx) < self.cache_valid_frames
+        ):
             return self._cached_table_info
 
         if self.yolo_model is None:
             print("警告: YOLOモデルが初期化されていません")
             return None
-        
+
         results = self.yolo_model(frame, verbose=False)
         if len(results) == 0 or len(results[0].boxes) == 0:
             return None
-        
+
         # 画面中央に最も近い卓球台を選択
         # 全検出結果から"Ping Pong Table"クラスのみをフィルタリング
         boxes = results[0].boxes
         frame_height, frame_width = frame.shape[:2]
         frame_center = (frame_width / 2, frame_height / 2)
         best_table = None
-        min_distance = float('inf')
+        min_distance = float("inf")
 
         for box in boxes:
             class_id = int(box.cls[0].cpu().numpy())
@@ -94,8 +94,9 @@ class TableDetector:
             center_y = (y1 + y2) / 2
 
             # 距離:ユークリッド距離
-            distance = np.sqrt((center_x - frame_center[0])**2 +
-                             (center_y - frame_center[1])**2)
+            distance = np.sqrt(
+                (center_x - frame_center[0]) ** 2 + (center_y - frame_center[1]) ** 2
+            )
 
             # 最も中央に近いものを卓球台として選択
             if distance < min_distance:
@@ -103,7 +104,7 @@ class TableDetector:
                 best_table = TableInfo(
                     bbox=(float(x1), float(y1), float(x2), float(y2)),
                     confidence=confidence,
-                    frame_idx=frame_idx
+                    frame_idx=frame_idx,
                 )
 
         if best_table is None:

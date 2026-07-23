@@ -12,6 +12,7 @@ DataLoaderの__getitem__内で呼ばれることを想定
 座標配列のレイアウト:
   [nose_x, nose_y, left_eye_x, left_eye_y, ..., right_ankle_x, right_ankle_y]
 """
+
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -23,11 +24,11 @@ from typing import Optional, Tuple
 #   left_wrist(9), right_wrist(10), left_hip(11), right_hip(12),
 #   left_knee(13), right_knee(14), left_ankle(15), right_ankle(16)
 LEFT_RIGHT_PAIRS = [
-    (1, 2),    # left_eye, right_eye
-    (3, 4),    # left_ear, right_ear
-    (5, 6),    # left_shoulder, right_shoulder
-    (7, 8),    # left_elbow, right_elbow
-    (9, 10),   # left_wrist, right_wrist
+    (1, 2),  # left_eye, right_eye
+    (3, 4),  # left_ear, right_ear
+    (5, 6),  # left_shoulder, right_shoulder
+    (7, 8),  # left_elbow, right_elbow
+    (9, 10),  # left_wrist, right_wrist
     (11, 12),  # left_hip, right_hip
     (13, 14),  # left_knee, right_knee
     (15, 16),  # left_ankle, right_ankle
@@ -101,7 +102,10 @@ class OnlineAugmentor:
         # 102次元の場合: [0:34]=座標, [34:68]=速度, [68:102]=加速度
         has_motion = num_features == 102
 
-        if self.config.horizontal_flip and np.random.rand() < self.config.horizontal_flip_prob:
+        if (
+            self.config.horizontal_flip
+            and np.random.rand() < self.config.horizontal_flip_prob
+        ):
             features = self._horizontal_flip(features, has_motion)
 
         if self.config.scaling:
@@ -128,7 +132,7 @@ class OnlineAugmentor:
         # 座標部分のスライス群を特定
         slices = [slice(0, 34)]  # 座標
         if has_motion:
-            slices.append(slice(34, 68))   # 速度
+            slices.append(slice(34, 68))  # 速度
             slices.append(slice(68, 102))  # 加速度
 
         for s in slices:
@@ -142,8 +146,9 @@ class OnlineAugmentor:
                 left_x, left_y = left_idx * 2, left_idx * 2 + 1
                 right_x, right_y = right_idx * 2, right_idx * 2 + 1
                 # swap
-                block[:, [left_x, left_y, right_x, right_y]] = \
-                    block[:, [right_x, right_y, left_x, left_y]]
+                block[:, [left_x, left_y, right_x, right_y]] = block[
+                    :, [right_x, right_y, left_x, left_y]
+                ]
 
             features[:, s] = block
 
@@ -203,6 +208,6 @@ class OnlineAugmentor:
         mask_len = np.random.randint(1, self.config.temporal_mask_max_frames + 1)
         mask_start = np.random.randint(0, max(1, seq_len - mask_len))
 
-        features[mask_start:mask_start + mask_len] = 0.0
+        features[mask_start : mask_start + mask_len] = 0.0
 
         return features

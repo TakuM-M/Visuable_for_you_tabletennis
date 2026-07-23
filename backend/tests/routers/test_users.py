@@ -3,6 +3,7 @@
 登録（新規 / 既存認証済み / 既存未認証）と、認証必須エンドポイント
 (/users/me) の認証要件を TestClient で検証する。
 """
+
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -39,13 +40,19 @@ def _make_user(**kw) -> SimpleNamespace:
 def test_register_creates_new_user() -> None:
     client = TestClient(_make_app())
     user = _make_user(email="new@example.com", email_verified=False)
-    with patch("app.routers.users.user_repo.get_by_email", return_value=None), \
-         patch("app.routers.users.hash_password", return_value="hashed"), \
-         patch("app.routers.users.user_repo.create", return_value=user), \
-         patch("app.routers.users.auth_service.send_verification_email") as send:
+    with (
+        patch("app.routers.users.user_repo.get_by_email", return_value=None),
+        patch("app.routers.users.hash_password", return_value="hashed"),
+        patch("app.routers.users.user_repo.create", return_value=user),
+        patch("app.routers.users.auth_service.send_verification_email") as send,
+    ):
         resp = client.post(
             "/users",
-            json={"email": "new@example.com", "password": "pw123456", "display_name": "新規"},
+            json={
+                "email": "new@example.com",
+                "password": "pw123456",
+                "display_name": "新規",
+            },
         )
 
     assert resp.status_code == 201
@@ -56,8 +63,10 @@ def test_register_creates_new_user() -> None:
 def test_register_existing_verified_email_returns_400() -> None:
     client = TestClient(_make_app())
     existing = _make_user(email_verified=True)
-    with patch("app.routers.users.user_repo.get_by_email", return_value=existing), \
-         patch("app.routers.users.hash_password", return_value="h"):
+    with (
+        patch("app.routers.users.user_repo.get_by_email", return_value=existing),
+        patch("app.routers.users.hash_password", return_value="h"),
+    ):
         resp = client.post(
             "/users",
             json={"email": existing.email, "password": "pw123456", "display_name": "x"},
@@ -69,13 +78,19 @@ def test_register_existing_verified_email_returns_400() -> None:
 def test_register_existing_unverified_updates_and_resends() -> None:
     client = TestClient(_make_app())
     existing = _make_user(email_verified=False)
-    with patch("app.routers.users.user_repo.get_by_email", return_value=existing), \
-         patch("app.routers.users.hash_password", return_value="h"), \
-         patch("app.routers.users.user_repo.update") as update, \
-         patch("app.routers.users.auth_service.send_verification_email") as send:
+    with (
+        patch("app.routers.users.user_repo.get_by_email", return_value=existing),
+        patch("app.routers.users.hash_password", return_value="h"),
+        patch("app.routers.users.user_repo.update") as update,
+        patch("app.routers.users.auth_service.send_verification_email") as send,
+    ):
         resp = client.post(
             "/users",
-            json={"email": existing.email, "password": "pw123456", "display_name": "再登録"},
+            json={
+                "email": existing.email,
+                "password": "pw123456",
+                "display_name": "再登録",
+            },
         )
 
     assert resp.status_code == 201
@@ -113,9 +128,11 @@ def test_update_me_updates_user() -> None:
     app.dependency_overrides[get_current_user] = lambda: user
     client = TestClient(app)
 
-    with patch("app.routers.users.hash_password", return_value="h"), \
-         patch("app.routers.users.user_repo.update") as update, \
-         patch("app.routers.users.user_repo.get_by_id", return_value=updated):
+    with (
+        patch("app.routers.users.hash_password", return_value="h"),
+        patch("app.routers.users.user_repo.update") as update,
+        patch("app.routers.users.user_repo.get_by_id", return_value=updated),
+    ):
         resp = client.patch("/users/me", json={"display_name": "新しい名前"})
 
     assert resp.status_code == 200

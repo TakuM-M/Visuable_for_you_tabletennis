@@ -42,7 +42,7 @@ class YOLOPose_Tracker:
 
         # 卓球台領域に一度でも入ったtrack_idを記憶
         self.validated_track_ids: Set[int] = set()
-        
+
         # YOLOモデルをロード
         print(f"YOLOモデルをロード中: {model_path}")
         self.model = YOLO(model_path)
@@ -57,10 +57,7 @@ class YOLOPose_Tracker:
         print(f"  FP16推論: {self.half}")
 
     def track_frame_with_table_filter(
-        self,
-        frame: np.ndarray,
-        table_info,
-        persist: bool = True
+        self, frame: np.ndarray, table_info, persist: bool = True
     ) -> List[PersonTrack]:
         """
         卓球台フィルタリングを適用した人物トラッキング
@@ -91,15 +88,16 @@ class YOLOPose_Tracker:
                 self.validated_track_ids.add(track_id)
 
             # 一度でも卓球台領域に入ったIDか、または現在卓球台に近い場合のみ追加
-            if track_id in self.validated_track_ids or distance < self.table_distance_threshold:
+            if (
+                track_id in self.validated_track_ids
+                or distance < self.table_distance_threshold
+            ):
                 filtered_persons.append(person)
 
         return filtered_persons
-    
+
     def _track_frame(
-        self,
-        frame: np.ndarray,
-        persist: bool = True
+        self, frame: np.ndarray, persist: bool = True
     ) -> List[PersonTrack]:
         """
         単一フレームから人物をトラッキング
@@ -118,7 +116,7 @@ class YOLOPose_Tracker:
             imgsz=self.imgsz,
             half=self.half,
             persist=persist,
-            verbose=False
+            verbose=False,
         )
 
         persons = []
@@ -149,25 +147,23 @@ class YOLOPose_Tracker:
                 int(bbox_xyxy[0]),
                 int(bbox_xyxy[1]),
                 int(bbox_xyxy[2]),
-                int(bbox_xyxy[3])
+                int(bbox_xyxy[3]),
             )
             confidence = float(box.conf.item())
             # キーポイント (17, 3) [x, y, confidence]
             keypoints = kps.data[0].cpu().numpy()
-            persons.append(PersonTrack(
-                track_id=track_id,
-                bbox=bbox,
-                keypoints=keypoints,
-                confidence=confidence
-            ))
+            persons.append(
+                PersonTrack(
+                    track_id=track_id,
+                    bbox=bbox,
+                    keypoints=keypoints,
+                    confidence=confidence,
+                )
+            )
 
         return persons
 
-    def _calculate_table_distance(
-        self,
-        person: PersonTrack,
-        table_info
-    ) -> float:
+    def _calculate_table_distance(self, person: PersonTrack, table_info) -> float:
         """
         人物と卓球台の正規化距離を計算
 
@@ -189,13 +185,13 @@ class YOLOPose_Tracker:
 
         # 卓球台の対角線長で正規化
         table_diagonal = np.sqrt(
-            (table_x2 - table_x1)**2 + (table_y2 - table_y1)**2
+            (table_x2 - table_x1) ** 2 + (table_y2 - table_y1) ** 2
         )
 
         if table_diagonal > 0:
             normalized_distance = distance / table_diagonal
         else:
-            normalized_distance = float('inf')
+            normalized_distance = float("inf")
 
         return normalized_distance
 
@@ -227,7 +223,7 @@ class YOLOPose_Tracker:
         draw_bbox: bool = True,
         draw_keypoints: bool = True,
         draw_skeleton: bool = True,
-        draw_id: bool = True
+        draw_id: bool = True,
     ) -> np.ndarray:
         """
         フレームにトラッキング結果を描画
@@ -247,25 +243,40 @@ class YOLOPose_Tracker:
 
         # スケルトンの接続定義（COCO形式）
         skeleton_connections = [
-            (0, 1), (0, 2),  # 鼻 - 目
-            (1, 3), (2, 4),  # 目 - 耳
-            (0, 5), (0, 6),  # 鼻 - 肩
-            (5, 6),          # 肩 - 肩
-            (5, 7), (7, 9),  # 左腕
-            (6, 8), (8, 10), # 右腕
-            (5, 11), (6, 12),# 肩 - 腰
-            (11, 12),        # 腰 - 腰
-            (11, 13), (13, 15),  # 左脚
-            (12, 14), (14, 16)   # 右脚
+            (0, 1),
+            (0, 2),  # 鼻 - 目
+            (1, 3),
+            (2, 4),  # 目 - 耳
+            (0, 5),
+            (0, 6),  # 鼻 - 肩
+            (5, 6),  # 肩 - 肩
+            (5, 7),
+            (7, 9),  # 左腕
+            (6, 8),
+            (8, 10),  # 右腕
+            (5, 11),
+            (6, 12),  # 肩 - 腰
+            (11, 12),  # 腰 - 腰
+            (11, 13),
+            (13, 15),  # 左脚
+            (12, 14),
+            (14, 16),  # 右脚
         ]
 
         for person in persons:
             # カラーマップ（IDごとに色を変える）
             color_idx = person.track_id % 10
             colors = [
-                (255, 0, 0), (0, 255, 0), (0, 0, 255),
-                (255, 255, 0), (255, 0, 255), (0, 255, 255),
-                (128, 0, 0), (0, 128, 0), (0, 0, 128), (128, 128, 0)
+                (255, 0, 0),
+                (0, 255, 0),
+                (0, 0, 255),
+                (255, 255, 0),
+                (255, 0, 255),
+                (0, 255, 255),
+                (128, 0, 0),
+                (0, 128, 0),
+                (0, 0, 128),
+                (128, 128, 0),
             ]
             color = colors[color_idx]
 
@@ -278,8 +289,15 @@ class YOLOPose_Tracker:
             if draw_id:
                 x1, y1, _, _ = person.bbox
                 label = f"ID:{person.track_id}"
-                cv2.putText(output, label, (x1, y1 - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                cv2.putText(
+                    output,
+                    label,
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    color,
+                    2,
+                )
 
             # スケルトンを描画
             if draw_skeleton:

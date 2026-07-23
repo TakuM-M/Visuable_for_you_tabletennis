@@ -24,7 +24,7 @@ def login(
             status_code=401,
             detail="メールアドレスまたはパスワードが違います",
         )
-        
+
     if not user.email_verified:
         raise HTTPException(
             status_code=403,
@@ -33,6 +33,7 @@ def login(
 
     token = create_access_token(str(user.id))
     return TokenResponse(access_token=token)
+
 
 @router.get("/verify-email")
 def verify_email(token: str, db: Session = Depends(get_db)):

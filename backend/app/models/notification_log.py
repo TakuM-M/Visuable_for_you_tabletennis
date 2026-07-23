@@ -23,9 +23,7 @@ class NotificationLog(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
-    job_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("jobs.id")
-    )
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"))
     email: Mapped[str] = mapped_column(String)
     status: Mapped[NotificationStatus] = mapped_column(
         SAEnum(NotificationStatus), default=NotificationStatus.pending

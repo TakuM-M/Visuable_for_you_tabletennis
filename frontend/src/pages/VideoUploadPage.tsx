@@ -103,7 +103,7 @@ export default function VideoUploadPage() {
               動画をアップロード
             </h1>
             <p className="mt-1.5 text-[13px] leading-[1.6] text-fg-3">
-              MP4 / MOV 形式に対応。アップロード後、自動でプレーシーンを抽出します。
+              アップロード後、自動でプレーシーンを抽出します。
             </p>
           </div>
 
@@ -129,7 +129,7 @@ export default function VideoUploadPage() {
             {/* File */}
             <Field
               label="動画ファイル"
-              hint="MP4 / MOV / MKV · 最大 5GB"
+              hint="MP4 / MOV / MKV"
               error={errors.file?.message as string | undefined}
             >
               {selectedFile ? (

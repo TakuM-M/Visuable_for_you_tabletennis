@@ -18,9 +18,7 @@ class Clip(Base):
     video_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("videos.id")
     )
-    job_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("jobs.id")
-    )
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"))
     start_time: Mapped[float] = mapped_column(Float)
     end_time: Mapped[float] = mapped_column(Float)
     # 連結時の並び順（0 始まり）。一括置換時に配列インデックスを採番する。

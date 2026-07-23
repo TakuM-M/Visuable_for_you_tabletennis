@@ -88,9 +88,18 @@ def get_timed_out_jobs(db: Session, threshold: datetime) -> list[Job]:
     )
 
 
-def get_jobs_ready_for_retry(
-    db: Session, now: datetime, max_retries: int
-) -> list[Job]:
+def get_queued_started_null_jobs(db: Session) -> list[Job]:
+    """status : queued started_at : null のジョブを取得する"""
+    return (
+        db.query(Job)
+        .filter(Job.status == JobStatus.queued)
+        .filter(Job.started_at.is_(None))
+        .with_for_update(skip_locked=True)
+        .all()
+    )
+
+
+def get_jobs_ready_for_retry(db: Session, now: datetime, max_retries: int) -> list[Job]:
     """next_retry_at が now を過ぎた failed ジョブで、まだ自動リトライ枠が残っているものを取得"""
     return (
         db.query(Job)

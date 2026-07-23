@@ -47,7 +47,7 @@ export default function LoginPage() {
 
   const onSubmit = (values: FormValues) => {
     setErrorMessage(null);
-    setSuccessMessage(null);  // ← 追加
+    setSuccessMessage(null);
     mutation.mutate(values);
   };
 

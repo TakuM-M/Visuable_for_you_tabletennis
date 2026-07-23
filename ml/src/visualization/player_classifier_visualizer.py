@@ -1,5 +1,6 @@
 import cv2
 
+
 class PlayerClassifierVisualizer:
     """プレイヤー分類結果を可視化するクラス"""
 
@@ -15,19 +16,50 @@ class PlayerClassifierVisualizer:
         # 卓球台を描画
         if table_info:
             x1, y1, x2, y2 = table_info.bbox
-            cv2.rectangle(output, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 255), 2)
-            cv2.putText(output, "Table", (int(x1), int(y1) - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            cv2.rectangle(
+                output, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 255), 2
+            )
+            cv2.putText(
+                output,
+                "Table",
+                (int(x1), int(y1) - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 255),
+                2,
+            )
         else:
             # 卓球台が検出できていない場合の警告表示
-            cv2.putText(output, "WARNING: Table Not Detected", (20, 60),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
+            cv2.putText(
+                output,
+                "WARNING: Table Not Detected",
+                (20, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (0, 0, 255),
+                3,
+            )
 
         # スケルトン接続定義
         skeleton_connections = [
-            (0, 1), (0, 2), (1, 3), (2, 4), (0, 5), (0, 6), (5, 6),
-            (5, 7), (7, 9), (6, 8), (8, 10), (5, 11), (6, 12), (11, 12),
-            (11, 13), (13, 15), (12, 14), (14, 16)
+            (0, 1),
+            (0, 2),
+            (1, 3),
+            (2, 4),
+            (0, 5),
+            (0, 6),
+            (5, 6),
+            (5, 7),
+            (7, 9),
+            (6, 8),
+            (8, 10),
+            (5, 11),
+            (6, 12),
+            (11, 12),
+            (11, 13),
+            (13, 15),
+            (12, 14),
+            (14, 16),
         ]
 
         # 人物を描画
@@ -43,8 +75,9 @@ class PlayerClassifierVisualizer:
 
             # ラベル
             text = f"{label} ID:{person.track_id}"
-            cv2.putText(output, text, (x1, y1 - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            cv2.putText(
+                output, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2
+            )
 
             # スケルトン
             for connection in skeleton_connections:
@@ -72,8 +105,15 @@ class PlayerClassifierVisualizer:
         info_y = 30
         line_height = 25
 
-        cv2.putText(output, "=== Player Candidates ===", (info_x, info_y),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(
+            output,
+            "=== Player Candidates ===",
+            (info_x, info_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
 
         y_offset = info_y + line_height
 
@@ -92,23 +132,51 @@ class PlayerClassifierVisualizer:
             color = (0, 255, 0) if is_player else (200, 200, 200)
 
             text = f"ID:{track_id} {'[PLAYER]' if is_player else ''}"
-            cv2.putText(output, text, (info_x, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+            cv2.putText(
+                output,
+                text,
+                (info_x, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+            )
             y_offset += line_height
 
             text = f"  Score: {score:.3f}"
-            cv2.putText(output, text, (info_x, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+            cv2.putText(
+                output,
+                text,
+                (info_x, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                color,
+                1,
+            )
             y_offset += 18
 
             text = f"  Frames: {candidate.total_frames}, Move: {candidate.total_movement:.1f}"
-            cv2.putText(output, text, (info_x, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+            cv2.putText(
+                output,
+                text,
+                (info_x, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                color,
+                1,
+            )
             y_offset += 18
 
             text = f"  Near table: {candidate.near_table_ratio:.1%}"
-            cv2.putText(output, text, (info_x, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+            cv2.putText(
+                output,
+                text,
+                (info_x, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                color,
+                1,
+            )
             y_offset += line_height
 
         return output

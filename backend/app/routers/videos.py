@@ -1,4 +1,12 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_owned_video
@@ -17,6 +25,7 @@ from app.services import video_service
 from app.services import storage_service
 
 router = APIRouter(prefix="/videos", tags=["videos"])
+
 
 @router.post("", response_model=VideoResponse, status_code=201)
 def upload_video(
@@ -81,7 +90,9 @@ def chunk_upload(
         raise HTTPException(status_code=404, detail="Upload not found")
 
 
-@router.post("/upload/{upload_id}/complete", response_model=VideoResponse, status_code=201)
+@router.post(
+    "/upload/{upload_id}/complete", response_model=VideoResponse, status_code=201
+)
 def chunk_upload_complete(
     upload_id: str,
     current_user: User = Depends(get_current_user),

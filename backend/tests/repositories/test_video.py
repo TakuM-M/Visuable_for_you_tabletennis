@@ -8,6 +8,7 @@ user に比べて学ぶことが多い:
 
 `user` fixture は conftest.py で定義済み。`db` も同様。
 """
+
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -25,6 +26,7 @@ from app.repositories import video as video_repo
 # create
 # ----------------------------------------------------------------------
 
+
 def test_create_sets_defaults(db, user):
     """create() は status=uploaded, output_path=None, duration=None を既定値にする"""
     video = video_repo.create(
@@ -38,9 +40,9 @@ def test_create_sets_defaults(db, user):
     assert video.title == "練習試合"
     assert video.storage_path == "videos/abc.mp4"
     assert video.status == VideoStatus.uploaded  # モデルの default
-    assert video.output_path is None             # nullable=True
-    assert video.duration is None                # 引数省略時
-    assert video.created_at is not None          # server_default=now()
+    assert video.output_path is None  # nullable=True
+    assert video.duration is None  # 引数省略時
+    assert video.created_at is not None  # server_default=now()
 
 
 def test_create_with_duration_records_it(db, user):
@@ -71,10 +73,9 @@ def test_create_with_unknown_user_id_violates_fk(db):
 # get_by_id / get_by_user_id / count_by_user_id
 # ----------------------------------------------------------------------
 
+
 def test_get_by_id_returns_created_video(db, user):
-    created = video_repo.create(
-        db, user_id=user.id, title="t", storage_path="p"
-    )
+    created = video_repo.create(db, user_id=user.id, title="t", storage_path="p")
     fetched = video_repo.get_by_id(db, created.id)
     assert fetched is not None
     assert fetched.id == created.id
@@ -125,6 +126,7 @@ def test_count_by_user_id_returns_zero_for_user_with_no_videos(db, user):
 # get_expired (created_at による時系列フィルタ)
 # ----------------------------------------------------------------------
 
+
 def test_get_expired_returns_only_videos_before_threshold(db, user):
     """threshold より古い created_at を持つ動画だけ返る。
 
@@ -147,6 +149,7 @@ def test_get_expired_returns_only_videos_before_threshold(db, user):
 # ----------------------------------------------------------------------
 # update_status / update_output_path / update_duration
 # ----------------------------------------------------------------------
+
 
 def test_update_status_transitions_through_lifecycle(db, user):
     """uploaded → queued → processing → completed の状態遷移を反映できる"""
@@ -191,6 +194,7 @@ def test_update_duration_sets_duration(db, user):
 # delete
 # ----------------------------------------------------------------------
 
+
 def test_delete_removes_video_and_returns_true(db, user):
     video = video_repo.create(db, user_id=user.id, title="t", storage_path="p")
     assert video_repo.delete(db, video.id) is True
@@ -205,6 +209,7 @@ def test_delete_returns_false_when_not_found(db):
 # source_duration（元動画長）
 # ----------------------------------------------------------------------
 
+
 def test_create_source_duration_defaults_none(db, user):
     """source_duration は引数省略時 None"""
     video = video_repo.create(db, user_id=user.id, title="t", storage_path="p")
@@ -214,8 +219,12 @@ def test_create_source_duration_defaults_none(db, user):
 def test_create_with_source_duration_records_it(db, user):
     """source_duration を渡せば保存される（duration とは独立）"""
     video = video_repo.create(
-        db=db, user_id=user.id, title="t", storage_path="p",
-        duration=10.0, source_duration=88.0,
+        db=db,
+        user_id=user.id,
+        title="t",
+        storage_path="p",
+        duration=10.0,
+        source_duration=88.0,
     )
     assert video.source_duration == 88.0
     assert video.duration == 10.0
@@ -225,22 +234,29 @@ def test_create_with_source_duration_records_it(db, user):
 # get_processing_without_running_job（中断された書き出しの検出）
 # ----------------------------------------------------------------------
 
+
 def test_get_processing_without_running_job_detects_interrupted_export(db, user):
     """processing かつ実行中 job なし（＝中断された書き出し）の動画だけを返す"""
     # 中断された書き出し: job は completed 済みで video だけ processing
-    interrupted = video_repo.create(db, user_id=user.id, title="中断", storage_path="videos/i.mp4")
+    interrupted = video_repo.create(
+        db, user_id=user.id, title="中断", storage_path="videos/i.mp4"
+    )
     job_done = job_repo.create(db, video_id=interrupted.id)
     job_repo.update_status(db, job_done.id, JobStatus.completed)
     video_repo.update_status(db, interrupted.id, VideoStatus.processing)
 
     # ML 解析中: processing だが実行中 job があるので対象外
-    analyzing = video_repo.create(db, user_id=user.id, title="解析中", storage_path="videos/a.mp4")
+    analyzing = video_repo.create(
+        db, user_id=user.id, title="解析中", storage_path="videos/a.mp4"
+    )
     job_running = job_repo.create(db, video_id=analyzing.id)
     job_repo.update_status(db, job_running.id, JobStatus.processing)
     video_repo.update_status(db, analyzing.id, VideoStatus.processing)
 
     # processing 以外は job が無くても対象外
-    ready = video_repo.create(db, user_id=user.id, title="ready", storage_path="videos/r.mp4")
+    ready = video_repo.create(
+        db, user_id=user.id, title="ready", storage_path="videos/r.mp4"
+    )
     video_repo.update_status(db, ready.id, VideoStatus.ready)
 
     result = video_repo.get_processing_without_running_job(db)

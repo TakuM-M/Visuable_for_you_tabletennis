@@ -17,8 +17,9 @@ import numpy as np
 
 class CameraAngle(Enum):
     """カメラアングルの種類"""
-    ENDLINE = "endline"          # エンドライン側（選手の後ろ）
-    SIDELINE = "sideline"        # サイドライン側（横）
+
+    ENDLINE = "endline"  # エンドライン側（選手の後ろ）
+    SIDELINE = "sideline"  # サイドライン側（横）
     DIAGONAL_TOP = "diagonal_top"  # 斜め上（プロ試合）
     UNKNOWN = "unknown"
 
@@ -26,6 +27,7 @@ class CameraAngle(Enum):
 @dataclass
 class TableInfo:
     """卓球台情報 - バウンディングボックスと基本情報のみ"""
+
     bbox: Tuple[float, float, float, float]  # (x1, y1, x2, y2)
     confidence: float
     frame_idx: int
@@ -34,10 +36,7 @@ class TableInfo:
     @property
     def center(self) -> Tuple[float, float]:
         """バウンディングボックスの中心座標"""
-        return (
-            (self.bbox[0] + self.bbox[2]) / 2,
-            (self.bbox[1] + self.bbox[3]) / 2
-        )
+        return ((self.bbox[0] + self.bbox[2]) / 2, (self.bbox[1] + self.bbox[3]) / 2)
 
     @property
     def width(self) -> float:
@@ -96,6 +95,7 @@ class PlayerCandidate:
 
     PlayerDetectorが内部的に使用するデータクラス
     """
+
     track_id: int
     first_seen_frame: int
     last_seen_frame: int
@@ -132,40 +132,46 @@ class PlayerCandidate:
     @property
     def near_table_ratio(self) -> float:
         """卓球台付近にいた時間の比率"""
-        return self.near_table_count / self.total_frames if self.total_frames > 0 else 0.0
-    
+        return (
+            self.near_table_count / self.total_frames if self.total_frames > 0 else 0.0
+        )
+
+
 # COCO 17キーポイント定義
 KEYPOINT_NAMES = [
-    "nose",           # 0
-    "left_eye",       # 1
-    "right_eye",      # 2
-    "left_ear",       # 3
-    "right_ear",      # 4
+    "nose",  # 0
+    "left_eye",  # 1
+    "right_eye",  # 2
+    "left_ear",  # 3
+    "right_ear",  # 4
     "left_shoulder",  # 5
-    "right_shoulder", # 6
-    "left_elbow",     # 7
-    "right_elbow",    # 8
-    "left_wrist",     # 9
-    "right_wrist",    # 10
-    "left_hip",       # 11
-    "right_hip",      # 12
-    "left_knee",      # 13
-    "right_knee",     # 14
-    "left_ankle",     # 15
-    "right_ankle"     # 16
+    "right_shoulder",  # 6
+    "left_elbow",  # 7
+    "right_elbow",  # 8
+    "left_wrist",  # 9
+    "right_wrist",  # 10
+    "left_hip",  # 11
+    "right_hip",  # 12
+    "left_knee",  # 13
+    "right_knee",  # 14
+    "left_ankle",  # 15
+    "right_ankle",  # 16
 ]
 
 
 @dataclass
 class PersonTrack:
     """トラッキングされた人物の情報"""
+
     track_id: int  # トラッキングID
     bbox: Tuple[int, int, int, int]  # バウンディングボックス (x1, y1, x2, y2)
     keypoints: np.ndarray  # キーポイント座標（生座標） (17, 3) [x, y, confidence]
     confidence: float  # 検出信頼度
 
     # 正規化データ（normalize_poses実行後に設定される）
-    normalized_keypoints: Optional[np.ndarray] = None  # 正規化座標 (17, 2) [norm_x, norm_y]
+    normalized_keypoints: Optional[np.ndarray] = (
+        None  # 正規化座標 (17, 2) [norm_x, norm_y]
+    )
     hip_center: Optional[Tuple[float, float]] = None  # 腰の中心座標（生座標系）
     scale_factor: Optional[float] = None  # スケール係数（腰幅）
     is_normalized_valid: bool = False  # 正規化が成功したかどうか

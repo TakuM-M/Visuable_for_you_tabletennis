@@ -3,6 +3,7 @@
 DB / セキュリティ関数 / auth_service を mock し、TestClient でログインと
 メール認証エンドポイントのステータスコード分岐を検証する。
 """
+
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -35,9 +36,11 @@ def _make_user(**kw) -> SimpleNamespace:
 def test_login_success_returns_token() -> None:
     client = TestClient(_make_app())
     user = _make_user()
-    with patch("app.routers.auth.user_repo.get_by_email", return_value=user), \
-         patch("app.routers.auth.verify_password", return_value=True), \
-         patch("app.routers.auth.create_access_token", return_value="tok123"):
+    with (
+        patch("app.routers.auth.user_repo.get_by_email", return_value=user),
+        patch("app.routers.auth.verify_password", return_value=True),
+        patch("app.routers.auth.create_access_token", return_value="tok123"),
+    ):
         resp = client.post(
             "/auth/login", data={"username": user.email, "password": "pw"}
         )
@@ -49,8 +52,10 @@ def test_login_success_returns_token() -> None:
 def test_login_wrong_password_returns_401() -> None:
     client = TestClient(_make_app())
     user = _make_user()
-    with patch("app.routers.auth.user_repo.get_by_email", return_value=user), \
-         patch("app.routers.auth.verify_password", return_value=False):
+    with (
+        patch("app.routers.auth.user_repo.get_by_email", return_value=user),
+        patch("app.routers.auth.verify_password", return_value=False),
+    ):
         resp = client.post(
             "/auth/login", data={"username": user.email, "password": "wrong"}
         )
@@ -71,8 +76,10 @@ def test_login_unknown_user_returns_401() -> None:
 def test_login_unverified_email_returns_403() -> None:
     client = TestClient(_make_app())
     user = _make_user(email_verified=False)
-    with patch("app.routers.auth.user_repo.get_by_email", return_value=user), \
-         patch("app.routers.auth.verify_password", return_value=True):
+    with (
+        patch("app.routers.auth.user_repo.get_by_email", return_value=user),
+        patch("app.routers.auth.verify_password", return_value=True),
+    ):
         resp = client.post(
             "/auth/login", data={"username": user.email, "password": "pw"}
         )

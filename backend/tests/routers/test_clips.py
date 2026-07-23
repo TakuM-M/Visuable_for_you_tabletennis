@@ -11,6 +11,7 @@ clips ルーターはエンドポイントが1本だけ:
   - 本体内で呼ぶ repo は patch で差し替える（patch 先は「使われている場所」=
     app.routers.clips.clip_repo.* を指定する）。
 """
+
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -94,8 +95,10 @@ def test_list_clips_by_video_returns_clips() -> None:
     video = _make_video(user_id=user.id)
     items = [_make_clip(video_id=video.id), _make_clip(video_id=video.id)]
 
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.clips.clip_repo.get_by_video_id", return_value=items):
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.clips.clip_repo.get_by_video_id", return_value=items),
+    ):
         client = _authed_client(user)
         resp = client.get(f"/videos/{video.id}/clips")
 
@@ -110,8 +113,10 @@ def test_list_clips_by_video_empty_returns_empty_list() -> None:
     """クリップが1件も無い動画でも、エラーではなく空配列 [] を返す。"""
     user = _make_user()
     video = _make_video(user_id=user.id)
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.clips.clip_repo.get_by_video_id", return_value=[]):
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.clips.clip_repo.get_by_video_id", return_value=[]),
+    ):
         client = _authed_client(user)
         resp = client.get(f"/videos/{video.id}/clips")
 
@@ -158,15 +163,21 @@ def test_put_clips_replaces_and_returns_list() -> None:
         _make_clip(video_id=video.id, sort_order=0),
         _make_clip(video_id=video.id, sort_order=1),
     ]
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video), \
-         patch("app.routers.clips.video_service.replace_clips", return_value=returned) as replace:
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch(
+            "app.routers.clips.video_service.replace_clips", return_value=returned
+        ) as replace,
+    ):
         client = _authed_client(user)
         resp = client.put(
             f"/videos/{video.id}/clips",
-            json={"clips": [
-                {"start_time": 0.0, "end_time": 5.0},
-                {"start_time": 6.0, "end_time": 9.0},
-            ]},
+            json={
+                "clips": [
+                    {"start_time": 0.0, "end_time": 5.0},
+                    {"start_time": 6.0, "end_time": 9.0},
+                ]
+            },
         )
 
     assert resp.status_code == 200

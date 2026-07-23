@@ -17,12 +17,14 @@ def send_verification_email(user) -> None:
     token = create_verification_token(str(user.id))
     url = f"{FRONTEND_URL}/verify-email?token={token}"
     try:
-        resend.Emails.send({
-            "from": FROM_EMAIL,
-            "to": user.email,
-            "subject": "【ClipMaster】メールアドレスの確認",
-            "html": f"<h2>メールアドレスの確認</h2><a href='{url}'>確認する</a>",
-        })
+        resend.Emails.send(
+            {
+                "from": FROM_EMAIL,
+                "to": user.email,
+                "subject": "【ClipMaster】メールアドレスの確認",
+                "html": f"<h2>メールアドレスの確認</h2><a href='{url}'>確認する</a>",
+            }
+        )
     except Exception as e:
         print(f"メール送信失敗: {e}")
 

@@ -10,6 +10,7 @@ get_jobs_ready_for_retry / get_timed_out_jobs) を網羅的にテストする。
 
 `video` fixture は conftest.py で定義済み (db → user → video の連鎖)。
 """
+
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -23,6 +24,7 @@ from app.repositories import job as job_repo
 # ----------------------------------------------------------------------
 # create
 # ----------------------------------------------------------------------
+
 
 def test_create_sets_defaults(db, video):
     """create() 直後は queued / retry_count=0 / 各タイムスタンプ None"""
@@ -49,6 +51,7 @@ def test_create_with_unknown_video_id_violates_fk(db):
 # get_by_id / get_by_video_id
 # ----------------------------------------------------------------------
 
+
 def test_get_by_id_returns_created_job(db, video):
     created = job_repo.create(db, video_id=video.id)
     fetched = job_repo.get_by_id(db, created.id)
@@ -67,6 +70,7 @@ def test_get_by_video_id_returns_all_jobs_for_that_video(db, video):
 # ----------------------------------------------------------------------
 # update_status (部分更新の挙動が肝)
 # ----------------------------------------------------------------------
+
 
 def test_update_status_changes_only_status_when_other_args_omitted(db, video):
     """status だけ渡せば status だけ書き換わる"""
@@ -108,6 +112,7 @@ def test_update_status_returns_none_for_unknown_id(db):
 # mark_failed (リトライ枠付き失敗 vs 最終失敗)
 # ----------------------------------------------------------------------
 
+
 def test_mark_failed_with_next_retry_at_sets_retry_window(db, video):
     """next_retry_at を渡すと自動リトライ対象となる失敗状態に遷移"""
     job = job_repo.create(db, video_id=video.id)
@@ -129,6 +134,7 @@ def test_mark_failed_with_none_next_retry_at_marks_terminal_failure(db, video):
 # ----------------------------------------------------------------------
 # get_timed_out_jobs (タイムアウト検出)
 # ----------------------------------------------------------------------
+
 
 def test_get_timed_out_jobs_returns_processing_jobs_started_before_threshold(db, video):
     """processing 中で started_at が threshold より古いジョブを拾う"""
@@ -162,9 +168,26 @@ def test_get_timed_out_jobs_excludes_completed_jobs(db, video):
     assert job_repo.get_timed_out_jobs(db, threshold) == []
 
 
+def test_get_queued_started_null_jobs_returns_only_queued_with_null_started_at(
+    db, video
+):
+    """status : queued started_at : null のジョブを取得する"""
+    job1 = job_repo.create(db, video_id=video.id)  # queued / started_at=None
+    job2 = job_repo.create(db, video_id=video.id)  # queued / started_at!=None
+    job3 = job_repo.create(db, video_id=video.id)  # processing / started_at=None
+    job2.started_at = datetime.now(timezone.utc)
+    job3.status = JobStatus.processing
+    db.commit()
+
+    result = job_repo.get_queued_started_null_jobs(db)
+    assert len(result) == 1
+    assert result[0].id == job1.id
+
+
 # ----------------------------------------------------------------------
 # get_jobs_ready_for_retry (自動リトライ対象の探索)
 # ----------------------------------------------------------------------
+
 
 def test_get_jobs_ready_for_retry_returns_failed_jobs_past_retry_time(db, video):
     """failed かつ next_retry_at が過去のジョブを拾う"""
@@ -211,6 +234,7 @@ def test_get_jobs_ready_for_retry_excludes_future_retry_time(db, video):
 # prepare_for_auto_retry / reset_for_manual_retry
 # ----------------------------------------------------------------------
 
+
 def test_prepare_for_auto_retry_increments_count_and_resets_state(db, video):
     """自動リトライ準備: retry_count++, status=queued, タイムスタンプ・エラー全クリア"""
     # 失敗状態をセットアップ
@@ -254,6 +278,7 @@ def test_reset_for_manual_retry_zeros_count_regardless_of_previous(db, video):
 # delete_by_video_id
 # ----------------------------------------------------------------------
 
+
 def test_delete_by_video_id_removes_all_jobs_and_returns_count(db, video):
     j1 = job_repo.create(db, video_id=video.id)
     j2 = job_repo.create(db, video_id=video.id)
@@ -271,6 +296,7 @@ def test_delete_by_video_id_returns_zero_when_no_jobs(db, video):
 # ----------------------------------------------------------------------
 # get_latest_by_video_id（ユーザー編集 clip に流用する最新ジョブの取得）
 # ----------------------------------------------------------------------
+
 
 def test_get_latest_by_video_id_returns_most_recent(db, video):
     """created_at が最も新しいジョブを返す"""

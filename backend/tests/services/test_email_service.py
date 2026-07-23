@@ -6,6 +6,7 @@ email_service は外部 API (Resend) をネットワーク越しに叩くので�
   - ネットワークに依存しない（毎回同じ結果＝flaky でない）
   - 「成功時 True / 失敗時 False」「正しいペイロードで呼んだか」を検証できる
 """
+
 from unittest.mock import patch
 
 from app.services import email_service

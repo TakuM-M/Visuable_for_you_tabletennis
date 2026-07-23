@@ -7,7 +7,7 @@ from src.core.data_classes import PersonTrack, TableInfo, PlayerCandidate
 class PlayerClassifier:
     """
     プレイヤー分類クラス
-    
+
     人間情報と卓球台情報から選手であるトラッキングIDを判定
 
     選定基準:
@@ -24,7 +24,7 @@ class PlayerClassifier:
         min_player_score: float = 0.3,
         recent_frames_window: int = 146,
         max_consecutive_other_count: int = 30,
-        movement_noise_threshold: float = 5.0
+        movement_noise_threshold: float = 5.0,
     ):
         """
         PlayerClassifierの初期化
@@ -56,10 +56,7 @@ class PlayerClassifier:
         self.current_frame_idx: int = 0
 
     def update(
-        self,
-        persons: List[PersonTrack],
-        table_info: TableInfo,
-        frame_idx: int
+        self, persons: List[PersonTrack], table_info: TableInfo, frame_idx: int
     ) -> None:
         """
         フレームごとに人物トラッキング情報を更新
@@ -98,7 +95,7 @@ class PlayerClassifier:
                     total_movement=movement,
                     near_table_count=1 if is_near else 0,
                     total_frames=1,
-                    movement_history=[movement]
+                    movement_history=[movement],
                 )
             else:
                 candidate = self.candidates[track_id]
@@ -141,7 +138,10 @@ class PlayerClassifier:
                 candidate.consecutive_other_count += 1
 
                 # 連続other判定が閾値を超えた場合は削除対象に追加
-                if candidate.consecutive_other_count >= self.max_consecutive_other_count:
+                if (
+                    candidate.consecutive_other_count
+                    >= self.max_consecutive_other_count
+                ):
                     remove_ids.append(track_id)
 
         # 削除対象の候補を完全に削除
@@ -167,7 +167,9 @@ class PlayerClassifier:
         for track_id in inactive_ids:
             del self.candidates[track_id]
 
-    def classify_players(self, max_inactive_frames_for_selection: int = 10) -> tuple[List[int], List[int]]:
+    def classify_players(
+        self, max_inactive_frames_for_selection: int = 10
+    ) -> tuple[List[int], List[int]]:
         """
         蓄積された情報からプレイヤーのtracking IDを決定
 
@@ -177,7 +179,7 @@ class PlayerClassifier:
         3. 最近のフレームで見られていること
 
         重要: 長期間プレイヤー候補として情報が蓄積されていない場合は削除
-        　　  other判定が連続で一定回数を超えた候補は自動的にリセット
+        other判定が連続で一定回数を超えた候補は自動的にリセット
 
         Args:
             max_inactive_frames_for_selection: プレイヤー選定時に許容する最大の非アクティブフレーム数
@@ -188,14 +190,18 @@ class PlayerClassifier:
         """
         # 最小フレーム数を満たし、かつ最近見られている候補をフィルタリング
         valid_candidates = [
-            c for c in self.candidates.values()
-            if (c.total_frames >= self.min_tracking_frames and
-                self.current_frame_idx - c.last_seen_frame <= max_inactive_frames_for_selection)
+            c
+            for c in self.candidates.values()
+            if (
+                c.total_frames >= self.min_tracking_frames
+                and self.current_frame_idx - c.last_seen_frame
+                <= max_inactive_frames_for_selection
+            )
         ]
 
         if not valid_candidates:
             return [], []
-        
+
         scored_candidates = []
         for candidate in valid_candidates:
             score = self._calculate_player_score(candidate)
@@ -208,7 +214,8 @@ class PlayerClassifier:
         # 重要: スコアがmin_player_score以下の候補は除外
         # （例: プレイヤー + 審判の場合、審判は低スコアのため除外される）
         selected_ids = [
-            track_id for track_id, score in scored_candidates[:self.max_players]
+            track_id
+            for track_id, score in scored_candidates[: self.max_players]
             if score >= self.min_player_score
         ]
 
@@ -242,13 +249,21 @@ class PlayerClassifier:
 
         # 候補の直近フレーム平均運動量でスコア計算
         if candidate.movement_history and len(candidate.movement_history) > 0:
-            candidate_avg_movement = sum(candidate.movement_history) / len(candidate.movement_history)
+            candidate_avg_movement = sum(candidate.movement_history) / len(
+                candidate.movement_history
+            )
         else:
             candidate_avg_movement = 0
-        movement_score = candidate_avg_movement / max_avg_movement if max_avg_movement > 0 else 0
+        movement_score = (
+            candidate_avg_movement / max_avg_movement if max_avg_movement > 0 else 0
+        )
 
         # 2. 卓球台近接率スコアの計算
-        near_table_ratio = candidate.near_table_count / candidate.total_frames if candidate.total_frames > 0 else 0
+        near_table_ratio = (
+            candidate.near_table_count / candidate.total_frames
+            if candidate.total_frames > 0
+            else 0
+        )
 
         # 全候補の中での最大近接率を取得（正規化用）
         max_near_ratio = max(
@@ -265,11 +280,7 @@ class PlayerClassifier:
 
         return score
 
-    def _calculate_table_distance(
-        self,
-        person: PersonTrack,
-        table_info
-    ) -> float:
+    def _calculate_table_distance(self, person: PersonTrack, table_info) -> float:
         """
         人物と卓球台の正規化距離を計算
 
@@ -290,20 +301,18 @@ class PlayerClassifier:
         distance = np.sqrt(dx**2 + dy**2)
 
         table_diagonal = np.sqrt(
-            (table_x2 - table_x1)**2 + (table_y2 - table_y1)**2
+            (table_x2 - table_x1) ** 2 + (table_y2 - table_y1) ** 2
         )
 
         if table_diagonal > 0:
             normalized_distance = distance / table_diagonal
         else:
-            normalized_distance = float('inf')
+            normalized_distance = float("inf")
 
         return normalized_distance
-    
+
     def _calculate_movement(
-        self,
-        prev_keypoints: np.ndarray,
-        curr_keypoints: np.ndarray
+        self, prev_keypoints: np.ndarray, curr_keypoints: np.ndarray
     ) -> float:
         """
         キーポイント間の移動量を計算
@@ -328,7 +337,9 @@ class PlayerClassifier:
         lower_body_valid_count = 0
         for idx in lower_body_indices:
             if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
-                distance = np.linalg.norm(curr_keypoints[idx, :2] - prev_keypoints[idx, :2])
+                distance = np.linalg.norm(
+                    curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
+                )
                 # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
                 if distance >= self.movement_noise_threshold:
                     lower_body_movement += distance
@@ -338,7 +349,9 @@ class PlayerClassifier:
         upper_body_valid_count = 0
         for idx in upper_body_indices:
             if prev_keypoints[idx, 2] > 0.5 and curr_keypoints[idx, 2] > 0.5:
-                distance = np.linalg.norm(curr_keypoints[idx, :2] - prev_keypoints[idx, :2])
+                distance = np.linalg.norm(
+                    curr_keypoints[idx, :2] - prev_keypoints[idx, :2]
+                )
                 # ノイズ閾値未満の微小な動きは無視（YOLOのブレをフィルタリング）
                 if distance >= self.movement_noise_threshold:
                     upper_body_movement += distance
@@ -347,12 +360,18 @@ class PlayerClassifier:
         if lower_body_valid_count == 0 and upper_body_valid_count == 0:
             return 0.0
 
-        lower_avg = (lower_body_movement / lower_body_valid_count
-                     if lower_body_valid_count > 0 else 0.0)
-        upper_avg = (upper_body_movement / upper_body_valid_count
-                     if upper_body_valid_count > 0 else 0.0)
+        lower_avg = (
+            lower_body_movement / lower_body_valid_count
+            if lower_body_valid_count > 0
+            else 0.0
+        )
+        upper_avg = (
+            upper_body_movement / upper_body_valid_count
+            if upper_body_valid_count > 0
+            else 0.0
+        )
         movement = 0.75 * lower_avg + 0.25 * upper_avg
-        
+
         return movement
 
     def reset(self) -> None:
