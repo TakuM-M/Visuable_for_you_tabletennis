@@ -20,6 +20,7 @@ erDiagram
         VARCHAR title
         VARCHAR storage_path
         VARCHAR output_path "nullable"
+        VARCHAR thumbnail_path "nullable"
         FLOAT duration "nullable"
         FLOAT source_duration "nullable"
         ENUM status "uploaded|queued|processing|ready|completed|failed"
@@ -92,6 +93,7 @@ erDiagram
 | title | VARCHAR | NOT NULL | 動画タイトル |
 | storage_path | VARCHAR | NOT NULL | 元動画のストレージパス |
 | output_path | VARCHAR | NULLABLE | 書き出し済み連結動画のストレージパス。書き出し前は NULL |
+| thumbnail_path | VARCHAR | NULLABLE | サムネイル画像（JPEG）のストレージパス。アップロード時に元動画から生成。生成に失敗した場合とこの機能の追加以前の動画は NULL |
 | duration | FLOAT | NULLABLE | 書き出し済み出力動画の長さ（秒） |
 | source_duration | FLOAT | NULLABLE | 元動画の長さ（秒）。アップロード時に設定。編集時の区間バリデーションに使用 |
 | status | ENUM | NOT NULL | `uploaded` / `queued` / `processing` / `ready` / `completed` / `failed` |

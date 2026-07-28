@@ -5,10 +5,11 @@ import {
   type VideoResponse,
 } from "../api/generated";
 import { authHeaders } from "../lib/auth";
+import { formatRetention } from "../lib/retention";
 import AppShell from "../components/layout/AppShell";
 import StatusBadge from "../components/ui/StatusBadge";
 import Button from "../components/ui/Button";
-import Stripes from "../components/ui/Stripes";
+import Thumbnail from "../components/ui/Thumbnail";
 import EmptyState from "../components/ui/EmptyState";
 import { IconFilm, IconPlus} from "../components/ui/Icons";
 
@@ -60,6 +61,11 @@ export default function VideoListPage() {
               <p className="mt-1.5 text-[13px] text-fg-3">
                 {isLoading ? "読み込み中..." : `${videos.length}件`}
               </p>
+              {!isLoading && videos.length > 0 && (
+                <p className="mt-1 text-[12px] text-fg-4">
+                  保存期限を過ぎた動画は自動的に削除されます
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <Button kind="primary" size="sm" onClick={() => navigate("/videos/new")}>
@@ -70,10 +76,11 @@ export default function VideoListPage() {
           </div>
 
           {/* Table header（モバイルでは行を2段組みにするため非表示） */}
-          <div className="hidden h-8 grid-cols-[1fr_120px_120px_150px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4 sm:grid">
+          <div className="hidden h-8 grid-cols-[1fr_96px_116px_128px_132px] items-center border-b border-border px-3.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-fg-4 sm:grid">
             <span>タイトル</span>
             <span className="text-right">再生時間</span>
             <span className="text-right">状態</span>
+            <span className="text-right">保存期限</span>
             <span className="text-right">アップロード</span>
           </div>
 
@@ -93,34 +100,48 @@ export default function VideoListPage() {
               />
             </div>
           ) : (
-            videos.map((v) => (
-              <button
-                type="button"
-                key={v.id}
-                onClick={() => navigate(`/videos/${v.id}`)}
-                className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border px-3.5 py-3 text-left hover:bg-subtle sm:grid-cols-[1fr_120px_120px_150px] sm:gap-0"
-              >
-                {/* モバイル: 1段目=タイトル+状態バッジ / 2段目=再生時間+日時（order-* で並べ替え） */}
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="h-6 w-9 flex-none overflow-hidden rounded">
-                    <Stripes />
+            videos.map((v) => {
+              const retention = formatRetention(v.expires_at);
+              return (
+                <button
+                  type="button"
+                  key={v.id}
+                  onClick={() => navigate(`/videos/${v.id}`)}
+                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border px-3.5 py-3 text-left hover:bg-subtle sm:grid-cols-[1fr_96px_116px_128px_132px] sm:gap-0"
+                >
+                  {/* モバイル: 1段目=タイトル+状態バッジ / 2段目=再生時間+保存期限
+                      （order-* で並べ替え。アップロード日時は幅を取るため sm 以上のみ） */}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="h-9 w-16 flex-none overflow-hidden rounded bg-subtle-2">
+                      <Thumbnail src={v.thumbnail_url} alt="" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[13.5px] font-medium">{v.title}</div>
+                      <div className="font-mono text-[10.5px] text-fg-4">MP4</div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-[13.5px] font-medium">{v.title}</div>
-                    <div className="font-mono text-[10.5px] text-fg-4">MP4</div>
+                  <div className="order-2 font-mono text-[12px] text-fg-2 sm:order-none sm:text-right">
+                    {fmtDuration(v.duration)}
                   </div>
-                </div>
-                <div className="order-2 font-mono text-[12px] text-fg-2 sm:order-none sm:text-right">
-                  {fmtDuration(v.duration)}
-                </div>
-                <div className="order-1 flex justify-end sm:order-none">
-                  <StatusBadge status={v.status} />
-                </div>
-                <div className="order-3 text-right text-[12px] text-fg-3 sm:order-none">
-                  {fmtDateTime(v.created_at)}
-                </div>
-              </button>
-            ))
+                  <div className="order-1 flex justify-end sm:order-none">
+                    <StatusBadge status={v.status} />
+                  </div>
+                  <div className="order-3 text-right sm:order-none">
+                    <div
+                      className={`font-mono text-[12px] ${
+                        retention.urgent ? "text-err-ink" : "text-fg-2"
+                      }`}
+                    >
+                      {retention.label}
+                    </div>
+                    <div className="text-[10.5px] text-fg-4">{retention.date}</div>
+                  </div>
+                  <div className="hidden text-right text-[12px] text-fg-3 sm:order-none sm:block">
+                    {fmtDateTime(v.created_at)}
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
       </div>
