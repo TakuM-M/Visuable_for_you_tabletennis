@@ -29,6 +29,7 @@ def _make_video(**kw) -> SimpleNamespace:
         id=uuid.uuid4(),
         storage_path="videos/a.mp4",
         output_path=None,
+        thumbnail_path=None,
     )
     defaults.update(kw)
     return SimpleNamespace(**defaults)
@@ -67,6 +68,80 @@ def test_extract_duration_returns_none_on_failure() -> None:
         side_effect=subprocess.TimeoutExpired(cmd="ffprobe", timeout=30),
     ):
         assert video_service._extract_duration("/tmp/x.mp4") is None
+
+
+# --- _thumbnail_key / _generate_thumbnail -----------------------------------
+
+
+def test_thumbnail_key_derives_from_video_key() -> None:
+    """サムネイルのキーは元動画のキーと同じ UUID を共有する"""
+    assert video_service._thumbnail_key("videos/abc-123.mp4") == "thumbnails/abc-123.jpg"
+
+
+def test_generate_thumbnail_uploads_and_returns_key(tmp_path) -> None:
+    """ffmpeg 成功時は R2 にアップロードして thumbnails/ のキーを返す"""
+    local = tmp_path / "f1.mp4"
+    local.write_bytes(b"dummy")
+    with (
+        patch("app.services.video_service.subprocess.run") as run,
+        patch("app.services.video_service.storage_service.upload_file") as upload,
+    ):
+        key = video_service._generate_thumbnail(local, "videos/f1.mp4", 100.0)
+
+    assert key == "thumbnails/f1.jpg"
+    assert upload.call_args.args[1] == "thumbnails/f1.jpg"
+    # 動画長の 10%（上限 3 秒）の位置をシークして 1 フレームだけ取り出す
+    cmd = run.call_args.args[0]
+    assert cmd[cmd.index("-ss") + 1] == "3.0"
+    assert cmd[cmd.index("-frames:v") + 1] == "1"
+
+
+def test_generate_thumbnail_seeks_early_for_short_video(tmp_path) -> None:
+    """短い動画では動画長の 10% 位置（3秒未満）をシークする"""
+    local = tmp_path / "f1.mp4"
+    local.write_bytes(b"dummy")
+    with (
+        patch("app.services.video_service.subprocess.run") as run,
+        patch("app.services.video_service.storage_service.upload_file"),
+    ):
+        video_service._generate_thumbnail(local, "videos/f1.mp4", 10.0)
+
+    cmd = run.call_args.args[0]
+    assert cmd[cmd.index("-ss") + 1] == "1.0"
+
+
+def test_generate_thumbnail_returns_none_on_failure(tmp_path) -> None:
+    """ffmpeg が失敗しても例外にせず None（サムネイルは付加情報なので握り潰す）"""
+    local = tmp_path / "f1.mp4"
+    local.write_bytes(b"dummy")
+    with (
+        patch(
+            "app.services.video_service.subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, "ffmpeg"),
+        ),
+        patch("app.services.video_service.storage_service.upload_file") as upload,
+    ):
+        assert video_service._generate_thumbnail(local, "videos/f1.mp4", 10.0) is None
+
+    upload.assert_not_called()
+
+
+def test_generate_thumbnail_removes_local_file(tmp_path) -> None:
+    """アップロード後にローカルの一時 JPEG を残さない"""
+    local = tmp_path / "f1.mp4"
+    local.write_bytes(b"dummy")
+
+    def _fake_ffmpeg(*args, **kwargs):
+        (tmp_path / "f1_thumb.jpg").write_bytes(b"jpeg")
+        return SimpleNamespace(returncode=0)
+
+    with (
+        patch("app.services.video_service.subprocess.run", side_effect=_fake_ffmpeg),
+        patch("app.services.video_service.storage_service.upload_file"),
+    ):
+        video_service._generate_thumbnail(local, "videos/f1.mp4", 10.0)
+
+    assert not (tmp_path / "f1_thumb.jpg").exists()
 
 
 # --- call_ml_service --------------------------------------------------------
@@ -247,6 +322,10 @@ def test_upload_video_saves_uploads_and_registers(tmp_path) -> None:
         patch("app.services.video_service.storage_service.upload_file") as upload,
         patch("app.services.video_service._extract_duration", return_value=10.0),
         patch(
+            "app.services.video_service._generate_thumbnail",
+            return_value="thumbnails/f1.jpg",
+        ),
+        patch(
             "app.services.video_service._register_video_and_start_ml",
             return_value=video,
         ) as register,
@@ -256,6 +335,8 @@ def test_upload_video_saves_uploads_and_registers(tmp_path) -> None:
     assert result is video
     upload.assert_called_once()
     register.assert_called_once()
+    # 生成したサムネイルの R2 キーが動画レコードに引き渡される
+    assert register.call_args.args[-1] == "thumbnails/f1.jpg"
 
 
 def test_upload_video_raises_when_quota_exceeded(tmp_path) -> None:
@@ -395,8 +476,15 @@ def test_process_chunk_upload_merges_and_uploads(tmp_path) -> None:
         patch("app.services.video_service.storage_service.upload_file") as upload_file,
         patch("app.services.video_service._extract_duration", return_value=10.0),
         patch(
+            "app.services.video_service._generate_thumbnail",
+            return_value="thumbnails/f1.jpg",
+        ),
+        patch(
             "app.services.video_service.video_repo.update_source_duration"
         ) as update_source_duration,
+        patch(
+            "app.services.video_service.video_repo.update_thumbnail_path"
+        ) as update_thumbnail_path,
         patch(
             "app.services.video_service.video_repo.update_status"
         ) as video_update_status,
@@ -412,6 +500,8 @@ def test_process_chunk_upload_merges_and_uploads(tmp_path) -> None:
     assert upload_file.call_args.args[1] == r2_key
     # 元動画長が保存される
     update_source_duration.assert_called_once_with(db, video_id, 10.0)
+    # サムネイルの R2 キーが保存される
+    update_thumbnail_path.assert_called_once_with(db, video_id, "thumbnails/f1.jpg")
     # 一時ファイル（チャンク・結合ファイル）が残らない
     assert list(tmp_path.iterdir()) == []
     # ML キックは背景内で直接呼ばれる
@@ -496,6 +586,28 @@ def test_delete_video_removes_records_and_r2_files() -> None:
     del_video.assert_called_once()
     deleted_keys = {call.args[0] for call in delete_file.call_args_list}
     assert deleted_keys == {"videos/a.mp4", "outputs/a.mp4"}
+
+
+def test_delete_video_removes_thumbnail() -> None:
+    """サムネイルも R2 から消す（消し漏らすと参照されないまま残り続ける）"""
+    db = MagicMock()
+    video = _make_video(
+        storage_path="videos/a.mp4",
+        output_path=None,
+        thumbnail_path="thumbnails/a.jpg",
+    )
+    with (
+        patch("app.services.video_service.video_repo.get_by_id", return_value=video),
+        patch("app.services.video_service.job_repo.get_by_video_id", return_value=[]),
+        patch("app.services.video_service.clip_repo.delete_by_video_id"),
+        patch("app.services.video_service.job_repo.delete_by_video_id"),
+        patch("app.services.video_service.video_repo.delete"),
+        patch("app.services.video_service.storage_service.delete_file") as delete_file,
+    ):
+        video_service.delete_video(db, video.id)
+
+    deleted_keys = {call.args[0] for call in delete_file.call_args_list}
+    assert deleted_keys == {"videos/a.mp4", "thumbnails/a.jpg"}
 
 
 def test_delete_video_skips_output_when_no_output_path() -> None:

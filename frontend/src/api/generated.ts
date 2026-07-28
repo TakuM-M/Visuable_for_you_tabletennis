@@ -225,6 +225,8 @@ export interface VideoResponse {
   status: VideoStatus;
   created_at: string;
   updated_at: string;
+  expires_at: string;
+  thumbnail_url?: string | null;
 }
 
 export type VerifyEmailAuthVerifyEmailGetParams = {

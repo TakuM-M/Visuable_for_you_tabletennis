@@ -15,11 +15,13 @@ import {
   type VideoResponse,
 } from "../api/generated";
 import { authHeaders } from "../lib/auth";
+import { formatRetention } from "../lib/retention";
 import AppShell from "../components/layout/AppShell";
 import StatusBadge from "../components/ui/StatusBadge";
 import Button from "../components/ui/Button";
 import DropdownMenu from "../components/ui/DropdownMenu";
 import Stripes from "../components/ui/Stripes";
+import Thumbnail from "../components/ui/Thumbnail";
 import EmptyState from "../components/ui/EmptyState";
 import ClipEditModal from "../components/video/ClipEditModal";
 import ClipPreviewPlayer, {
@@ -238,6 +240,7 @@ export default function VideoDetailPage() {
               : "idle";
   // 擬似プレビュー（source モード）が出ているときだけシーン選択でジャンプ可能。
   const previewActive = playerMode === "source" && clips.length > 0;
+  const retention = formatRetention(video.expires_at);
 
   return (
     <AppShell>
@@ -276,6 +279,21 @@ export default function VideoDetailPage() {
                 )}
                 <span className="text-fg-4">
                   {new Date(video.created_at).toLocaleDateString("ja-JP")}
+                </span>
+                {/* 保存期限。期限を過ぎた動画は自動削除されるので残り日数を明示する */}
+                <span
+                  className={`flex items-center gap-1.5 ${
+                    retention.urgent ? "text-err-ink" : "text-fg-3"
+                  }`}
+                  title={`${retention.date} に自動削除されます`}
+                >
+                  <IconTrash size={12} className={retention.urgent ? "" : "text-fg-4"} />
+                  <span>
+                    保存期限 {retention.date}
+                    <span className="ml-1.5 font-mono text-[11.5px]">
+                      ({retention.label})
+                    </span>
+                  </span>
                 </span>
               </div>
             </div>
@@ -329,6 +347,7 @@ export default function VideoDetailPage() {
                 mode={playerMode}
                 outputUrl={outputUrl}
                 sourceUrl={sourceUrl}
+                thumbnailUrl={video.thumbnail_url}
                 clips={clips}
                 previewRef={previewRef}
               />
@@ -487,12 +506,14 @@ function PlayerBlock({
   mode,
   outputUrl,
   sourceUrl,
+  thumbnailUrl,
   clips,
   previewRef,
 }: {
   mode: PlayerMode;
   outputUrl: string | null;
   sourceUrl: string | null;
+  thumbnailUrl?: string | null;
   clips: ClipResponse[];
   previewRef: React.Ref<ClipPreviewHandle>;
 }) {
@@ -519,7 +540,10 @@ function PlayerBlock({
   }
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-[10px] bg-[#0e0f12]">
-      <Stripes className="absolute inset-0 opacity-70" />
+      {/* 解析中・書き出し中でもどの動画かが分かるよう、サムネイルを下敷きにする */}
+      <div className="absolute inset-0 opacity-70">
+        <Thumbnail src={thumbnailUrl} alt="" />
+      </div>
       <div
         className="absolute inset-0"
         style={{
