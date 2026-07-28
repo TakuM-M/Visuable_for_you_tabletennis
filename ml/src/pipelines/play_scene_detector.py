@@ -287,13 +287,17 @@ class PlaySceneDetector:
                     else:
                         probs_batch = probs_batch.reshape(-1, 1)
 
-                # フレームごとに確率を記録
+                # フレームごとに確率を記録。
+                # 実フレーム番号は dataset.frames から引く。metadata["start_frame"] + i
+                # と数えると、fps 間引き（target_fps < 動画fps）でフレーム番号が
+                # 飛んでいるときに区間の末尾が sequence_length - 1 フレームぶん欠落する
+                # （15fps 間引きなら 1 秒近く、ラリーの終わりが切れる）
                 for batch_idx, metadata in enumerate(metadata_batch):
-                    start_frame = metadata["start_frame"]
+                    start_idx = metadata["start_idx"]
                     probs = probs_batch[batch_idx]
 
                     for i, prob in enumerate(probs):
-                        frame_num = start_frame + i
+                        frame_num = int(dataset.frames[start_idx + i])
                         if frame_num not in frame_probs:
                             frame_probs[frame_num] = []
                         frame_probs[frame_num].append(float(prob))

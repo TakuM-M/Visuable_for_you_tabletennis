@@ -57,18 +57,51 @@
 ML 側のコールバックは timeout 10 秒・リトライ無し。ここで落ちると backend からは
 「RunPod は COMPLETED なのにコールバック未達」となり、20〜40分の推論をやり直すことになる。
 
-### F. 推論が全フレーム処理になっている — 未対応（要判断）
+### F. 推論が全フレーム処理になっていた — 対応済み（config JSON の反映が残り）
 
 `VideoProcessingConfig.target_fps` の既定が 30.0 で、30fps 動画では `frame_step=1`、
-つまり全 54,000 フレームに姿勢推定が走る。**30分動画の待ち時間と GPU 課金の主因はここ**。
+つまり全 54,000 フレームに姿勢推定が走っていた。**30分動画の待ち時間と GPU 課金の
+主因はここ**。学習データ側（`02_export_player_pose.ipynb`）と評価（`05_evaluate_*`）は
+15fps 間引き前提で、推論だけが 30fps だった。
 
-学習データ側の姿勢 CSV は gap=2（15fps 相当）で間引いてあるため、推論を 15fps に
-落とすほうが学習時の条件に近く、処理時間も半減する。ただし推論精度に直接影響するので
-このタスクでは変更していない。実設定は RunPod の Network Volume 上にある
-`/workspace/configs/runpod_config.json`（リポジトリ管理外）にあるため、変更する場合は
-そちらの `video_processing.target_fps` を触ることになる。
+### F-2. 15fps に切り替えると顕在化するフレーム番号のズレ — 対応済み
 
-判断材料を得るために、`runpod_handler.py` に処理フレーム数と推論所要時間のログを追加済み。
+`target_fps` を変えるだけでは済まなかった。`PlaySceneDetector._predict` は
+シーケンス内 i 番目の実フレーム番号を `metadata["start_frame"] + i` として数えていたが、
+`start_frame` は**実フレーム番号**、`i` は**サンプルのインデックス**である。間引きが無い
+（`frame_step=1`）間は両者が一致するので問題が出ないが、15fps 間引き（`frame_step=2`）では
+実フレーム番号が 2 刻みになるためズレる。
+
+検証（`sequence_length=30`・実フレーム 1000〜1120 の区間が全てプレーと判定された場合）:
+
+| フレーム番号の求め方 | 出力される区間 | 尺 |
+| --- | --- | --- |
+| 真の区間 | 1000〜1120 | 4.00秒 |
+| 現行 `start_frame + i` | 1000〜1091 | 3.03秒（末尾 29 フレーム欠落）|
+| 修正後 `dataset.frames[start_idx + i]` | 1000〜1120 | 4.00秒 |
+
+欠落量は `sequence_length - 1` フレームで固定なので、15fps では**全区間の末尾が
+一律 1 秒近く切れる**（ラリーの決め球が落ちる）。正規化に失敗したフレームは
+`get_pose_data_for_dataset` でスキップされるため、欠測がある区間ではさらにズレる。
+
+評価ノート（05）はこれを避けて `start_idx` から `dataset.frames` を引いており
+（「複数トラックの行やフレーム欠落があっても壊れない」というコメントがある）、
+本番推論だけが古い数え方のまま残っていた。つまり**評価指標は正しく、本番だけがずれる**
+状態だったため、30fps のままでは誰も気付けなかった。
+
+修正は本番も評価ノートと同じ方式に揃えた。
+
+**残作業**: RunPod の Network Volume 上の `/workspace/configs/runpod_config.json`
+（リポジトリ管理外。`.gitignore` の `configs/` で除外）の `video_processing.target_fps`
+を 15 にする。リポジトリ側のフォールバックは 15.0 に変更済みなので、JSON からキーごと
+消す対応でもよい。学習データ生成に使った `crip_app_config.json` と
+`tracking_export` / `player_classification` の値が揃っているかも合わせて確認すること
+（`min_consecutive_frames` や `recent_frames_window` はサンプル数で数えるため、
+fps が変わると実時間の意味が変わる）。
+
+判断材料として、`runpod_handler.py` に処理フレーム数と推論所要時間のログを追加済み。
+15fps 化で推論時間は概ね半減する見込みだが、`runpod_execution_timeout_ratio`（3.0）は
+安全側の値なのでそのままでよい。
 
 ### G. 書き出しの進捗がユーザーに見えない — 未対応
 
@@ -114,10 +147,17 @@ ML 側のコールバックは timeout 10 秒・リトライ無し。ここで�
 - セグメント切り出しを並列化（既定 2、CPU コア数とセグメント数で頭打ち）
 - セマフォで同時書き出しを 1 件に制限。順番待ちが 30分を超えたら `ready` に戻す
 
-### ML 側（`ml/runpod_handler.py`）
+### ML 側
 
+- `target_fps` の既定を 15.0 に（`src/pipelines/config.py` と `runpod_handler.py` の
+  フォールバック。姿勢推定の実行回数が半分になる）
+- `PlaySceneDetector._predict` の実フレーム番号を `dataset.frames` から引くよう修正
 - コールバックを 3 回までリトライ（推論のやり直しを避ける）
 - ダウンロードサイズ・所要時間・処理フレーム数・推論時間をログに出力
+
+なお ml 側にはテストディレクトリも venv も無いため、F-2 の検証は
+`MemoryPoseSequenceDataset` 相当のフレーム配列（2 刻み）に対して両方式の被覆範囲を
+計算する形で行った。テスト基盤を作る際はこのケースを回帰テストにすること。
 
 ## 受け入れ条件
 
@@ -128,8 +168,11 @@ ML 側のコールバックは timeout 10 秒・リトライ無し。ここで�
 - [x] 中間ファイルが失敗時にも残らない
 - [x] FFmpeg がハングしても書き出しスロットを占有し続けない
 - [x] backend テストが通る（282 件）
+- [x] 推論が学習時と同じ 15fps 間引きになる（リポジトリ側の既定値）
+- [x] fps 間引き時にシーン区間の末尾が欠落しない
+- [ ] RunPod の `runpod_config.json` に 15fps を反映する（Network Volume 上）
 - [ ] 実機で 30分動画を通してエンドツーエンドの所要時間を計測する
-- [ ] 計測結果をもとに F（target_fps）の判断をする
+- [ ] 15fps 化による検出精度の変化を 05 のノートブックで確認する
 
 ## 関連ファイル
 
@@ -138,9 +181,13 @@ ML 側のコールバックは timeout 10 秒・リトライ無し。ここで�
 - `backend/app/services/video_clip_service.py`
 - `backend/app/routers/videos.py` / `backend/app/schemas/video.py`
 - `frontend/src/lib/chunkedUpload.ts` / `frontend/src/pages/VideoUploadPage.tsx`
-- `ml/runpod_handler.py`
+- `ml/runpod_handler.py` / `ml/src/pipelines/config.py`
+- `ml/src/pipelines/play_scene_detector.py`（フレーム番号の対応づけ）
 - `nginx/nginx.conf` / `docker-compose.yml`
 
 ## 進捗ログ
 
 - 2026-07-28: 全経路を評価し、A〜E を修正。F・G は判断待ち・範囲外として記録
+- 2026-07-28: 推論も 15fps が本来の想定と判明したため F を対応。
+  切り替えで顕在化するフレーム番号のズレ（F-2）を発見・修正。
+  RunPod 上の config JSON への反映が残り

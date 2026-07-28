@@ -84,7 +84,9 @@ def _build_pipeline_config() -> InferencePipelineConfig:
             max_frame_gap=te.get("max_frame_gap", 5),
         ),
         video_processing=VideoProcessingConfig(
-            target_fps=vp.get("target_fps", 30.0),
+            # 学習データと同じ 15fps 間引き。設定ファイル側で明示的に上書きしない
+            # 限りこの値を使う（30fps にすると学習時と条件がずれ、GPU 時間も倍になる）
+            target_fps=vp.get("target_fps", 15.0),
             show_progress=vp.get("show_progress", True),
             output_codec=vp.get("output_codec", "mp4v"),
         ),
