@@ -33,6 +33,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      # チャンク結合・FFmpeg の中間ファイル置き場。GB 級のファイルを
+      # コンテナの書き込みレイヤー（overlay fs）に書くと、書き込みが遅いうえに
+      # イメージ入れ替えのたびに消え方が読めないため、専用ボリュームに逃がす
+      - backend-tmp:/app/uploads
     networks:
       - tabletennis-net
 
@@ -73,6 +78,8 @@ services:
 # ========================================
 volumes:
   postgres-data:
+    driver: local
+  backend-tmp:
     driver: local
 
 # ========================================

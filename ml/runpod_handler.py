@@ -5,6 +5,7 @@ RunPod Serverless Handler for Table Tennis Play Scene Detection
 import json
 import os
 import tempfile
+import time
 import traceback
 
 import httpx
@@ -112,29 +113,45 @@ _pipeline = InferencePipeline(_build_pipeline_config())
 print("モデルロード完了")
 
 
+CALLBACK_MAX_ATTEMPTS = 3
+CALLBACK_TIMEOUT_SECONDS = 30.0
+
+
 def _post_callback(url: str, payload: dict, job_id: str, label: str) -> None:
     """backendへコールバックを送る。送信自体に失敗しても例外は投げない。
 
-    ここで詰まった場合はGPU側からできることが無く、backend側の
-    タイムアウト監視（job_reaper）に委ねるしかないため。
+    数回リトライするのは、ここで一度で諦めると backend からは
+    「RunPod は COMPLETED なのにコールバック未達」にしか見えず、推論を
+    まるごとやり直すことになるため。長い動画ほどそのやり直しが高くつく。
+    リトライしても駄目な場合はGPU側からできることが無く、backend側の
+    タイムアウト監視（job_reaper / reconcile_runpod_jobs）に委ねるしかない。
     """
     if not url:
         print(f"{label}コールバックURLが未指定のため送信をスキップ job_id={job_id}")
         return
 
-    try:
-        headers = {}
-        api_key = os.getenv("INTERNAL_API_KEY")
-        if api_key:
-            headers["X-Internal-Api-Key"] = api_key
+    headers = {}
+    api_key = os.getenv("INTERNAL_API_KEY")
+    if api_key:
+        headers["X-Internal-Api-Key"] = api_key
 
-        response = httpx.post(url, json=payload, headers=headers, timeout=10.0)
-        response.raise_for_status()
-        print(
-            f"{label}コールバック送信完了 job_id={job_id} status={response.status_code}"
-        )
-    except Exception as e:
-        print(f"{label}コールバック送信失敗 job_id={job_id}: {e}")
+    for attempt in range(1, CALLBACK_MAX_ATTEMPTS + 1):
+        try:
+            response = httpx.post(
+                url, json=payload, headers=headers, timeout=CALLBACK_TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+            print(
+                f"{label}コールバック送信完了 job_id={job_id} status={response.status_code}"
+            )
+            return
+        except Exception as e:
+            print(
+                f"{label}コールバック送信失敗 ({attempt}/{CALLBACK_MAX_ATTEMPTS}) "
+                f"job_id={job_id}: {e}"
+            )
+            if attempt < CALLBACK_MAX_ATTEMPTS:
+                time.sleep(2**attempt)
 
 
 def _run_inference(video_url: str, job_id: str) -> list[dict]:
@@ -143,23 +160,39 @@ def _run_inference(video_url: str, job_id: str) -> list[dict]:
         video_path = f"{tmpdir}/input.mp4"
 
         print(f"動画ダウンロード開始 job_id={job_id}")
+        started = time.monotonic()
+        # timeout は 1 回のソケット操作にかかる上限であってダウンロード全体の
+        # 上限ではないので、GB 級でもこの値のままでよい
         with httpx.Client(timeout=300.0) as client:
             with client.stream("GET", video_url) as response:
                 response.raise_for_status()
                 with open(video_path, "wb") as f:
-                    for chunk in response.iter_bytes(chunk_size=65536):
+                    for chunk in response.iter_bytes(chunk_size=1024 * 1024):
                         f.write(chunk)
-        print(f"動画ダウンロード完了 job_id={job_id}")
+        size_mb = os.path.getsize(video_path) / 1024**2
+        print(
+            f"動画ダウンロード完了 job_id={job_id} size={size_mb:.1f}MB "
+            f"所要={time.monotonic() - started:.1f}秒"
+        )
 
+        # 動画長・処理時間は「長い動画で実行時間上限に収まるか」を後から
+        # 検証するための材料になるので必ず残す
+        inference_started = time.monotonic()
         results = _pipeline.process_video(
             input_video=video_path,
             output_dir=tmpdir,
             base_name="video",
         )
+        inference_seconds = time.monotonic() - inference_started
 
     # フレーム番号は元動画の実フレーム番号のため、元動画のFPSで割る
     video_fps = results["pose_export"]["video_fps"]
     scenes = results["scene_detection"]["scenes"]
+    total_frames = results["pose_export"]["processed_frames"]
+    print(
+        f"推論時間 job_id={job_id} 処理フレーム={total_frames} "
+        f"所要={inference_seconds:.1f}秒"
+    )
     return [
         {"start_time": round(s / video_fps, 2), "end_time": round(e / video_fps, 2)}
         for s, e in scenes

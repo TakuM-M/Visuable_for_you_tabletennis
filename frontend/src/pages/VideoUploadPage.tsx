@@ -4,7 +4,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { chunkedUpload } from "../lib/chunkedUpload";
+import {
+  UploadRejectedError,
+  chunkedUpload,
+  readVideoDuration,
+  validateUploadFile,
+  validateVideoDuration,
+} from "../lib/chunkedUpload";
 import AppShell from "../components/layout/AppShell";
 import Button from "../components/ui/Button";
 import Stripes from "../components/ui/Stripes";
@@ -12,7 +18,13 @@ import { IconChevL, IconClose, IconUpload } from "../components/ui/Icons";
 
 const schema = z.object({
   title: z.string().min(1, "タイトルを入力してください"),
-  file: z.custom<File>((v) => v instanceof File, "動画ファイルを選択してください"),
+  file: z
+    .custom<File>((v) => v instanceof File, "動画ファイルを選択してください")
+    // 上限超過は送る前に弾く。数 GB 送りきってから 413 で落ちるのが一番つらい
+    .superRefine((f: File, ctx) => {
+      const message = validateUploadFile(f);
+      if (message) ctx.addIssue({ code: "custom", message });
+    }),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -24,6 +36,8 @@ export default function VideoUploadPage() {
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [durationError, setDurationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -66,16 +80,23 @@ export default function VideoUploadPage() {
     setProgress(null);
   };
 
-  const onFileChange = (files: FileList | null) => {
+  const onFileChange = async (files: FileList | null) => {
     if (!files?.length) return;
     const file = files[0];
     setSelectedFile(file);
+    setDuration(null);
+    setDurationError(null);
     // input.files の FileList は live オブジェクトで後から空になり得るため、File を切り出して保持する
     setValue("file", file, { shouldValidate: true });
     if (!titleValue) {
       const stem = file.name.replace(/\.[^.]+$/, "");
       setValue("title", stem);
     }
+    // 長さの判定は非同期（メタデータ読み込み待ち）なので zod のスキーマには
+    // 載せられない。選択直後に別途チェックして送信前に知らせる
+    const seconds = await readVideoDuration(file);
+    setDuration(seconds);
+    setDurationError(validateVideoDuration(seconds));
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -86,6 +107,8 @@ export default function VideoUploadPage() {
 
   const onClear = () => {
     setSelectedFile(null);
+    setDuration(null);
+    setDurationError(null);
     resetField("file");
   };
 
@@ -130,7 +153,7 @@ export default function VideoUploadPage() {
             <Field
               label="動画ファイル"
               hint="MP4 / MOV / MKV"
-              error={errors.file?.message as string | undefined}
+              error={(errors.file?.message as string | undefined) ?? durationError ?? undefined}
             >
               {selectedFile ? (
                 <div className="flex items-center gap-3 rounded-[10px] border border-border bg-surface p-3">
@@ -143,6 +166,7 @@ export default function VideoUploadPage() {
                     </div>
                     <div className="mt-0.5 font-mono text-[11px] text-fg-4">
                       {formatBytes(selectedFile.size)}
+                      {duration !== null && ` · ${formatDuration(duration)}`}
                     </div>
                   </div>
                   {!isUploading && (
@@ -185,7 +209,7 @@ export default function VideoUploadPage() {
                     <span className="text-accent">選択</span>
                   </div>
                   <div className="mt-1.5 font-mono text-[10.5px] text-fg-4">
-                    MP4 / MOV / MKV · 最大 5GB
+                    MP4 / MOV / MKV · 最大 5GB / 60分
                   </div>
                 </label>
               )}
@@ -213,7 +237,9 @@ export default function VideoUploadPage() {
 
             {mutation.isError && (
               <p className="text-[12.5px] text-err">
-                アップロードに失敗しました。もう一度お試しください。
+                {mutation.error instanceof UploadRejectedError
+                  ? mutation.error.message
+                  : "アップロードに失敗しました。もう一度お試しください。"}
               </p>
             )}
 
@@ -234,7 +260,12 @@ export default function VideoUploadPage() {
                     キャンセル
                   </Button>
                 )}
-                <Button type="submit" kind="primary" size="sm" disabled={isUploading}>
+                <Button
+                  type="submit"
+                  kind="primary"
+                  size="sm"
+                  disabled={isUploading || durationError !== null}
+                >
                   {isUploading ? "アップロード中..." : "アップロードを開始"}
                 </Button>
               </div>
@@ -269,6 +300,12 @@ function Field({
       {error && <p className="text-[11.5px] text-err">{error}</p>}
     </div>
   );
+}
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}分${String(s).padStart(2, "0")}秒`;
 }
 
 function formatBytes(b: number) {

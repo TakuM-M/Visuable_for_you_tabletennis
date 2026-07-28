@@ -52,6 +52,8 @@ def upload_video(
         )
     except video_service.QuotaExceededError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except video_service.UploadRejectedError as e:
+        raise HTTPException(status_code=413, detail=str(e))
 
     return video
 
@@ -70,9 +72,12 @@ def chunk_upload_init(
             title=body.title,
             filename=body.filename,
             total_chunks=body.total_chunks,
+            total_bytes=body.total_bytes,
         )
     except video_service.QuotaExceededError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except video_service.UploadRejectedError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     return ChunkUploadInitResponse(upload_id=upload_id)
 
 
@@ -88,6 +93,10 @@ def chunk_upload(
         video_service.save_chunk(upload_id, index, file)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Upload not found")
+    except video_service.UploadRejectedError as e:
+        # 413 はフロントの isTransient がリトライ対象にしないステータス。
+        # 上限超過は何度送っても同じなので、その場で止めるのが正しい
+        raise HTTPException(status_code=413, detail=str(e))
 
 
 @router.post(

@@ -99,6 +99,8 @@ docker push takumm/tabletennis-ml:vX.Y.Z
 要点:
 - 動画の実体はすべて R2（S3 互換）。backend / ML どちらも presigned URL で受け渡し、ローカルディスクは一時利用のみ。
 - ML はステートレス。job_id をキーに backend へコールバックで結果を返す。`/internal/*` パスは nginx で外部にも到達可能（RunPod からのコールバックを受けるため）。
+- **受け入れ上限は 5GB / 60分**（`core/config.py` の `max_upload_bytes` / `max_video_duration_seconds`）。フロント（送信前）・init（申告サイズ）・チャンク受信と結合後（実測）の三段で検査し、超過は 413 を返す。上限を変えるときは `frontend/src/lib/chunkedUpload.ts` の `MAX_UPLOAD_BYTES` / `MAX_VIDEO_DURATION_SECONDS` と UI 表記も揃える。長時間動画まわりの経緯は `docs/tasks/fix-long-video-support.md` 参照。
+- RunPod へは動画長から算出した `policy.executionTimeout` を渡す。ここを省くとエンドポイント既定値が効き、長い動画が推論の途中で `TIMED_OUT` になる。
 
 ### Backend 階層（`backend/app/`）
 

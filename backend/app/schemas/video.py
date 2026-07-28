@@ -13,11 +13,16 @@ class VideoCreate(BaseModel):
 
 
 class ChunkUploadInitRequest(BaseModel):
-    """チャンクアップロード初期化リクエスト"""
+    """チャンクアップロード初期化リクエスト
+
+    total_bytes はサイズ上限を「1 バイトも受け取る前に」判定するために受け取る。
+    自己申告なので信用はせず、実際の受信量は save_chunk 側でも累積検査する。
+    """
 
     title: str
     filename: str
     total_chunks: int
+    total_bytes: int
 
 
 class ChunkUploadInitResponse(BaseModel):

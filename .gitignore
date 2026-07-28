@@ -84,3 +84,7 @@ ml/models/
 
 # documentation
 docs/develop
+
+# アップロードの一時ファイル（dev では ./backend が /app にマウントされるため
+# チャンク・結合済み動画がここに現れる。本番は backend-tmp ボリューム）
+backend/uploads/

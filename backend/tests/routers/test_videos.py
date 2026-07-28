@@ -119,7 +119,12 @@ def test_chunk_upload_init_returns_upload_id() -> None:
     ):
         resp = client.post(
             "/videos/upload/init",
-            json={"title": "t", "filename": "a.mp4", "total_chunks": 3},
+            json={
+                "title": "t",
+                "filename": "a.mp4",
+                "total_chunks": 3,
+                "total_bytes": 100,
+            },
         )
     assert resp.status_code == 200
     assert resp.json()["upload_id"] == "upload-123"
@@ -133,7 +138,12 @@ def test_chunk_upload_init_quota_exceeded_returns_409() -> None:
     ):
         resp = client.post(
             "/videos/upload/init",
-            json={"title": "t", "filename": "a.mp4", "total_chunks": 3},
+            json={
+                "title": "t",
+                "filename": "a.mp4",
+                "total_chunks": 3,
+                "total_bytes": 100,
+            },
         )
     assert resp.status_code == 409
 
@@ -166,6 +176,56 @@ def test_chunk_upload_unknown_upload_returns_404() -> None:
             files={"file": ("chunk", b"data", "application/octet-stream")},
         )
     assert resp.status_code == 404
+
+
+def test_chunk_upload_init_too_large_returns_413() -> None:
+    """サイズ上限超過は 413。フロントはこのステータスをリトライ対象にしない"""
+    client = _authed_client()
+    with patch(
+        "app.routers.videos.video_service.init_chunk_upload",
+        side_effect=video_service.UploadRejectedError("上限超過"),
+    ):
+        resp = client.post(
+            "/videos/upload/init",
+            json={
+                "title": "t",
+                "filename": "a.mp4",
+                "total_chunks": 3,
+                "total_bytes": 999,
+            },
+        )
+    assert resp.status_code == 413
+    assert resp.json()["detail"] == "上限超過"
+
+
+def test_chunk_upload_rejected_returns_413() -> None:
+    """チャンク受信中の上限超過も 413 で返す"""
+    client = _authed_client()
+    with patch(
+        "app.routers.videos.video_service.save_chunk",
+        side_effect=video_service.UploadRejectedError("上限超過"),
+    ):
+        resp = client.post(
+            "/videos/upload/abc/chunk",
+            params={"index": 0},
+            files={"file": ("chunk", b"data", "application/octet-stream")},
+        )
+    assert resp.status_code == 413
+
+
+def test_upload_video_rejected_returns_413() -> None:
+    """単一リクエストアップロードでも上限超過は 413"""
+    client = _authed_client()
+    with patch(
+        "app.routers.videos.video_service.upload_video",
+        side_effect=video_service.UploadRejectedError("上限超過"),
+    ):
+        resp = client.post(
+            "/videos",
+            data={"title": "x"},
+            files={"file": ("a.mp4", b"dummy", "video/mp4")},
+        )
+    assert resp.status_code == 413
 
 
 # ---------------------------------------------------------------------------
