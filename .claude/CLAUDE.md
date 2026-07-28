@@ -74,13 +74,20 @@ npx orval                # backend が立ち上がってる状態で OpenAPI →
 
 ```bash
 cd ml
-uv sync --dev            # macOS は CPU 版 torch、Linux は CUDA 12.1 版
-uv run pytest
+uv sync                  # macOS は CPU 版 torch、Linux は CUDA 12.4 版（dev + training グループ込み）
 
 # RunPod 用イメージのビルド・push
 docker build --platform linux/amd64 --target runpod-worker -t takumm/tabletennis-ml:vX.Y.Z .
 docker push takumm/tabletennis-ml:vX.Y.Z
 ```
+
+依存グループは 3 つに分かれている。ローカルでは `[tool.uv] default-groups` により `dev` / `training` も既定で入るが、**推論イメージは `uv sync --no-default-groups` で本体依存のみに絞る**。学習でしか使わない tensorboard を RunPod ワーカーに載せないための分離なので、学習専用のパッケージを足すときは `training` グループに入れる。
+
+ML イメージのベースは **`python:3.10-slim-bookworm`**。CUDA ランタイムは torch の cu124 wheel が依存する `nvidia-*-cu12` パッケージが同梱するため、CUDA 入りのベースイメージは要らない（コンテナに必要なのはホスト側の NVIDIA ドライバのみ）。以前は `pytorch/pytorch:2.1.0-cuda12.1` を使っていたが、pyproject が cu124 を明示している以上そちらの torch/CUDA は一度も読み込まれず、約 7GB の死荷重になっていた。Debian は bookworm を明示ピンしている（trixie では `libglib2.0-0` が `libglib2.0-0t64` に改名されるなど、タグ追従で apt が壊れるため）。
+
+`--platform linux/amd64` は Apple Silicon 上では QEMU エミュレーションになり、`apt-get` だけで 15 分以上かかる。ビルドは amd64 ネイティブな環境で行うか、Docker Desktop の Rosetta を有効にする。
+
+なお ml/ にテストコードは現状存在しない（`uv run pytest` は 0 件で成功する）。
 
 ## Architecture
 
