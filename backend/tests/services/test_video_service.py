@@ -116,6 +116,85 @@ def test_call_ml_service_posts_to_runpod_when_enabled() -> None:
     assert "api.runpod.ai" in posted_url
 
 
+def test_call_ml_service_saves_runpod_job_id() -> None:
+    """RunPod が返したジョブIDを保存する。
+
+    これが無いと後から GPU の生死確認（/status）も停止（/cancel）もできない。
+    """
+    job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.job_repo.update_status"),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            return_value="http://dl",
+        ),
+        patch("app.services.video_service.USE_RUNPOD", True),
+        patch("app.services.video_service.RUNPOD_ENDPOINT_ID", "ep"),
+        patch("app.services.video_service.job_repo.set_runpod_job_id") as set_id,
+        patch("app.services.video_service.httpx") as mock_httpx,
+    ):
+        sl.return_value.__enter__.return_value = MagicMock()
+        client = mock_httpx.Client.return_value.__enter__.return_value
+        client.post.return_value.json.return_value = {"id": "rp-1"}
+        video_service.call_ml_service("videos/a.mp4", job_id, video_id)
+
+    set_id.assert_called_once()
+    assert set_id.call_args.args[1] == uuid.UUID(job_id)
+    assert set_id.call_args.args[2] == "rp-1"
+
+
+def test_call_ml_service_skips_save_when_runpod_returns_no_id() -> None:
+    """id が返らなければ保存しない（None を書き込んで監視対象を壊さない）"""
+    job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.job_repo.update_status"),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            return_value="http://dl",
+        ),
+        patch("app.services.video_service.USE_RUNPOD", True),
+        patch("app.services.video_service.RUNPOD_ENDPOINT_ID", "ep"),
+        patch("app.services.video_service.job_repo.set_runpod_job_id") as set_id,
+        patch("app.services.video_service.httpx") as mock_httpx,
+    ):
+        sl.return_value.__enter__.return_value = MagicMock()
+        client = mock_httpx.Client.return_value.__enter__.return_value
+        client.post.return_value.json.return_value = {}
+        video_service.call_ml_service("videos/a.mp4", job_id, video_id)
+
+    set_id.assert_not_called()
+
+
+def test_call_ml_service_sends_fail_callback_url() -> None:
+    """RunPod には失敗通知先も渡す（GPU 側が自分の失敗を伝えられるように）"""
+    job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with (
+        patch("app.services.video_service.SessionLocal") as sl,
+        patch("app.services.video_service.job_repo.update_status"),
+        patch("app.services.video_service.video_repo.update_status"),
+        patch("app.services.video_service.job_repo.set_runpod_job_id"),
+        patch(
+            "app.services.video_service.storage_service.generate_presigned_url",
+            return_value="http://dl",
+        ),
+        patch("app.services.video_service.USE_RUNPOD", True),
+        patch("app.services.video_service.RUNPOD_ENDPOINT_ID", "ep"),
+        patch("app.services.video_service.httpx") as mock_httpx,
+    ):
+        sl.return_value.__enter__.return_value = MagicMock()
+        client = mock_httpx.Client.return_value.__enter__.return_value
+        client.post.return_value.json.return_value = {"id": "rp-1"}
+        video_service.call_ml_service("videos/a.mp4", job_id, video_id)
+
+    sent = client.post.call_args.kwargs["json"]["input"]
+    assert sent["fail_callback_url"].endswith(f"/internal/jobs/{job_id}/fail")
+    assert sent["callback_url"].endswith(f"/internal/jobs/{job_id}/complete")
+
+
 def test_call_ml_service_delegates_failure_to_handler() -> None:
     job_id, video_id = str(uuid.uuid4()), str(uuid.uuid4())
     with (

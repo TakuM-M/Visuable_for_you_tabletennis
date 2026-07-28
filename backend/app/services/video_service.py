@@ -118,10 +118,16 @@ def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
                     },
                 )
                 response.raise_for_status()
+            # RunPod 側のジョブIDを控える。これが無いと GPU の生死確認（/status）も
+            # 停止（/cancel）もできず、課金を止める手段が無くなる
+            runpod_job_id = response.json().get("id")
+            if runpod_job_id:
+                with SessionLocal() as db:
+                    job_repo.set_runpod_job_id(db, job_uuid, runpod_job_id)
             logger.info(
                 "RunPod ジョブ送信成功 job_id=%s runpod_id=%s",
                 job_id,
-                response.json().get("id"),
+                runpod_job_id,
             )
         else:
             with httpx.Client(timeout=5.0) as client:

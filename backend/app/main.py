@@ -31,6 +31,12 @@ async def lifespan(app: FastAPI):
         id="dispatch_retries",
     )
     scheduler.add_job(
+        job_reaper.reconcile_runpod_jobs,
+        "interval",
+        seconds=settings.runpod_poll_interval_seconds,
+        id="reconcile_runpod_jobs",
+    )
+    scheduler.add_job(
         job_reaper.clean_tmp_dir,
         "interval",
         seconds=settings.tmp_cleaner_interval_seconds,

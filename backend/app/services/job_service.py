@@ -17,6 +17,7 @@ from app.repositories import job as job_repo
 from app.repositories import notification_log as notification_log_repo
 from app.repositories import user as user_repo
 from app.repositories import video as video_repo
+from app.services import runpod_service
 from app.services.email_service import (
     send_analysis_complete_email,
     send_clip_failure_email,
@@ -76,11 +77,21 @@ def handle_ml_failure(db: Session, job_id: uuid.UUID, error_message: str) -> Non
 
     リトライ枠が残っていれば next_retry_at を設定して failed に遷移。
     リトライ枠を使い切っていれば最終 failed として動画ステータスとメール通知も行う。
+
+    ML 失敗の入口（呼び出し失敗・完了処理失敗・タイムアウト・ML からの失敗通知・
+    RunPod 状態の突き合わせ）はすべてここに集約されているため、GPU の停止もここで
+    まとめて行う。
     """
     job = job_repo.get_by_id(db, job_id)
     if job is None:
         logger.warning("失敗ハンドリング対象のジョブが見つかりません job_id=%s", job_id)
         return
+
+    # 失敗を記録する前に GPU を止める。ここを飛ばして failed にすると RunPod の
+    # ワーカーが走り続けて課金が止まらず、さらにリトライで GPU が並列に増えてしまう。
+    # 既に終了しているジョブへの cancel は無害なので状態を問わず投げる。
+    if job.runpod_job_id:
+        runpod_service.cancel_job(job.runpod_job_id)
 
     if job.retry_count < settings.job_max_retries:
         next_retry_at = _compute_next_retry_at(job.retry_count)
