@@ -39,8 +39,14 @@ env/
 .ipynb_checkpoints
 
 # config_api
-configs/
-configs/api.config
+# 推論イメージに焼き込む runpod_config.json だけは追跡する。CI（actions/checkout）は
+# git 追跡ファイルしか持って来ないため、ここで除外するとイメージから設定が欠落し、
+# runpod_handler.py が起動直後の open() で落ちてワーカーが unhealthy になる。
+#
+# パターンに「/」を含めると .gitignore のある階層からの相対パスになるため、
+# ml/ を省いて configs/* と書くとルート直下の configs/ にしかマッチしない。
+ml/configs/*
+!ml/configs/runpod_config.json
 
 # pytest
 .pytest_cache/
@@ -80,7 +86,16 @@ outputs/*.txt
 temp/
 
 # Model files (ML weights only)
-ml/models/
+# 推論（runpod-worker）が使う4ファイル（計 54MB）だけ追跡する。学習の中間生成物や
+# 未使用の事前学習モデルは除外したまま。イメージを CI でビルドする以上、焼き込む
+# モデルが git 管理下に無いとイメージから欠落する。
+# ml/.dockerignore の許可リストと必ず同じ4ファイルに揃える。
+ml/models/**
+!ml/models/**/
+!ml/models/table_detection/best.pt
+!ml/models/pretrained/yolo11m-pose.pt
+!ml/models/play_classifier/lstm_model.pth
+!ml/models/play_classifier/lstm_config.json
 
 # documentation
 docs/develop

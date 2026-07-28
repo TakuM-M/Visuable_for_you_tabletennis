@@ -1,0 +1,49 @@
+{
+  "models": {
+    "table_detection": "/workspace/models/table_detection/best.pt",
+    "pose_estimation": "/workspace/models/pretrained/yolo11m-pose.pt",
+    "play_classifier": "/workspace/models/play_classifier/lstm_model.pth",
+    "play_classifier_config": "/workspace/models/play_classifier/lstm_config.json"
+  },
+  "device": "cuda",
+  "table_detection": {
+    "cache_valid_frames": 500,
+    "min_confidence": 0.6,
+    "max_detection_attempts": 200
+  },
+  "pose_tracking": {
+    "conf_threshold": 0.5,
+    "iou_threshold": 0.7,
+    "table_distance_threshold": 0.2,
+    "min_keypoint_confidence": 0.5,
+    "imgsz": 640,
+    "half": true
+  },
+  "player_classification": {
+    "near_table_threshold": 0.1,
+    "min_tracking_frames": 10,
+    "max_players": 2,
+    "max_inactive_frames": 30,
+    "min_player_score": 0.3,
+    "recent_frames_window": 146,
+    "max_consecutive_other_count": 30,
+    "movement_noise_threshold": 5.0
+  },
+  "tracking_export": {
+    "min_consecutive_frames": 30,
+    "max_frame_gap": 5
+  },
+  "video_processing": {
+    "target_fps": 15.0,
+    "show_progress": true,
+    "output_codec": "mp4v"
+  },
+  "scene_detection": {
+    "threshold": 0.5,
+    "min_scene_duration": 30
+  },
+  "pipeline": {
+    "show_progress": true,
+    "save_intermediate_files": false
+  }
+}
