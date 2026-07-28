@@ -138,7 +138,13 @@ ML イメージのベースは **`python:3.10-slim-bookworm`**。CUDA ランタ�
 
 `Dockerfile` は 6 ステージのマルチビルド（`base` → `system-deps` → `python-deps` → `app` / `mock` / `runpod-worker`）。target を変えて使い分ける。
 
-学習済みモデルは `ml/models/` に置く（`.gitignore` で除外）。RunPod では Network Volume をマウントし、`TABLE_MODEL_PATH` 等の環境変数でパスを与える。
+学習済みモデルは `ml/models/` に置く。**推論が使う 4 ファイル（計 54MB）だけは git 管理下**に置き、イメージに焼き込む。RunPod に Network Volume はマウントしていないので、モデルはイメージに入っていないと動かない。
+
+- `models/table_detection/best.pt` / `models/pretrained/yolo11m-pose.pt` / `models/play_classifier/lstm_model.pth` / `models/play_classifier/lstm_config.json`
+- 学習の中間生成物や未使用の事前学習モデルは除外したまま。**追跡対象はルートの `.gitignore` と `ml/.dockerignore` の 2 箇所に許可リストがあるので必ず揃える**。
+- モデルを差し替えるときは `ml/configs/runpod_config.json`（これも git 管理下）のパスと実ファイル名の一致を確認する。`PlaySceneDetector._load_config()` は設定ファイルが見つからなくても警告だけで既定値に進むため、パスの綴り違いが黙って通る。
+
+`ml/models/` と `ml/configs/` を丸ごと `.gitignore` していた頃、ローカルビルドでは作業ディレクトリの実ファイルが `COPY . /workspace/` で入るため気づけなかったが、ビルドを CI に移した途端 `actions/checkout` がこれらを持って来ずイメージから欠落し、ワーカーが起動直後に `FileNotFoundError` で落ちて RunPod 上で unhealthy になった（v1.3.2）。CI の「ワーカー起動のスモークテスト」がこの欠落を検知する。
 
 ### Infra
 

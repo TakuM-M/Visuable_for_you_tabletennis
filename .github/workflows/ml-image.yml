@@ -103,6 +103,30 @@ jobs:
           print('OK: 推論パイプラインの import に成功')
           "
 
+      # runpod_handler.py はモジュール読み込み時に設定ファイルを開いてモデルを
+      # ロードするため、「import が通る = ワーカーが READY になれる」と言える。
+      # ここまで検証しないと、設定やモデルがイメージから欠落していても push でき、
+      # RunPod 側でワーカーが unhealthy になって初めて気づくことになる
+      # （v1.3.2 で発生。configs/ と models/ が .gitignore され、ローカルビルドでは
+      # 作業ディレクトリの実ファイルが COPY されていたが CI では欠落した）。
+      - name: ワーカー起動のスモークテスト
+        run: |
+          docker run --rm -e ML_DEVICE=cpu ${{ steps.meta.outputs.tag }} python -c "
+          import json, pathlib, runpod
+
+          # 設定が指すモデルの実在を先に確かめる。PlaySceneDetector は設定ファイルが
+          # 無くても警告のみで既定値に進むので、import 任せだとパスの綴り違いを見逃す。
+          cfg = json.load(open('/workspace/configs/runpod_config.json'))
+          missing = [p for p in cfg['models'].values() if not pathlib.Path(p).exists()]
+          assert not missing, f'設定が指すモデルがイメージ内に無い: {missing}'
+          print('OK: 設定が参照する全モデルが存在')
+
+          # serverless.start はジョブを待ち続けて戻らないためスタブに差し替える
+          runpod.serverless.start = lambda *a, **k: print('serverless.start に到達')
+          import runpod_handler
+          print('OK: ワーカーは起動できる')
+          "
+
       - name: Docker Hub にログイン
         if: github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3

@@ -1,0 +1,47 @@
+{
+  "model": {
+    "hidden_size": 128,
+    "num_layers": 2,
+    "dropout": 0.4
+  },
+  "dataset": {
+    "train_data_dirs": [
+      "data/detect/01_train",
+      "data/detect/09_train",
+      "data/detect/10_train",
+      "data/detect/11_train",
+      "data/detect/13_train",
+      "data/detect/02_train",
+      "data/detect/03_train",
+      "data/detect/04_train",
+      "data/detect/06_train"
+    ],
+    "val_data_dirs": [
+      "data/detect/05_train",
+      "data/detect/07_train",
+      "data/detect/08_train",
+      "data/detect/12_train",
+      "data/detect/14_train"
+    ],
+    "csv_filename": "player_pose_data.csv",
+    "label_filename": "play_labels.csv",
+    "sequence_length": 30,
+    "stride": 5,
+    "batch_size": 32,
+    "num_workers": 4
+  },
+  "optimizer": {
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "scheduler_patience": 5,
+    "scheduler_factor": 0.5,
+    "scheduler_min_lr": 1e-06
+  },
+  "training": {
+    "epochs": 50,
+    "save_every": 110,
+    "device": "cuda",
+    "early_stopping_patience": 10,
+    "pos_weight": 1.5
+  }
+}
