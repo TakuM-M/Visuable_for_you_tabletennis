@@ -48,6 +48,91 @@ def test_reap_timeouts_noop_when_no_jobs() -> None:
     handle.assert_not_called()
 
 
+# --- reconcile_runpod_jobs --------------------------------------------------
+#   コールバックが届かないまま GPU 側が終了したケースを、job_timeout_hours を
+#   待たずに検知する。RunPod の状態ごとの分岐が肝。
+
+
+def _make_runpod_job(**kw) -> SimpleNamespace:
+    defaults = dict(id=uuid.uuid4(), runpod_job_id="rp-1")
+    defaults.update(kw)
+    return SimpleNamespace(**defaults)
+
+
+def _run_reconcile(status: str | None, jobs: list | None = None):
+    """RunPod の状態を固定して reconcile_runpod_jobs を走らせ、handle mock を返す"""
+    targets = [_make_runpod_job()] if jobs is None else jobs
+    with (
+        patch("app.services.video_service.USE_RUNPOD", True),
+        patch("app.services.job_reaper.SessionLocal") as sl,
+        patch(
+            "app.services.job_reaper.job_repo.get_running_runpod_jobs",
+            return_value=targets,
+        ),
+        patch(
+            "app.services.job_reaper.runpod_service.get_job_status", return_value=status
+        ),
+        patch("app.services.job_reaper.job_service.handle_ml_failure") as handle,
+    ):
+        sl.return_value.__enter__.return_value = MagicMock()
+        job_reaper.reconcile_runpod_jobs()
+    return handle
+
+
+def test_reconcile_skips_when_runpod_disabled() -> None:
+    """dev（ml-mock 経路）では RunPod に問い合わせない"""
+    with (
+        patch("app.services.video_service.USE_RUNPOD", False),
+        patch("app.services.job_reaper.job_repo.get_running_runpod_jobs") as get_jobs,
+    ):
+        job_reaper.reconcile_runpod_jobs()
+
+    get_jobs.assert_not_called()
+
+
+def test_reconcile_fails_job_when_runpod_dead() -> None:
+    """FAILED / TIMED_OUT / CANCELLED は即座に失敗確定させる（(b) の本命）"""
+    for status in ("FAILED", "TIMED_OUT", "CANCELLED"):
+        handle = _run_reconcile(status)
+        handle.assert_called_once()
+        assert status in handle.call_args.args[2]
+
+
+def test_reconcile_keeps_active_job_untouched() -> None:
+    """まだ動いているジョブには手を出さない"""
+    for status in ("IN_QUEUE", "IN_PROGRESS", "RUNNING"):
+        handle = _run_reconcile(status)
+        handle.assert_not_called()
+
+
+def test_reconcile_keeps_job_when_status_unknown() -> None:
+    """問い合わせ失敗（None）で稼働中のジョブを殺さない"""
+    handle = _run_reconcile(None)
+    handle.assert_not_called()
+
+
+def test_reconcile_ignores_unrecognized_status() -> None:
+    """未知の状態は判断を保留する（reap_timeouts が最終的に拾う）"""
+    handle = _run_reconcile("SOMETHING_NEW")
+    handle.assert_not_called()
+
+
+def test_reconcile_fails_completed_job_without_callback() -> None:
+    """COMPLETED でもコールバック未達なら失敗扱いにしてリトライさせる。
+
+    エラーメッセージで「GPU は動いたがコールバックが届かなかった」と分かるようにする。
+    """
+    handle = _run_reconcile("COMPLETED")
+    handle.assert_called_once()
+    assert "コールバック未達" in handle.call_args.args[2]
+
+
+def test_reconcile_handles_multiple_jobs() -> None:
+    jobs = [_make_runpod_job(), _make_runpod_job()]
+    handle = _run_reconcile("FAILED", jobs=jobs)
+    assert handle.call_count == 2
+
+
 # --- dispatch_retries -------------------------------------------------------
 
 

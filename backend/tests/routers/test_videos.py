@@ -9,7 +9,7 @@
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -53,6 +53,7 @@ def _make_video(**kw) -> SimpleNamespace:
         title="テスト動画",
         storage_path="videos/test.mp4",
         output_path=None,
+        thumbnail_path=None,
         duration=None,
         source_duration=None,
         status=VideoStatus.uploaded,
@@ -119,7 +120,12 @@ def test_chunk_upload_init_returns_upload_id() -> None:
     ):
         resp = client.post(
             "/videos/upload/init",
-            json={"title": "t", "filename": "a.mp4", "total_chunks": 3},
+            json={
+                "title": "t",
+                "filename": "a.mp4",
+                "total_chunks": 3,
+                "total_bytes": 100,
+            },
         )
     assert resp.status_code == 200
     assert resp.json()["upload_id"] == "upload-123"
@@ -133,7 +139,12 @@ def test_chunk_upload_init_quota_exceeded_returns_409() -> None:
     ):
         resp = client.post(
             "/videos/upload/init",
-            json={"title": "t", "filename": "a.mp4", "total_chunks": 3},
+            json={
+                "title": "t",
+                "filename": "a.mp4",
+                "total_chunks": 3,
+                "total_bytes": 100,
+            },
         )
     assert resp.status_code == 409
 
@@ -166,6 +177,56 @@ def test_chunk_upload_unknown_upload_returns_404() -> None:
             files={"file": ("chunk", b"data", "application/octet-stream")},
         )
     assert resp.status_code == 404
+
+
+def test_chunk_upload_init_too_large_returns_413() -> None:
+    """サイズ上限超過は 413。フロントはこのステータスをリトライ対象にしない"""
+    client = _authed_client()
+    with patch(
+        "app.routers.videos.video_service.init_chunk_upload",
+        side_effect=video_service.UploadRejectedError("上限超過"),
+    ):
+        resp = client.post(
+            "/videos/upload/init",
+            json={
+                "title": "t",
+                "filename": "a.mp4",
+                "total_chunks": 3,
+                "total_bytes": 999,
+            },
+        )
+    assert resp.status_code == 413
+    assert resp.json()["detail"] == "上限超過"
+
+
+def test_chunk_upload_rejected_returns_413() -> None:
+    """チャンク受信中の上限超過も 413 で返す"""
+    client = _authed_client()
+    with patch(
+        "app.routers.videos.video_service.save_chunk",
+        side_effect=video_service.UploadRejectedError("上限超過"),
+    ):
+        resp = client.post(
+            "/videos/upload/abc/chunk",
+            params={"index": 0},
+            files={"file": ("chunk", b"data", "application/octet-stream")},
+        )
+    assert resp.status_code == 413
+
+
+def test_upload_video_rejected_returns_413() -> None:
+    """単一リクエストアップロードでも上限超過は 413"""
+    client = _authed_client()
+    with patch(
+        "app.routers.videos.video_service.upload_video",
+        side_effect=video_service.UploadRejectedError("上限超過"),
+    ):
+        resp = client.post(
+            "/videos",
+            data={"title": "x"},
+            files={"file": ("a.mp4", b"dummy", "video/mp4")},
+        )
+    assert resp.status_code == 413
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +312,82 @@ def test_get_video_requires_auth() -> None:
     client = TestClient(_make_app())
     resp = client.get(f"/videos/{uuid.uuid4()}")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# expires_at（保持期限）/ thumbnail_url（サムネイル）
+#   どちらも DB に持たない導出値で、_to_response が組み立てる。
+# ---------------------------------------------------------------------------
+def test_response_expires_at_is_created_at_plus_retention_days() -> None:
+    """保持期限は created_at + video_retention_days（更新日ではなく作成日起点）"""
+    user = _make_user()
+    client = _authed_client(user)
+    created = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+    video = _make_video(user_id=user.id, created_at=created)
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch.object(videos.settings, "video_retention_days", 7.0),
+    ):
+        resp = client.get(f"/videos/{video.id}")
+
+    assert resp.status_code == 200
+    expires_at = datetime.fromisoformat(resp.json()["expires_at"])
+    assert expires_at == created + timedelta(days=7)
+
+
+def test_response_includes_thumbnail_url_when_generated() -> None:
+    """thumbnail_path があれば署名済み URL を同梱する（<img> から直接読める）"""
+    user = _make_user()
+    client = _authed_client(user)
+    video = _make_video(user_id=user.id, thumbnail_path="thumbnails/abc.jpg")
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch(
+            "app.routers.videos.storage_service.generate_presigned_url",
+            return_value="https://r2.example/thumb-signed",
+        ) as gen_mock,
+    ):
+        resp = client.get(f"/videos/{video.id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["thumbnail_url"] == "https://r2.example/thumb-signed"
+    assert gen_mock.call_args.args[0] == "thumbnails/abc.jpg"
+
+
+def test_response_thumbnail_url_is_null_when_not_generated() -> None:
+    """未生成（生成失敗・機能追加以前の動画）なら null で、署名も発行しない"""
+    user = _make_user()
+    client = _authed_client(user)
+    video = _make_video(user_id=user.id, thumbnail_path=None)
+    with (
+        patch("app.core.deps.video_repo.get_by_id", return_value=video),
+        patch("app.routers.videos.storage_service.generate_presigned_url") as gen_mock,
+    ):
+        resp = client.get(f"/videos/{video.id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["thumbnail_url"] is None
+    gen_mock.assert_not_called()
+
+
+def test_list_videos_includes_expires_at_and_thumbnail_url() -> None:
+    """一覧も詳細と同じ導出値を返す（一覧だけ _to_response を通し忘れると壊れる）"""
+    user = _make_user()
+    client = _authed_client(user)
+    items = [_make_video(user_id=user.id, thumbnail_path="thumbnails/a.jpg")]
+    with (
+        patch("app.routers.videos.video_repo.get_by_user_id", return_value=items),
+        patch(
+            "app.routers.videos.storage_service.generate_presigned_url",
+            return_value="https://r2.example/thumb-signed",
+        ),
+    ):
+        resp = client.get("/videos")
+
+    assert resp.status_code == 200
+    body = resp.json()[0]
+    assert body["thumbnail_url"] == "https://r2.example/thumb-signed"
+    assert body["expires_at"] is not None
 
 
 # ---------------------------------------------------------------------------

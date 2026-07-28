@@ -24,6 +24,7 @@ def _make_job(**kw) -> SimpleNamespace:
         video_id=uuid.uuid4(),
         retry_count=0,
         status=JobStatus.failed,
+        runpod_job_id=None,
     )
     defaults.update(kw)
     return SimpleNamespace(**defaults)
@@ -127,6 +128,57 @@ def test_handle_ml_failure_final_failure_when_exhausted() -> None:
     assert mark_failed.call_args.args[3] is None
     video_update.assert_called_once_with(db, job.video_id, VideoStatus.failed)
     notify.assert_called_once()
+
+
+def test_handle_ml_failure_cancels_runpod_job() -> None:
+    """失敗を記録する前に GPU を止める。
+
+    ここを飛ばすと RunPod のワーカーが走り続けて課金が止まらず、さらに
+    リトライで GPU が並列に増えてしまう。
+    """
+    db = MagicMock()
+    job = _make_job(retry_count=0, runpod_job_id="rp-1")
+    with (
+        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
+        patch("app.services.job_service.settings.job_max_retries", 2),
+        patch("app.services.job_service.job_repo.mark_failed"),
+        patch("app.services.job_service.runpod_service.cancel_job") as cancel,
+    ):
+        job_service.handle_ml_failure(db, job.id, "boom")
+
+    cancel.assert_called_once_with("rp-1")
+
+
+def test_handle_ml_failure_skips_cancel_without_runpod_id() -> None:
+    """ml-mock 経路（runpod_job_id が無い）では停止 API を叩かない"""
+    db = MagicMock()
+    job = _make_job(retry_count=0, runpod_job_id=None)
+    with (
+        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
+        patch("app.services.job_service.settings.job_max_retries", 2),
+        patch("app.services.job_service.job_repo.mark_failed"),
+        patch("app.services.job_service.runpod_service.cancel_job") as cancel,
+    ):
+        job_service.handle_ml_failure(db, job.id, "boom")
+
+    cancel.assert_not_called()
+
+
+def test_handle_ml_failure_proceeds_when_cancel_fails() -> None:
+    """停止に失敗しても失敗処理は最後まで進む（DB が未更新のまま残らない）"""
+    db = MagicMock()
+    job = _make_job(retry_count=0, runpod_job_id="rp-1")
+    with (
+        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
+        patch("app.services.job_service.settings.job_max_retries", 2),
+        patch("app.services.job_service.job_repo.mark_failed") as mark_failed,
+        patch(
+            "app.services.job_service.runpod_service.cancel_job", return_value=False
+        ),
+    ):
+        job_service.handle_ml_failure(db, job.id, "boom")
+
+    mark_failed.assert_called_once()
 
 
 # --- _send_failure_notification --------------------------------------------
@@ -309,6 +361,25 @@ def test_process_complete_job_no_failure_on_success() -> None:
         job_service.process_complete_job(uuid.uuid4(), [])
 
     handle.assert_not_called()
+
+
+# --- process_fail_job -------------------------------------------------------
+
+
+def test_process_fail_job_delegates_to_handle_ml_failure() -> None:
+    """ML からの失敗通知はそのまま handle_ml_failure に渡り、リトライ判定に乗る。"""
+    job_id = uuid.uuid4()
+    with (
+        patch("app.services.job_service.SessionLocal") as sl,
+        patch("app.services.job_service.handle_ml_failure") as handle,
+    ):
+        sl.return_value.__enter__.return_value = MagicMock()
+        job_service.process_fail_job(job_id, "HTTPStatusError: 403 Forbidden")
+
+    handle.assert_called_once()
+    assert handle.call_args.args[1] == job_id
+    # 原因を追えるよう ML 側のエラー文字列を error_message に残す
+    assert "HTTPStatusError: 403 Forbidden" in handle.call_args.args[2]
 
 
 # --- complete_job -----------------------------------------------------------

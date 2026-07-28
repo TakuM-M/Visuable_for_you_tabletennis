@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.video import Video
 from app.repositories import job as job_repo
-from app.schemas.job import JobCompleteRequest, JobResponse
+from app.schemas.job import JobCompleteRequest, JobFailRequest, JobResponse
 from app.services import job_service
 
 logger = get_logger(__name__)
@@ -65,4 +65,27 @@ def complete_job(
     ]
     background_tasks.add_task(job_service.process_complete_job, job_id, clips)
     logger.info("ジョブ完了コールバック受信 job_id=%s clips=%s件", job_id, len(clips))
+    return {"message": "受付完了"}
+
+
+@router.post(
+    "/internal/jobs/{job_id}/fail",
+    dependencies=[Depends(require_internal_api_key)],
+    status_code=202,
+)
+def fail_job(
+    job_id: uuid.UUID,
+    request: JobFailRequest,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """MLサービスからの処理失敗コールバック。
+
+    ML 側が自分の失敗を自覚できたときにここへ通知してもらい、job_reaper の
+    タイムアウト待ち（job_timeout_hours）を経ずに失敗を確定させる。
+    リトライ判定・通知は complete と同じく背景タスクへ委譲して即 202 を返す。
+    """
+    background_tasks.add_task(job_service.process_fail_job, job_id, request.error)
+    logger.warning(
+        "ジョブ失敗コールバック受信 job_id=%s error=%s", job_id, request.error
+    )
     return {"message": "受付完了"}

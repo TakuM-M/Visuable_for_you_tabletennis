@@ -26,9 +26,15 @@ def _get_client():
     return _client
 
 
-def upload_file(local_path: str, r2_key: str) -> None:
-    """ローカルファイルをR2にアップロードする"""
-    _get_client().upload_file(local_path, R2_BUCKET_NAME, r2_key)
+def upload_file(local_path: str, r2_key: str, content_type: str | None = None) -> None:
+    """ローカルファイルをR2にアップロードする
+
+    content_type を渡すとオブジェクトのメタデータに反映する。boto3 は既定で
+    Content-Type を付けず octet-stream 扱いになるため、<img> に直接読ませる
+    サムネイルのようなファイルでは明示する。
+    """
+    extra_args = {"ContentType": content_type} if content_type else None
+    _get_client().upload_file(local_path, R2_BUCKET_NAME, r2_key, ExtraArgs=extra_args)
 
 
 def generate_presigned_url(

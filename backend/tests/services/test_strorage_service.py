@@ -16,7 +16,26 @@ def test_upload_file_calls_client_upload_file():
     with patch("app.services.storage_service._get_client", return_value=client):
         storage_service.upload_file("/tmp/a.mp4", "videos/a.mp4")
     client.upload_file.assert_called_once_with(
-        "/tmp/a.mp4", storage_service.R2_BUCKET_NAME, "videos/a.mp4"
+        "/tmp/a.mp4", storage_service.R2_BUCKET_NAME, "videos/a.mp4", ExtraArgs=None
+    )
+
+
+def test_upload_file_sets_content_type_when_given():
+    """content_type 指定時は ExtraArgs でオブジェクトのメタデータに反映する
+
+    サムネイルは <img> から直接読ませるため、octet-stream のままだと
+    ブラウザによっては表示されない。
+    """
+    client = Mock()
+    with patch("app.services.storage_service._get_client", return_value=client):
+        storage_service.upload_file(
+            "/tmp/a.jpg", "thumbnails/a.jpg", content_type="image/jpeg"
+        )
+    client.upload_file.assert_called_once_with(
+        "/tmp/a.jpg",
+        storage_service.R2_BUCKET_NAME,
+        "thumbnails/a.jpg",
+        ExtraArgs={"ContentType": "image/jpeg"},
     )
 
 

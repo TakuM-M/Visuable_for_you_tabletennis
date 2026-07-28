@@ -7,7 +7,7 @@ from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.repositories import job as job_repo
 from app.repositories import video as video_repo
-from app.services import job_service, metrics_service, video_service
+from app.services import job_service, metrics_service, runpod_service, video_service
 from app.services.video_service import LOCAL_TMP_DIR, call_ml_service
 
 logger = get_logger(__name__)
@@ -23,6 +23,53 @@ def reap_timeouts() -> None:
                 "タイムアウト検知 job_id=%s started_at=%s", job.id, job.started_at
             )
             job_service.handle_ml_failure(db, job.id, "ML タイムアウト")
+
+
+def reconcile_runpod_jobs() -> None:
+    """processing のジョブを RunPod 側の実状態と突き合わせ、終了済みなら失敗扱いにする。
+
+    GPU 側が自分の失敗を通知できないケース（OOM・ワーカークラッシュ・コールバック
+    送信自体の失敗）は /internal/jobs/{id}/fail が呼ばれないため、backend からは
+    「processing のまま音信不通」にしか見えない。RunPod に問い合わせることで
+    job_timeout_hours（既定 24 時間）を待たずに検知する。
+    """
+    if not video_service.USE_RUNPOD:
+        return
+
+    with SessionLocal() as db:
+        # セッションを跨いで使うので必要な値だけコピーする
+        targets = [
+            (job.id, job.runpod_job_id) for job in job_repo.get_running_runpod_jobs(db)
+        ]
+
+    for job_id, runpod_job_id in targets:
+        status = runpod_service.get_job_status(runpod_job_id)
+
+        # None（問い合わせ失敗）はまだ生きている可能性があるので触らない。
+        # 一時的な通信断で稼働中のジョブを殺さないための判断。
+        if status is None or status in runpod_service.ACTIVE_STATUSES:
+            continue
+
+        if status == "COMPLETED":
+            # 推論は完了しているのにコールバックが届いていない。原因は backend 側
+            # （502・APIキー不一致）やネットワークであることが多く、リトライしても
+            # 同じ結果になりうるため、ログとエラーメッセージで区別できるようにする
+            message = "RunPod は COMPLETED だがコールバック未達"
+        elif status in runpod_service.DEAD_STATUSES:
+            message = f"RunPod ジョブ異常終了: {status}"
+        else:
+            # 未知の状態は判断を保留する（誤検知で生きているジョブを殺さない）。
+            # 本当に固まっていれば reap_timeouts が最終的に拾う
+            logger.warning(
+                "RunPod の未知の状態を検知 job_id=%s status=%s", job_id, status
+            )
+            continue
+
+        logger.warning(
+            "RunPod 状態の不一致を検知 job_id=%s runpod_status=%s", job_id, status
+        )
+        with SessionLocal() as db:
+            job_service.handle_ml_failure(db, job_id, message)
 
 
 def dispatch_retries() -> None:

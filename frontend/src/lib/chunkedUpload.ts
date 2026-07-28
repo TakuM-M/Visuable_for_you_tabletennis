@@ -4,6 +4,11 @@ const CHUNK_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_ATTEMPTS = 4; // 初回 + リトライ3回
 const RETRY_BASE_DELAY_MS = 1000; // リトライ間隔（指数バックオフの初期値）
 
+// アップロードサイズの上限。backend の settings.max_upload_bytes と揃えること。
+// ここで先に弾くのは、上限超過が確定しているファイルのために何 GB も
+// 送らせないため。最終的な担保は backend 側（413）が行う。
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024; // 5GB
+
 export interface ChunkedUploadOptions {
   file: File;
   title: string;
@@ -20,15 +25,84 @@ class UploadHttpError extends Error {
   }
 }
 
+// そのまま画面に出してよいエラー。原因がユーザー側にあり、やり直しても
+// 同じ結果になるもの（サイズ超過・長さ超過）だけをこれで包む。
+export class UploadRejectedError extends Error {}
+
+// 解析を受け付ける動画長の上限。backend の settings.max_video_duration_seconds と揃える
+export const MAX_VIDEO_DURATION_SECONDS = 3600; // 60分
+
+export function validateUploadFile(file: File): string | null {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const gb = MAX_UPLOAD_BYTES / 1024 ** 3;
+    return `ファイルサイズが上限 ${gb}GB を超えています`;
+  }
+  if (file.size === 0) {
+    return "ファイルが空です";
+  }
+  return null;
+}
+
+export function validateVideoDuration(duration: number | null): string | null {
+  // 読み取れなかった場合は backend 側（結合後の ffprobe）の判定に委ねる
+  if (duration === null) return null;
+  if (duration > MAX_VIDEO_DURATION_SECONDS) {
+    return (
+      `動画の長さが上限 ${MAX_VIDEO_DURATION_SECONDS / 60}分 を超えています` +
+      `（${(duration / 60).toFixed(1)}分）`
+    );
+  }
+  return null;
+}
+
+// ブラウザにメタデータだけ読ませて再生時間を得る。長さの上限超過を
+// アップロード前に知らせるためのもので、数 GB 送りきってから 413 で
+// 落とされる事態を避ける。読めなければ null（判定は backend に委ねる）。
+export function readVideoDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const finish = (value: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+    video.preload = "metadata";
+    video.onloadedmetadata = () =>
+      finish(Number.isFinite(video.duration) ? video.duration : null);
+    video.onerror = () => finish(null);
+    video.src = url;
+  });
+}
+
 const abortError = () => new DOMException("Aborted", "AbortError");
 
 const isAbortError = (e: unknown): boolean =>
   e instanceof DOMException && e.name === "AbortError";
 
+// レスポンスボディの detail（FastAPI の HTTPException）を取り出す
+const parseDetail = (body: string): string | null => {
+  try {
+    const parsed = JSON.parse(body);
+    return typeof parsed?.detail === "string" ? parsed.detail : null;
+  } catch {
+    return null;
+  }
+};
+
+// 413 はサイズ・長さの上限超過。理由をそのまま画面に出し、リトライはしない。
+const httpError = (status: number, label: string, body: string): Error =>
+  status === 413
+    ? new UploadRejectedError(
+        parseDetail(body) ?? "アップロード可能なサイズを超えています",
+      )
+    : new UploadHttpError(`${label} failed: ${status}`, status);
+
 // 一時的な失敗（ネットワークエラー・5xx・429）のみリトライ対象とする。
 // モバイル回線の瞬断や画面ロックによる切断、レート制限の 503 をここで救う。
+// 上限超過（UploadRejectedError）は何度送っても同じなので除外する。
 const isTransient = (e: unknown): boolean =>
   !isAbortError(e) &&
+  !(e instanceof UploadRejectedError) &&
   (!(e instanceof UploadHttpError) || e.status >= 500 || e.status === 429);
 
 // complete は再実行すると動画が二重登録されうるため、
@@ -99,7 +173,7 @@ function sendChunk(
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new UploadHttpError(`${label} failed: ${xhr.status}`, xhr.status));
+      else reject(httpError(xhr.status, label, xhr.responseText));
     };
     xhr.onerror = () => reject(new Error(`${label} failed: network error`));
     xhr.onabort = () => reject(abortError());
@@ -118,6 +192,9 @@ export async function chunkedUpload({
   onProgress,
   signal,
 }: ChunkedUploadOptions) {
+  const invalid = validateUploadFile(file);
+  if (invalid) throw new UploadRejectedError(invalid);
+
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
   // 進捗は「送信済みバイト / 全体バイト」で報告する。
@@ -133,20 +210,22 @@ export async function chunkedUpload({
 
   // 1. Init
   const initRes = await withRetry(
-    () =>
-      fetch("/api/videos/upload/init", {
+    async () => {
+      const res = await fetch("/api/videos/upload/init", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           title,
           filename: file.name,
           total_chunks: totalChunks,
+          // 上限判定を 1 バイト送る前に済ませてもらう
+          total_bytes: file.size,
         }),
         signal,
-      }).then((res) => {
-        if (!res.ok) throw new UploadHttpError(`Init failed: ${res.status}`, res.status);
-        return res;
-      }),
+      });
+      if (!res.ok) throw httpError(res.status, "Init", await res.text());
+      return res;
+    },
     isTransient,
     signal,
   );
@@ -176,17 +255,15 @@ export async function chunkedUpload({
 
   // 3. Complete
   const completeRes = await withRetry(
-    () =>
-      fetch(`/api/videos/upload/${upload_id}/complete`, {
+    async () => {
+      const res = await fetch(`/api/videos/upload/${upload_id}/complete`, {
         method: "POST",
         headers: { ...authHeaders() },
         signal,
-      }).then((res) => {
-        if (!res.ok) {
-          throw new UploadHttpError(`Complete failed: ${res.status}`, res.status);
-        }
-        return res;
-      }),
+      });
+      if (!res.ok) throw httpError(res.status, "Complete", await res.text());
+      return res;
+    },
     isSafeToRetryComplete,
     signal,
   );

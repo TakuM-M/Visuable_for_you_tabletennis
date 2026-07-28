@@ -58,6 +58,32 @@ def update_status(
     return job
 
 
+def set_runpod_job_id(
+    db: Session, job_id: uuid.UUID, runpod_job_id: str
+) -> Job | None:
+    """RunPod が採番したジョブIDを記録する（/status・/cancel を叩くのに必要）"""
+    job = get_by_id(db, job_id)
+    if job is None:
+        return None
+    job.runpod_job_id = runpod_job_id
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_running_runpod_jobs(db: Session) -> list[Job]:
+    """RunPod 側の状態を突き合わせる対象（processing かつ runpod_job_id を持つ）を返す。
+
+    queued は RunPod へまだ投げていない（= runpod_job_id が無い）ため対象外。
+    """
+    return (
+        db.query(Job)
+        .filter(Job.status == JobStatus.processing)
+        .filter(Job.runpod_job_id.is_not(None))
+        .all()
+    )
+
+
 def mark_failed(
     db: Session,
     job_id: uuid.UUID,
@@ -123,6 +149,9 @@ def prepare_for_auto_retry(db: Session, job_id: uuid.UUID) -> Job | None:
     job.completed_at = None
     job.next_retry_at = None
     job.error_message = None
+    # 前回の RunPod ジョブIDは無効。残すと再キック直後（新しいIDが保存される前）に
+    # 監視が古いジョブの状態を見て誤って失敗扱いにしてしまう
+    job.runpod_job_id = None
     db.commit()
     db.refresh(job)
     return job
@@ -139,6 +168,7 @@ def reset_for_manual_retry(db: Session, job_id: uuid.UUID) -> Job | None:
     job.completed_at = None
     job.next_retry_at = None
     job.error_message = None
+    job.runpod_job_id = None
     db.commit()
     db.refresh(job)
     return job

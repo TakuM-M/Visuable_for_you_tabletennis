@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -9,6 +11,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_user, get_owned_video
 from app.db.session import get_db
 from app.models.user import User
@@ -25,6 +28,41 @@ from app.services import video_service
 from app.services import storage_service
 
 router = APIRouter(prefix="/videos", tags=["videos"])
+
+# サムネイル URL の有効期限（秒）。一覧を開いたまま放置されても画像が切れない
+# 程度に長めを取る（動画本体の presigned URL より軽い情報なので許容できる）
+THUMBNAIL_URL_EXPIRES_IN = 7200
+
+
+def _to_response(video: Video) -> VideoResponse:
+    """Video モデルを API レスポンスへ変換する。
+
+    expires_at（保持期限）と thumbnail_url（署名済み URL）は DB に持たない導出値
+    なのでここで組み立てる。VideoResponse を返すエンドポイントは必ずこれを通すこと。
+    ORM をそのまま返すと expires_at 不足で応答の検証に失敗する。
+    """
+    thumbnail_url = (
+        storage_service.generate_presigned_url(
+            video.thumbnail_path, expires_in=THUMBNAIL_URL_EXPIRES_IN
+        )
+        if video.thumbnail_path
+        else None
+    )
+    return VideoResponse(
+        id=video.id,
+        user_id=video.user_id,
+        title=video.title,
+        storage_path=video.storage_path,
+        output_path=video.output_path,
+        duration=video.duration,
+        source_duration=video.source_duration,
+        status=video.status,
+        created_at=video.created_at,
+        updated_at=video.updated_at,
+        expires_at=video.created_at
+        + timedelta(days=settings.video_retention_days),
+        thumbnail_url=thumbnail_url,
+    )
 
 
 @router.post("", response_model=VideoResponse, status_code=201)
@@ -52,8 +90,10 @@ def upload_video(
         )
     except video_service.QuotaExceededError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except video_service.UploadRejectedError as e:
+        raise HTTPException(status_code=413, detail=str(e))
 
-    return video
+    return _to_response(video)
 
 
 @router.post("/upload/init", response_model=ChunkUploadInitResponse)
@@ -70,9 +110,12 @@ def chunk_upload_init(
             title=body.title,
             filename=body.filename,
             total_chunks=body.total_chunks,
+            total_bytes=body.total_bytes,
         )
     except video_service.QuotaExceededError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except video_service.UploadRejectedError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     return ChunkUploadInitResponse(upload_id=upload_id)
 
 
@@ -88,6 +131,10 @@ def chunk_upload(
         video_service.save_chunk(upload_id, index, file)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Upload not found")
+    except video_service.UploadRejectedError as e:
+        # 413 はフロントの isTransient がリトライ対象にしないステータス。
+        # 上限超過は何度送っても同じなので、その場で止めるのが正しい
+        raise HTTPException(status_code=413, detail=str(e))
 
 
 @router.post(
@@ -111,7 +158,7 @@ def chunk_upload_complete(
         raise HTTPException(status_code=404, detail=str(e))
     except video_service.QuotaExceededError as e:
         raise HTTPException(status_code=409, detail=str(e))
-    return video
+    return _to_response(video)
 
 
 @router.get("", response_model=list[VideoResponse])
@@ -120,7 +167,7 @@ def list_videos(
     db: Session = Depends(get_db),
 ) -> list[VideoResponse]:
     """ログインユーザーの動画一覧取得"""
-    return video_repo.get_by_user_id(db, current_user.id)
+    return [_to_response(v) for v in video_repo.get_by_user_id(db, current_user.id)]
 
 
 @router.get("/{video_id}", response_model=VideoResponse)
@@ -128,7 +175,7 @@ def get_video(
     video: Video = Depends(get_owned_video),
 ) -> VideoResponse:
     """動画詳細取得"""
-    return video
+    return _to_response(video)
 
 
 @router.get("/{video_id}/output", response_model=VideoOutputResponse)
@@ -175,7 +222,7 @@ def export_video(
     重い FFmpeg 処理は背景タスクで実行し、video を processing にして即座に返す。
     完了すると status が completed になり、GET /videos/{id}/output で取得できる。
     """
-    return video_service.export_video(db, video, background_tasks)
+    return _to_response(video_service.export_video(db, video, background_tasks))
 
 
 @router.delete("/{video_id}", status_code=204)

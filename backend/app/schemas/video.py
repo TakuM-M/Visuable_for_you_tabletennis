@@ -13,11 +13,16 @@ class VideoCreate(BaseModel):
 
 
 class ChunkUploadInitRequest(BaseModel):
-    """チャンクアップロード初期化リクエスト"""
+    """チャンクアップロード初期化リクエスト
+
+    total_bytes はサイズ上限を「1 バイトも受け取る前に」判定するために受け取る。
+    自己申告なので信用はせず、実際の受信量は save_chunk 側でも累積検査する。
+    """
 
     title: str
     filename: str
     total_chunks: int
+    total_bytes: int
 
 
 class ChunkUploadInitResponse(BaseModel):
@@ -41,6 +46,15 @@ class VideoResponse(BaseModel):
     status: VideoStatus
     created_at: datetime
     updated_at: datetime
+    # 保持ポリシー（settings.video_retention_days）による自動削除の予定時刻。
+    # DB には持たず created_at から算出する導出値で、組み立ては
+    # routers/videos.py の _to_response が一手に引き受ける。
+    expires_at: datetime
+    # サムネイル画像の presigned URL。未生成（生成失敗・機能追加以前の動画）なら
+    # None で、フロントはプレースホルダ表示にフォールバックする。
+    # <img src> は Authorization ヘッダを送れないため、R2 キーではなく
+    # 署名済み URL を一覧レスポンスに同梱して追加リクエストを不要にしている。
+    thumbnail_url: str | None = None
 
 
 class VideoOutputResponse(BaseModel):

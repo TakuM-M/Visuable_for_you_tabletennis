@@ -112,7 +112,10 @@ class TrackingExportConfig:
 class VideoProcessingConfig:
     """動画処理の設定"""
 
-    target_fps: float = 30.0
+    # 15fps（30fps 動画なら 1 フレームおき）。学習データの姿勢 CSV も同じ
+    # 間引きで作っているため、推論だけ 30fps にすると学習時と条件がずれるうえ、
+    # 姿勢推定の実行回数が倍になって GPU 時間もそのぶん伸びる
+    target_fps: float = 15.0
     show_progress: bool = True
     output_codec: str = "mp4v"
 
