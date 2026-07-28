@@ -100,6 +100,15 @@ export interface JobCompleteRequest {
   clips: ClipData[];
 }
 
+/**
+ * MLサービスからの処理失敗コールバックのリクエストボディ。
+
+job_id はパスパラメータで受け取るためボディには持たない。
+ */
+export interface JobFailRequest {
+  error: string;
+}
+
 export type JobStatus = typeof JobStatus[keyof typeof JobStatus];
 
 
@@ -227,6 +236,8 @@ index: number;
 };
 
 export type CompleteJobInternalJobsJobIdCompletePost202 = { [key: string]: unknown };
+
+export type FailJobInternalJobsJobIdFailPost202 = { [key: string]: unknown };
 
 export type HealthHealthGet200 = { [key: string]: unknown };
 
@@ -1173,6 +1184,62 @@ export const completeJobInternalJobsJobIdCompletePost = async (jobId: string,
   
   const data: completeJobInternalJobsJobIdCompletePostResponse['data'] = body ? JSON.parse(body) : {}
   return { data, status: res.status, headers: res.headers } as completeJobInternalJobsJobIdCompletePostResponse
+}
+  
+
+
+/**
+ * MLサービスからの処理失敗コールバック。
+
+ML 側が自分の失敗を自覚できたときにここへ通知してもらい、job_reaper の
+タイムアウト待ち（job_timeout_hours）を経ずに失敗を確定させる。
+リトライ判定・通知は complete と同じく背景タスクへ委譲して即 202 を返す。
+ * @summary Fail Job
+ */
+export type failJobInternalJobsJobIdFailPostResponse202 = {
+  data: FailJobInternalJobsJobIdFailPost202
+  status: 202
+}
+
+export type failJobInternalJobsJobIdFailPostResponse422 = {
+  data: HTTPValidationError
+  status: 422
+}
+
+export type failJobInternalJobsJobIdFailPostResponseSuccess = (failJobInternalJobsJobIdFailPostResponse202) & {
+  headers: Headers;
+};
+export type failJobInternalJobsJobIdFailPostResponseError = (failJobInternalJobsJobIdFailPostResponse422) & {
+  headers: Headers;
+};
+
+export type failJobInternalJobsJobIdFailPostResponse = (failJobInternalJobsJobIdFailPostResponseSuccess | failJobInternalJobsJobIdFailPostResponseError)
+
+export const getFailJobInternalJobsJobIdFailPostUrl = (jobId: string,) => {
+
+
+  
+
+  return `/api/internal/jobs/${jobId}/fail`
+}
+
+export const failJobInternalJobsJobIdFailPost = async (jobId: string,
+    jobFailRequest: JobFailRequest, options?: RequestInit): Promise<failJobInternalJobsJobIdFailPostResponse> => {
+  
+  const res = await fetch(getFailJobInternalJobsJobIdFailPostUrl(jobId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      jobFailRequest,)
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: failJobInternalJobsJobIdFailPostResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as failJobInternalJobsJobIdFailPostResponse
 }
   
 

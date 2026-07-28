@@ -153,6 +153,18 @@ def process_complete_job(
             handle_ml_failure(db, job_id, f"完了処理失敗: {e}")
 
 
+def process_fail_job(job_id: uuid.UUID, error: str) -> None:
+    """ML 失敗コールバックの背景タスクエントリポイント。
+
+    ML 側が自分の失敗（動画ダウンロード失敗・推論エラー等）を自覚できた場合に
+    呼ばれる。これが無いと job は processing のまま残り、job_reaper の
+    タイムアウト（job_timeout_hours）まで失敗が確定しない。
+    リトライ判定・通知は handle_ml_failure に委譲する。
+    """
+    with SessionLocal() as db:
+        handle_ml_failure(db, job_id, f"ML処理失敗: {error}")
+
+
 def complete_job(
     db: Session,
     job_id: uuid.UUID,

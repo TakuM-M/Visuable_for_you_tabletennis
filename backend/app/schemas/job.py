@@ -37,3 +37,12 @@ class JobCompleteRequest(BaseModel):
     """
 
     clips: list[ClipData]
+
+
+class JobFailRequest(BaseModel):
+    """MLサービスからの処理失敗コールバックのリクエストボディ。
+
+    job_id はパスパラメータで受け取るためボディには持たない。
+    """
+
+    error: str

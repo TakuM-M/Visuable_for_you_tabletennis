@@ -277,3 +277,53 @@ def test_complete_job_requires_internal_key_returns_401() -> None:
 
     assert resp.status_code == 401
     proc.assert_not_called()  # 認証で止まるので重い処理は呼ばれない
+
+
+# ===========================================================================
+# POST /internal/jobs/{job_id}/fail （ML からの失敗コールバック）
+#   - complete と対になる入口。ML が自分の失敗を自覚できたときに叩かれる。
+#   - 認証・背景タスク委譲・202 という形は complete と揃えている。
+#   ルーター:
+#     background_tasks.add_task(job_service.process_fail_job, job_id, request.error)
+# ===========================================================================
+def test_fail_job_returns_202_and_schedules_background_task() -> None:
+    """202 を返し、job_id と error をそのまま背景タスクへ渡す。"""
+    app = _make_app()
+    app.dependency_overrides[require_internal_api_key] = lambda: None
+    client = TestClient(app)
+
+    job_id = uuid.uuid4()
+    payload = {"error": "HTTPStatusError: 403 Forbidden"}
+
+    with patch("app.routers.jobs.job_service.process_fail_job") as proc:
+        resp = client.post(f"/internal/jobs/{job_id}/fail", json=payload)
+
+    assert resp.status_code == 202
+    assert resp.json() == {"message": "受付完了"}
+    proc.assert_called_once_with(job_id, payload["error"])
+
+
+def test_fail_job_requires_internal_key_returns_401() -> None:
+    """内部APIキーが無ければ 401。失敗扱いの処理も走らない。"""
+    client = TestClient(_make_app())
+
+    with patch("app.routers.jobs.job_service.process_fail_job") as proc:
+        resp = client.post(
+            f"/internal/jobs/{uuid.uuid4()}/fail", json={"error": "boom"}
+        )
+
+    assert resp.status_code == 401
+    proc.assert_not_called()
+
+
+def test_fail_job_without_error_field_returns_422() -> None:
+    """error は必須。欠けていれば Pydantic のバリデーションで 422。"""
+    app = _make_app()
+    app.dependency_overrides[require_internal_api_key] = lambda: None
+    client = TestClient(app)
+
+    with patch("app.routers.jobs.job_service.process_fail_job") as proc:
+        resp = client.post(f"/internal/jobs/{uuid.uuid4()}/fail", json={})
+
+    assert resp.status_code == 422
+    proc.assert_not_called()

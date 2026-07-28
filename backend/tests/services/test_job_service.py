@@ -311,6 +311,25 @@ def test_process_complete_job_no_failure_on_success() -> None:
     handle.assert_not_called()
 
 
+# --- process_fail_job -------------------------------------------------------
+
+
+def test_process_fail_job_delegates_to_handle_ml_failure() -> None:
+    """ML からの失敗通知はそのまま handle_ml_failure に渡り、リトライ判定に乗る。"""
+    job_id = uuid.uuid4()
+    with (
+        patch("app.services.job_service.SessionLocal") as sl,
+        patch("app.services.job_service.handle_ml_failure") as handle,
+    ):
+        sl.return_value.__enter__.return_value = MagicMock()
+        job_service.process_fail_job(job_id, "HTTPStatusError: 403 Forbidden")
+
+    handle.assert_called_once()
+    assert handle.call_args.args[1] == job_id
+    # 原因を追えるよう ML 側のエラー文字列を error_message に残す
+    assert "HTTPStatusError: 403 Forbidden" in handle.call_args.args[2]
+
+
 # --- complete_job -----------------------------------------------------------
 
 

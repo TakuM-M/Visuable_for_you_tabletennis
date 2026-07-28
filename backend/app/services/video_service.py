@@ -87,6 +87,7 @@ def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
     """
     job_uuid = uuid.UUID(job_id)
     callback_url = f"{BACKEND_INTERNAL_URL}/internal/jobs/{job_id}/complete"
+    fail_callback_url = f"{BACKEND_INTERNAL_URL}/internal/jobs/{job_id}/fail"
 
     # 処理開始マーク（タイムアウト判定の起点になる）
     with SessionLocal() as db:
@@ -112,6 +113,7 @@ def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
                             "video_download_url": video_download_url,
                             "job_id": job_id,
                             "callback_url": callback_url,
+                            "fail_callback_url": fail_callback_url,
                         }
                     },
                 )
