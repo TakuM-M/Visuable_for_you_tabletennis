@@ -66,6 +66,60 @@ def _extract_duration(local_path: Path) -> float | None:
         return None
 
 
+# サムネイルの横幅（px）。高さはアスペクト比維持で自動決定する。
+# 一覧の小さいセルと詳細のプレビューを1枚で兼ねる想定のサイズ。
+THUMBNAIL_WIDTH = 640
+
+
+def _thumbnail_key(video_r2_key: str) -> str:
+    """元動画の R2 キー（videos/{uuid}.mp4）からサムネイルの R2 キーを導出する"""
+    return f"thumbnails/{Path(video_r2_key).stem}.jpg"
+
+
+def _generate_thumbnail(
+    local_path: Path, video_r2_key: str, duration: float | None
+) -> str | None:
+    """ローカル動画から静止画を1枚切り出して R2 に置き、その R2 キーを返す。
+
+    サムネイルは表示上の付加情報でしかないので、失敗しても例外にせず None を
+    返してアップロード処理を続行する（thumbnail_path は None のままになり、
+    フロントはプレースホルダを表示する）。
+    先頭フレームは暗転やカメラ設置中であることが多いため、少し進んだ位置から取る。
+    """
+    seek = min(3.0, duration * 0.1) if duration else 1.0
+    thumb_path = local_path.parent / f"{local_path.stem}_thumb.jpg"
+    r2_key = _thumbnail_key(video_r2_key)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                # -ss を -i の前に置いて入力シークさせる（先頭から全デコードしない）
+                "-ss",
+                str(seek),
+                "-i",
+                str(local_path),
+                "-frames:v",
+                "1",
+                "-vf",
+                f"scale={THUMBNAIL_WIDTH}:-2",
+                "-q:v",
+                "4",
+                str(thumb_path),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=60,
+        )
+        storage_service.upload_file(str(thumb_path), r2_key, content_type="image/jpeg")
+        return r2_key
+    except Exception as e:
+        logger.warning("サムネイル生成に失敗しました r2_key=%s: %s", video_r2_key, e)
+        return None
+    finally:
+        thumb_path.unlink(missing_ok=True)
+
+
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
 LOCAL_TMP_DIR = Path("/app/uploads/tmp")
 LOCAL_TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -157,6 +211,7 @@ def _register_video_and_start_ml(
     r2_key: str,
     background_tasks: BackgroundTasks,
     source_duration: float | None = None,
+    thumbnail_path: str | None = None,
 ) -> Video:
     """動画をDBに登録し、MLサービスを呼び出す共通処理"""
     video = video_repo.create(
@@ -165,6 +220,7 @@ def _register_video_and_start_ml(
         title=title,
         storage_path=r2_key,
         source_duration=source_duration,
+        thumbnail_path=thumbnail_path,
     )
     video_repo.update_status(db, video.id, VideoStatus.queued)
     job = job_repo.create(db=db, video_id=video.id)
@@ -190,15 +246,16 @@ def upload_video(
     local_path = LOCAL_TMP_DIR / f"{file_id}_{file.filename}"
     r2_key = f"videos/{file_id}.mp4"
 
-    # ローカルに一時保存 → R2にアップロード → 元動画長を取得 → ローカル削除
+    # ローカルに一時保存 → R2にアップロード → 元動画長とサムネイルを取得 → ローカル削除
     with local_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     storage_service.upload_file(str(local_path), r2_key)
     source_duration = _extract_duration(local_path)
+    thumbnail_path = _generate_thumbnail(local_path, r2_key, source_duration)
     local_path.unlink(missing_ok=True)
 
     return _register_video_and_start_ml(
-        db, user_id, title, r2_key, background_tasks, source_duration
+        db, user_id, title, r2_key, background_tasks, source_duration, thumbnail_path
     )
 
 
@@ -299,9 +356,14 @@ def process_chunk_upload(
 
         storage_service.upload_file(str(merged_path), r2_key)
         duration = _extract_duration(merged_path)
-        if duration is not None:
-            with SessionLocal() as db:
+        thumbnail_path = _generate_thumbnail(merged_path, r2_key, duration)
+        with SessionLocal() as db:
+            if duration is not None:
                 video_repo.update_source_duration(db, uuid.UUID(video_id), duration)
+            if thumbnail_path is not None:
+                video_repo.update_thumbnail_path(
+                    db, uuid.UUID(video_id), thumbnail_path
+                )
         merged_path.unlink(missing_ok=True)
         shutil.rmtree(upload_dir)
 
@@ -333,6 +395,8 @@ def delete_video(db: Session, video_id: uuid.UUID) -> bool:
     storage_service.delete_file(video.storage_path)
     if video.output_path:
         storage_service.delete_file(video.output_path)
+    if video.thumbnail_path:
+        storage_service.delete_file(video.thumbnail_path)
 
     jobs = job_repo.get_by_video_id(db, video_id)
     for job in jobs:

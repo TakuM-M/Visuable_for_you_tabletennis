@@ -31,6 +31,10 @@ class Video(Base):
     title: Mapped[str] = mapped_column(String)
     storage_path: Mapped[str] = mapped_column(String)
     output_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 一覧・詳細のサムネイル画像（JPEG）の R2 キー。アップロード時に元動画から
+    # 生成する。生成に失敗した場合や機能追加以前の動画では None のままで、
+    # フロントはプレースホルダ表示にフォールバックする。
+    thumbnail_path: Mapped[str | None] = mapped_column(String, nullable=True)
     duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     # 元動画の再生時間（秒）。編集時の区間バリデーションやタイムライン表示に使う。
     # duration は書き出し済み出力動画の長さが入るため別フィールドで保持する。
