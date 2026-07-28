@@ -1,0 +1,119 @@
+name: ML image build & push
+
+# ML 推論イメージ（RunPod Serverless ワーカー）を amd64 ネイティブなランナーでビルドする。
+#
+# ローカル（Apple Silicon）で --platform linux/amd64 を指定すると QEMU
+# エミュレーションになり、apt-get だけで 15 分以上かかる上に 20GB 級の
+# ビルドキャッシュが Mac のディスクを圧迫する。ubuntu-latest は amd64 ネイティブ
+# なのでエミュレーションが不要になる。
+#
+# - workflow_dispatch: 検証 → Docker Hub へ push（手動リリース）
+# - pull_request:      ml/ 配下の変更時に検証のみ（push しない）
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "イメージタグ（例: v1.3.2）"
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - "ml/**"
+      - ".github/workflows/ml-image.yml"
+
+env:
+  IMAGE_NAME: takumm/tabletennis-ml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: バージョン指定の形式を検証
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::バージョンは vX.Y.Z 形式で指定してください（入力値: ${{ inputs.version }}）"
+            exit 1
+          fi
+
+      # ML イメージは 7GB 級。ランナー既定の空き容量では load 時に不足しうるため、
+      # 使わないプリインストール環境を削除して確保する。
+      - name: ランナーのディスク容量を確保
+        run: |
+          echo "--- 削除前 ---"
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          echo "--- 削除後 ---"
+          df -h /
+
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Buildx をセットアップ
+        uses: docker/setup-buildx-action@v3
+
+      # タグを決める。PR では push しないので検証用の固定名でよい。
+      - name: イメージタグを決定
+        id: meta
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ env.IMAGE_NAME }}:${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # push する前に必ずローカルへ load して検証する。壊れたイメージを
+      # Docker Hub に上げると RunPod 側が先に踏むことになるため。
+      # provenance: false は単一アーキの素のマニフェストを出すため（RunPod 向け）。
+      - name: イメージをビルド
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ml
+          file: ./ml/Dockerfile
+          target: runpod-worker
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tag }}
+          load: true
+          push: false
+          provenance: false
+
+      - name: イメージサイズを表示
+        run: |
+          docker images ${{ env.IMAGE_NAME }} \
+            --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}"
+
+      # 依存が正しく解決できているかをイメージ内で確認する。
+      # torch が +cu124 / CUDA 12.4 で入っていることまで見る。ベースイメージを
+      # python:slim に変えた構成では、CUDA ランタイムは nvidia-*-cu12 wheel が
+      # 供給しているため、ここが崩れると GPU 推論が動かない。
+      - name: 依存のスモークテスト
+        run: |
+          docker run --rm ${{ steps.meta.outputs.tag }} python -c "
+          import torch, cv2, ultralytics
+          from src.pipelines.inference_pipeline import InferencePipeline
+          print('torch       :', torch.__version__)
+          print('torch CUDA  :', torch.version.cuda)
+          print('cv2         :', cv2.__version__)
+          print('ultralytics :', ultralytics.__version__)
+          assert torch.version.cuda == '12.4', f'CUDA 12.4 ではない: {torch.version.cuda}'
+          print('OK: 推論パイプラインの import に成功')
+          "
+
+      - name: Docker Hub にログイン
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Hub へ push
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          docker push ${{ steps.meta.outputs.tag }}
+          echo "### push 完了: \`${{ steps.meta.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "RunPod のエンドポイント設定でこのタグを指定してください。" >> "$GITHUB_STEP_SUMMARY"

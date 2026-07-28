@@ -30,11 +30,10 @@
 |------|------|
 | **Python** | プログラミング言語 |
 | **PyTorch** | ディープラーニングフレームワーク |
-| **MediaPipe** | 姿勢・ジェスチャー検出 |
 | **OpenCV** | 映像処理 |
-| **Ultralytics** | 物体検出（YOLO） |
-| **scikit-learn** | 機械学習 |
+| **Ultralytics** | 物体検出（YOLO）・姿勢推定（YOLO-Pose） |
 | **NumPy / Pandas / SciPy** | 数値・データ処理 |
+| **TensorBoard** | 学習ログの可視化（学習時のみ） |
 | **CUDA** | GPU高速化 |
 | **FFmpeg** | 動画変換 |
 
