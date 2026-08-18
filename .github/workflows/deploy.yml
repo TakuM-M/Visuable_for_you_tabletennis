@@ -18,7 +18,8 @@ jobs:
           script: |
             set -e
             cd ~/Visuable_for_you_tabletennis
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
             docker compose build
             docker compose run --rm backend alembic upgrade head
             docker compose up -d
