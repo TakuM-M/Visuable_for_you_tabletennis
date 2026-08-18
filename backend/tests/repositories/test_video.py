@@ -1,13 +1,4 @@
-"""video repository の実 DB テスト。
-
-user に比べて学ぶことが多い:
-  - 外部キー (videos.user_id → users.id) があるので、テスト前提として user が必要
-  - 複数ユーザーが入り混じった状態での絞り込みクエリの正しさを見る
-  - created_at による時系列フィルタ (get_expired) を扱う
-  - FK 違反が DB レベルで弾かれることを確認する
-
-`user` fixture は conftest.py で定義済み。`db` も同様。
-"""
+"""video repository の実 DB テスト"""
 
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -134,7 +125,8 @@ def test_get_expired_returns_only_videos_before_threshold(db, user):
     テストでは作った後に created_at を上書きして古い動画を演出する。
     """
     old = video_repo.create(db, user_id=user.id, title="old", storage_path="o")
-    new = video_repo.create(db, user_id=user.id, title="new", storage_path="n")
+    # threshold より新しい動画が返らないことを見るための対照。変数には束ねない
+    video_repo.create(db, user_id=user.id, title="new", storage_path="n")
 
     # old だけ created_at を 10 日前にずらす
     old.created_at = datetime.now(timezone.utc) - timedelta(days=10)

@@ -1203,7 +1203,6 @@ def test_recover_interrupted_to_failed_marks_orphaned_queued_as_failed() -> None
 
 
 def test_recover_interrupted_to_failed_noop_when_none() -> None:
-    job = SimpleNamespace(id=uuid.uuid4(), video_id=uuid.uuid4())
     db = MagicMock()
 
     with (
