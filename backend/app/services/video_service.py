@@ -176,7 +176,9 @@ def _generate_thumbnail(
 
 
 # ローカル一時ディレクトリ（チャンク結合・FFmpeg処理用）
-LOCAL_TMP_DIR = Path("/app/uploads/tmp")
+# 既定値はコンテナの WORKDIR 配下。CI のようにコンテナ外で動かす場合は
+# /app を作れないため、環境変数で書き込み可能な場所に差し替える
+LOCAL_TMP_DIR = Path(os.getenv("LOCAL_TMP_DIR", "/app/uploads/tmp"))
 LOCAL_TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # ファイルコピー時のバッファサイズ。GB 級の動画を扱うので既定（64KB）より大きくとる

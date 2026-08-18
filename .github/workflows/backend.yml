@@ -9,6 +9,8 @@ on:
 env:
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
   SECRET_KEY: test-secret-key
+  # ランナー上で直接動かすため /app は使えない。書き込み可能な場所を渡す
+  LOCAL_TMP_DIR: /tmp/tabletennis-uploads
 
 jobs:
   build:
