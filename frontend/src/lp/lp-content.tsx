@@ -39,7 +39,7 @@ export function LpCta({ children, kind = 'primary', size = 'lg', href, style, on
   }
 
   const element = href ? 'a' : 'button'
-  const Element = element as any
+  const Element = element as React.ElementType
 
   return (
     <Element

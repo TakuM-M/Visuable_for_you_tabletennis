@@ -4,12 +4,13 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "error">(() =>
+    searchParams.get("token") ? "loading" : "error",
+  );
 
   useEffect(() => {
     const token = searchParams.get("token");
     if (!token) {
-      setStatus("error");
       return;
     }
     fetch(`/api/auth/verify-email?token=${token}`)

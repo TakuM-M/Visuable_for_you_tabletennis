@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import UUID, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import TIMESTAMP
@@ -7,6 +8,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
+
+# 型注釈でのみ使う import（実体を import すると循環するため）
+if TYPE_CHECKING:
+    from app.models.job import Job
+    from app.models.video import Video
 
 
 class Clip(Base):
