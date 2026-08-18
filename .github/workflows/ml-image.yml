@@ -1,12 +1,5 @@
 name: ML image build & push
 
-# ML 推論イメージ（RunPod Serverless ワーカー）を amd64 ネイティブなランナーでビルドする。
-#
-# ローカル（Apple Silicon）で --platform linux/amd64 を指定すると QEMU
-# エミュレーションになり、apt-get だけで 15 分以上かかる上に 20GB 級の
-# ビルドキャッシュが Mac のディスクを圧迫する。ubuntu-latest は amd64 ネイティブ
-# なのでエミュレーションが不要になる。
-#
 # - workflow_dispatch: 検証 → Docker Hub へ push（手動リリース）
 # - pull_request:      ml/ 配下の変更時に検証のみ（push しない）
 
