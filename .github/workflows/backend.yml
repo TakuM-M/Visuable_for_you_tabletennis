@@ -6,6 +6,10 @@ on:
       - "backend/**"
       - ".github/workflows/backend.yml"
 
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+  SECRET_KEY: test-secret-key
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +26,44 @@ jobs:
         uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: "3.12"
+          enable-cache: true
 
       - name: ruff check
         run: uv run ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest
