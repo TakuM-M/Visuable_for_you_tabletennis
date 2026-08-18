@@ -5,6 +5,7 @@
 **卓球試合映像から「プレー中の区間」だけを自動検出、ラリー中だけの動画を生成する Web アプリケーション**
 
 [![Website](https://img.shields.io/badge/Website-visualize--tt.com-1f6feb?style=for-the-badge)](https://visualize-tt.com/)
+[![blog](https://takum-m.github.io/blog/2026-07-26-visuable-for-you/)
 
 </div>
 
