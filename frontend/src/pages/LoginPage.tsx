@@ -30,7 +30,7 @@ export default function LoginPage() {
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
       loginAuthLoginPost({ username: values.email, password: values.password }),
-        onSuccess: (res:any) => {
+        onSuccess: (res) => {
           if (res.status === 200) {
             setToken(res.data.access_token);
             navigate("/videos");
