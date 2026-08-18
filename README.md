@@ -167,6 +167,7 @@ flowchart LR
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
 ![Nginx](https://img.shields.io/badge/Nginx-009639?style=flat&logo=nginx&logoColor=white)
 ![Cloudflare R2](https://img.shields.io/badge/Cloudflare_R2-F38020?style=flat&logo=cloudflare&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=flat&logo=githubactions&logoColor=white)
 ![RunPod](https://img.shields.io/badge/RunPod-Serverless_GPU-purple?style=flat)
 ![Resend](https://img.shields.io/badge/Resend-Email-black?style=flat)
 
