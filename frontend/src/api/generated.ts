@@ -256,6 +256,16 @@ export type loginAuthLoginPostResponse200 = {
   status: 200
 }
 
+export type loginAuthLoginPostResponse401 = {
+  data: void
+  status: 401
+}
+
+export type loginAuthLoginPostResponse403 = {
+  data: void
+  status: 403
+}
+
 export type loginAuthLoginPostResponse422 = {
   data: HTTPValidationError
   status: 422
@@ -264,7 +274,7 @@ export type loginAuthLoginPostResponse422 = {
 export type loginAuthLoginPostResponseSuccess = (loginAuthLoginPostResponse200) & {
   headers: Headers;
 };
-export type loginAuthLoginPostResponseError = (loginAuthLoginPostResponse422) & {
+export type loginAuthLoginPostResponseError = (loginAuthLoginPostResponse401 | loginAuthLoginPostResponse403 | loginAuthLoginPostResponse422) & {
   headers: Headers;
 };
 
