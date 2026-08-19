@@ -20,8 +20,8 @@ from app.models.job import JobStatus
 from app.models.video import Video, VideoStatus
 from app.repositories.job import job_repository as job_repo
 from app.repositories.video import video_repository as video_repo
-from app.repositories import clip as clip_repo
-from app.repositories import notification_log as notification_log_repo
+from app.repositories.clip import clip_repository as clip_repo
+from app.repositories.notification_log import notification_log_repository as notification_log_repo
 from app.schemas.clip import ClipInput
 from app.services import storage_service
 from app.services.video_clip_service import clip_video

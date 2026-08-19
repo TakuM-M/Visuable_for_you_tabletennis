@@ -5,7 +5,9 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from app.models.clip import Clip
 from app.models.job import Job, JobStatus
+from app.models.notification_log import NotificationLog, NotificationStatus
 from app.models.user import User
 from app.models.video import Video, VideoStatus
 
@@ -168,4 +170,66 @@ class FakeVideoRepository:
         raise NotImplementedError
 
     def delete(self, db: Session, video_id: uuid.UUID) -> bool:
+        raise NotImplementedError
+
+
+class FakeClipRepository:
+    """ClipRepository Protocol の形だけを満たす土台"""
+
+    def create(
+        self,
+        db: Session,
+        video_id: uuid.UUID,
+        job_id: uuid.UUID,
+        start_time: float,
+        end_time: float,
+        storage_path: str,
+        sort_order: int = 0,
+    ) -> Clip:
+        raise NotImplementedError
+
+    def get_by_video_id(self, db: Session, video_id: uuid.UUID) -> list[Clip]:
+        raise NotImplementedError
+
+    def get_by_job_id(self, db: Session, job_id: uuid.UUID) -> list[Clip]:
+        raise NotImplementedError
+
+    def delete_by_video_id(self, db: Session, video_id: uuid.UUID) -> int:
+        raise NotImplementedError
+
+    def replace_for_video(
+        self,
+        db: Session,
+        video_id: uuid.UUID,
+        job_id: uuid.UUID,
+        clips_data: list[dict],
+    ) -> list[Clip]:
+        raise NotImplementedError
+
+
+class FakeNotificationLogRepository:
+    """NotificationLogRepository Protocol の形だけを満たす土台"""
+
+    def create(
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        job_id: uuid.UUID,
+        email: str,
+    ) -> NotificationLog:
+        raise NotImplementedError
+
+    def get_by_job_id(self, db: Session, job_id: uuid.UUID) -> list[NotificationLog]:
+        raise NotImplementedError
+
+    def update_status(
+        self,
+        db: Session,
+        log_id: int,
+        status: NotificationStatus,
+        sent_at: datetime | None = None,
+    ) -> NotificationLog | None:
+        raise NotImplementedError
+
+    def delete_by_job_id(self, db: Session, job_id: uuid.UUID) -> int:
         raise NotImplementedError

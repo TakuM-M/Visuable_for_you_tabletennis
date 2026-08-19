@@ -4,7 +4,9 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from app.models.clip import Clip
 from app.models.job import Job, JobStatus
+from app.models.notification_log import NotificationLog, NotificationStatus
 from app.models.user import User
 from app.models.video import Video, VideoStatus
 
@@ -161,4 +163,62 @@ class VideoRepository(Protocol):
         ...
 
     def delete(self, db: Session, video_id: uuid.UUID) -> bool:
+        ...
+
+
+class ClipRepository(Protocol):
+    def create(
+        self,
+        db: Session,
+        video_id: uuid.UUID,
+        job_id: uuid.UUID,
+        start_time: float,
+        end_time: float,
+        storage_path: str,
+        sort_order: int = 0,
+    ) -> Clip:
+        ...
+
+    def get_by_video_id(self, db: Session, video_id: uuid.UUID) -> list[Clip]:
+        ...
+
+    def get_by_job_id(self, db: Session, job_id: uuid.UUID) -> list[Clip]:
+        ...
+
+    def delete_by_video_id(self, db: Session, video_id: uuid.UUID) -> int:
+        ...
+
+    def replace_for_video(
+        self,
+        db: Session,
+        video_id: uuid.UUID,
+        job_id: uuid.UUID,
+        clips_data: list[dict],
+    ) -> list[Clip]:
+        ...
+
+
+class NotificationLogRepository(Protocol):
+    def create(
+        self,
+        db: Session,
+        user_id: uuid.UUID,
+        job_id: uuid.UUID,
+        email: str,
+    ) -> NotificationLog:
+        ...
+
+    def get_by_job_id(self, db: Session, job_id: uuid.UUID) -> list[NotificationLog]:
+        ...
+
+    def update_status(
+        self,
+        db: Session,
+        log_id: int,
+        status: NotificationStatus,
+        sent_at: datetime | None = None,
+    ) -> NotificationLog | None:
+        ...
+
+    def delete_by_job_id(self, db: Session, job_id: uuid.UUID) -> int:
         ...
