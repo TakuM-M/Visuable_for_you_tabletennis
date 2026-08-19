@@ -10,22 +10,34 @@ from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
 from app.models.video import Video
-from app.repositories import user as user_repo
-from app.repositories import video as video_repo
+from app.repositories.protocols import UserRepository, VideoRepository
+from app.repositories.user import user_repository
+from app.repositories.video import video_repository
 
-# Authorization: Bearer <token> ヘッダーからトークンを自動取得する FastAPI の既製品
-# tokenUrl はSwagger UIの「Authorize」ボタンが使うログインエンドポイント
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
+# リポジトリを FastAPI の依存として供給する。サービス層のようにキーワード専用引数の
+# 既定値で渡すと、FastAPI が signature を読んで「HTTP から受け取る値」と解釈し、
+# ルート登録時に FastAPIError になる（* の有無は関係ない）。Depends で包むことで
+# 依存として扱われ、テストからは app.dependency_overrides で差し替えられる。
+def get_user_repository() -> UserRepository:
+    return user_repository
+
+
+def get_video_repository() -> VideoRepository:
+    return video_repository
 
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
+    user_repo: UserRepository = Depends(get_user_repository),
 ) -> User:
     """JWTトークンを検証してログイン中のユーザーを返す"""
     try:
-        user_id = decode_token(token)
-    except JWTError:
+        user_id = uuid.UUID(decode_token(token))
+    except (JWTError, ValueError):
         raise HTTPException(
             status_code=401,
             detail="トークンが無効または期限切れです",
@@ -43,6 +55,7 @@ def get_owned_video(
     video_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    video_repo: VideoRepository = Depends(get_video_repository),
 ) -> Video:
     """video_id の動画を取得し、ログインユーザーの所有物か検証して返す。
 

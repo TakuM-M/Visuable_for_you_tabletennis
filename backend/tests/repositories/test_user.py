@@ -10,7 +10,7 @@ import uuid
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.repositories import user as user_repo
+from app.repositories.user import user_repository as user_repo
 
 
 def test_create_returns_user_with_generated_fields(db):

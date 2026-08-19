@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -57,5 +57,5 @@ def decode_verification_token(token: str) -> str:
     """メール確認用の JWT トークンを検証して user_id を返す。不正なトークンは JWTError を送出する"""
     payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
     if payload.get("type") != "email_verification":
-        raise jwt.JWTError("不正なトークン")
+        raise JWTError("不正なトークン")
     return payload["sub"]

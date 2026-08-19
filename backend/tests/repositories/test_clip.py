@@ -8,9 +8,9 @@ import uuid
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.repositories import clip as clip_repo
-from app.repositories import job as job_repo
-from app.repositories import video as video_repo
+from app.repositories.clip import clip_repository as clip_repo
+from app.repositories.job import job_repository as job_repo
+from app.repositories.video import video_repository as video_repo
 
 
 def test_create_sets_fields(db, video, job):

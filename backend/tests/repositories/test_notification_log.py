@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.models.notification_log import NotificationStatus
-from app.repositories import job as job_repo
-from app.repositories import notification_log as nlog_repo
+from app.repositories.job import job_repository as job_repo
+from app.repositories.notification_log import notification_log_repository as nlog_repo
 
 
 def test_create_sets_defaults(db, user, job):

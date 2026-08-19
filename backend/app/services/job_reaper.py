@@ -5,15 +5,16 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
-from app.repositories import job as job_repo
-from app.repositories import video as video_repo
+from app.repositories.protocols import JobRepository, VideoRepository
+from app.repositories.job import job_repository
+from app.repositories.video import video_repository
 from app.services import job_service, metrics_service, runpod_service, video_service
 from app.services.video_service import LOCAL_TMP_DIR, call_ml_service
 
 logger = get_logger(__name__)
 
 
-def reap_timeouts() -> None:
+def reap_timeouts(*, job_repo: JobRepository = job_repository) -> None:
     """started_at が job_timeout_hours より古い queued / processing ジョブを失敗扱いにする"""
     threshold = datetime.now(timezone.utc) - timedelta(hours=settings.job_timeout_hours)
     with SessionLocal() as db:
@@ -25,7 +26,7 @@ def reap_timeouts() -> None:
             job_service.handle_ml_failure(db, job.id, "ML タイムアウト")
 
 
-def reconcile_runpod_jobs() -> None:
+def reconcile_runpod_jobs(*, job_repo: JobRepository = job_repository) -> None:
     """processing のジョブを RunPod 側の実状態と突き合わせ、終了済みなら失敗扱いにする。
 
     GPU 側が自分の失敗を通知できないケース（OOM・ワーカークラッシュ・コールバック
@@ -39,7 +40,9 @@ def reconcile_runpod_jobs() -> None:
     with SessionLocal() as db:
         # セッションを跨いで使うので必要な値だけコピーする
         targets = [
-            (job.id, job.runpod_job_id) for job in job_repo.get_running_runpod_jobs(db)
+            (job.id, job.runpod_job_id)
+            for job in job_repo.get_running_runpod_jobs(db)
+            if job.runpod_job_id is not None
         ]
 
     for job_id, runpod_job_id in targets:
@@ -72,7 +75,7 @@ def reconcile_runpod_jobs() -> None:
             job_service.handle_ml_failure(db, job_id, message)
 
 
-def dispatch_retries() -> None:
+def dispatch_retries(*, job_repo: JobRepository = job_repository) -> None:
     """next_retry_at に達した failed ジョブを再キックする"""
     now = datetime.now(timezone.utc)
     with SessionLocal() as db:
@@ -92,7 +95,7 @@ def dispatch_retries() -> None:
         call_ml_service(storage_path, job_id, video_id)
 
 
-def cleanup_expired_videos() -> None:
+def cleanup_expired_videos(*, video_repo: VideoRepository = video_repository) -> None:
     """video_retention_days を超えた動画を delete_video() で削除する"""
     threshold = datetime.now(timezone.utc) - timedelta(
         days=settings.video_retention_days

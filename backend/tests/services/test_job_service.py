@@ -1,6 +1,6 @@
 """job_service の mock テスト。
 
-DB リポジトリ・R2・メール・FFmpeg・httpx をすべて差し替え、
+DB リポジトリは Fake の注入で、R2・メール・FFmpeg・httpx は patch で差し替え、
 リトライ判定 / 失敗通知 / 手動再実行 / 完了処理の分岐を検証する。
 """
 
@@ -11,11 +11,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 from app.models.job import JobStatus
 from app.models.notification_log import NotificationStatus
 from app.models.video import VideoStatus
 from app.services import job_service
+from tests.fakes import (
+    FakeClipRepository,
+    FakeJobRepository,
+    FakeNotificationLogRepository,
+    FakeUserRepository,
+    FakeVideoRepository,
+)
 
 
 def _make_job(**kw) -> SimpleNamespace:
@@ -46,6 +54,116 @@ def _make_user(**kw) -> SimpleNamespace:
     defaults = dict(id=uuid.uuid4(), email="user@example.com")
     defaults.update(kw)
     return SimpleNamespace(**defaults)
+
+
+# --- リポジトリ Fake --------------------------------------------------------
+#   job_service が実際に呼ぶメソッドだけを実装し、呼び出しを記録する。
+#   未実装のメソッドは土台（tests/fakes.py）が NotImplementedError を送出するので、
+#   想定外の呼び出しはその場でテストが落ちる。
+
+
+class _JobRepositoryStub(FakeJobRepository):
+    def __init__(self, job: SimpleNamespace | None = None) -> None:
+        self.job = job
+        self.mark_failed_calls: list[dict] = []
+        self.update_status_calls: list[dict] = []
+        self.reset_calls: list[uuid.UUID] = []
+
+    def get_by_id(self, db: Session, job_id: uuid.UUID):
+        return self.job
+
+    def mark_failed(self, db: Session, job_id, error_message, next_retry_at):
+        self.mark_failed_calls.append(
+            {
+                "job_id": job_id,
+                "error_message": error_message,
+                "next_retry_at": next_retry_at,
+            }
+        )
+        return None
+
+    def update_status(
+        self,
+        db: Session,
+        job_id,
+        status,
+        started_at=None,
+        completed_at=None,
+        error_message=None,
+    ):
+        self.update_status_calls.append(
+            {"job_id": job_id, "status": status, "completed_at": completed_at}
+        )
+        return None
+
+    def reset_for_manual_retry(self, db: Session, job_id):
+        self.reset_calls.append(job_id)
+        return None
+
+
+class _VideoRepositoryStub(FakeVideoRepository):
+    def __init__(self, video: SimpleNamespace | None = None) -> None:
+        self.video = video
+        self.update_status_calls: list[tuple] = []
+
+    def get_by_id(self, db: Session, video_id: uuid.UUID):
+        return self.video
+
+    def update_status(self, db: Session, video_id, status):
+        self.update_status_calls.append((db, video_id, status))
+        return self.video
+
+
+class _UserRepositoryStub(FakeUserRepository):
+    def __init__(self, user: SimpleNamespace | None = None) -> None:
+        self.user = user
+
+    def get_by_id(self, db: Session, user_id: uuid.UUID):
+        return self.user
+
+
+class _ClipRepositoryStub(FakeClipRepository):
+    def __init__(self) -> None:
+        self.created: list[dict] = []
+
+    def create(
+        self,
+        db: Session,
+        video_id,
+        job_id,
+        start_time,
+        end_time,
+        storage_path,
+        sort_order=0,
+    ):
+        self.created.append(
+            {
+                "video_id": video_id,
+                "job_id": job_id,
+                "start_time": start_time,
+                "end_time": end_time,
+                "storage_path": storage_path,
+                "sort_order": sort_order,
+            }
+        )
+        return SimpleNamespace(id=uuid.uuid4())
+
+
+class _NotificationLogRepositoryStub(FakeNotificationLogRepository):
+    def __init__(self, log: SimpleNamespace | None = None) -> None:
+        self.log = log if log is not None else SimpleNamespace(id=1)
+        self.created: list[dict] = []
+        self.status_calls: list[dict] = []
+
+    def create(self, db: Session, user_id, job_id, email):
+        self.created.append({"user_id": user_id, "job_id": job_id, "email": email})
+        return self.log
+
+    def update_status(self, db: Session, log_id, status, sent_at=None):
+        self.status_calls.append(
+            {"log_id": log_id, "status": status, "sent_at": sent_at}
+        )
+        return None
 
 
 # --- _compute_next_retry_at -------------------------------------------------
@@ -85,48 +203,46 @@ def test_compute_next_retry_at_defaults_to_60s_when_backoff_empty() -> None:
 
 def test_handle_ml_failure_returns_when_job_missing() -> None:
     db = MagicMock()
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=None),
-        patch("app.services.job_service.job_repo.mark_failed") as mark_failed,
-    ):
-        job_service.handle_ml_failure(db, uuid.uuid4(), "err")
-    mark_failed.assert_not_called()
+    job_repo = _JobRepositoryStub(None)
+    job_service.handle_ml_failure(db, uuid.uuid4(), "err", job_repo=job_repo)
+    assert job_repo.mark_failed_calls == []
 
 
 def test_handle_ml_failure_schedules_retry_when_under_limit() -> None:
     db = MagicMock()
     job = _make_job(retry_count=0)
+    job_repo = _JobRepositoryStub(job)
+    video_repo = _VideoRepositoryStub()
     with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
         patch("app.services.job_service.settings.job_max_retries", 2),
-        patch("app.services.job_service.job_repo.mark_failed") as mark_failed,
-        patch("app.services.job_service.video_repo.update_status") as video_update,
         patch("app.services.job_service._send_failure_notification") as notify,
     ):
-        job_service.handle_ml_failure(db, job.id, "boom")
+        job_service.handle_ml_failure(
+            db, job.id, "boom", job_repo=job_repo, video_repo=video_repo
+        )
 
-    assert mark_failed.call_count == 1
-    # mark_failed(db, job_id, error_message, next_retry_at) の 4 番目が next_retry_at
-    assert mark_failed.call_args.args[3] is not None
-    video_update.assert_not_called()
+    assert len(job_repo.mark_failed_calls) == 1
+    assert job_repo.mark_failed_calls[0]["next_retry_at"] is not None
+    assert video_repo.update_status_calls == []
     notify.assert_not_called()
 
 
 def test_handle_ml_failure_final_failure_when_exhausted() -> None:
     db = MagicMock()
     job = _make_job(retry_count=2)
+    job_repo = _JobRepositoryStub(job)
+    video_repo = _VideoRepositoryStub()
     with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
         patch("app.services.job_service.settings.job_max_retries", 2),
-        patch("app.services.job_service.job_repo.mark_failed") as mark_failed,
-        patch("app.services.job_service.video_repo.update_status") as video_update,
         patch("app.services.job_service._send_failure_notification") as notify,
     ):
-        job_service.handle_ml_failure(db, job.id, "boom")
+        job_service.handle_ml_failure(
+            db, job.id, "boom", job_repo=job_repo, video_repo=video_repo
+        )
 
     # 最終失敗では next_retry_at は None（自動リトライしない）
-    assert mark_failed.call_args.args[3] is None
-    video_update.assert_called_once_with(db, job.video_id, VideoStatus.failed)
+    assert job_repo.mark_failed_calls[0]["next_retry_at"] is None
+    assert video_repo.update_status_calls == [(db, job.video_id, VideoStatus.failed)]
     notify.assert_called_once()
 
 
@@ -138,13 +254,12 @@ def test_handle_ml_failure_cancels_runpod_job() -> None:
     """
     db = MagicMock()
     job = _make_job(retry_count=0, runpod_job_id="rp-1")
+    job_repo = _JobRepositoryStub(job)
     with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
         patch("app.services.job_service.settings.job_max_retries", 2),
-        patch("app.services.job_service.job_repo.mark_failed"),
         patch("app.services.job_service.runpod_service.cancel_job") as cancel,
     ):
-        job_service.handle_ml_failure(db, job.id, "boom")
+        job_service.handle_ml_failure(db, job.id, "boom", job_repo=job_repo)
 
     cancel.assert_called_once_with("rp-1")
 
@@ -153,13 +268,12 @@ def test_handle_ml_failure_skips_cancel_without_runpod_id() -> None:
     """ml-mock 経路（runpod_job_id が無い）では停止 API を叩かない"""
     db = MagicMock()
     job = _make_job(retry_count=0, runpod_job_id=None)
+    job_repo = _JobRepositoryStub(job)
     with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
         patch("app.services.job_service.settings.job_max_retries", 2),
-        patch("app.services.job_service.job_repo.mark_failed"),
         patch("app.services.job_service.runpod_service.cancel_job") as cancel,
     ):
-        job_service.handle_ml_failure(db, job.id, "boom")
+        job_service.handle_ml_failure(db, job.id, "boom", job_repo=job_repo)
 
     cancel.assert_not_called()
 
@@ -168,17 +282,16 @@ def test_handle_ml_failure_proceeds_when_cancel_fails() -> None:
     """停止に失敗しても失敗処理は最後まで進む（DB が未更新のまま残らない）"""
     db = MagicMock()
     job = _make_job(retry_count=0, runpod_job_id="rp-1")
+    job_repo = _JobRepositoryStub(job)
     with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
         patch("app.services.job_service.settings.job_max_retries", 2),
-        patch("app.services.job_service.job_repo.mark_failed") as mark_failed,
         patch(
             "app.services.job_service.runpod_service.cancel_job", return_value=False
         ),
     ):
-        job_service.handle_ml_failure(db, job.id, "boom")
+        job_service.handle_ml_failure(db, job.id, "boom", job_repo=job_repo)
 
-    mark_failed.assert_called_once()
+    assert len(job_repo.mark_failed_calls) == 1
 
 
 # --- _send_failure_notification --------------------------------------------
@@ -186,71 +299,77 @@ def test_handle_ml_failure_proceeds_when_cancel_fails() -> None:
 
 def test_send_failure_notification_skips_when_video_missing() -> None:
     db = MagicMock()
-    with (
-        patch("app.services.job_service.video_repo.get_by_id", return_value=None),
-        patch("app.services.job_service.notification_log_repo.create") as create,
-    ):
-        job_service._send_failure_notification(db, uuid.uuid4(), uuid.uuid4(), "err")
-    create.assert_not_called()
+    nlog_repo = _NotificationLogRepositoryStub()
+    job_service._send_failure_notification(
+        db,
+        uuid.uuid4(),
+        uuid.uuid4(),
+        "err",
+        video_repo=_VideoRepositoryStub(None),
+        # 動画が無い時点で打ち切るので、ユーザー照会には進まない（進めば落ちる）
+        user_repo=FakeUserRepository(),
+        notification_log_repo=nlog_repo,
+    )
+    assert nlog_repo.created == []
 
 
 def test_send_failure_notification_skips_when_user_missing() -> None:
     db = MagicMock()
     video = _make_video()
-    with (
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-        patch("app.services.job_service.user_repo.get_by_id", return_value=None),
-        patch("app.services.job_service.notification_log_repo.create") as create,
-    ):
-        job_service._send_failure_notification(db, uuid.uuid4(), video.id, "err")
-    create.assert_not_called()
+    nlog_repo = _NotificationLogRepositoryStub()
+    job_service._send_failure_notification(
+        db,
+        uuid.uuid4(),
+        video.id,
+        "err",
+        video_repo=_VideoRepositoryStub(video),
+        user_repo=_UserRepositoryStub(None),
+        notification_log_repo=nlog_repo,
+    )
+    assert nlog_repo.created == []
 
 
 def test_send_failure_notification_records_sent_on_success() -> None:
     db = MagicMock()
     video = _make_video()
     user = _make_user(id=video.user_id)
-    log = SimpleNamespace(id=7)
-    with (
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-        patch("app.services.job_service.user_repo.get_by_id", return_value=user),
-        patch(
-            "app.services.job_service.notification_log_repo.create", return_value=log
-        ),
-        patch(
-            "app.services.job_service.send_clip_failure_email", return_value=True
-        ) as send_mail,
-        patch(
-            "app.services.job_service.notification_log_repo.update_status"
-        ) as update_status,
-    ):
-        job_service._send_failure_notification(db, uuid.uuid4(), video.id, "err")
+    nlog_repo = _NotificationLogRepositoryStub(SimpleNamespace(id=7))
+    with patch(
+        "app.services.job_service.send_clip_failure_email", return_value=True
+    ) as send_mail:
+        job_service._send_failure_notification(
+            db,
+            uuid.uuid4(),
+            video.id,
+            "err",
+            video_repo=_VideoRepositoryStub(video),
+            user_repo=_UserRepositoryStub(user),
+            notification_log_repo=nlog_repo,
+        )
 
     send_mail.assert_called_once()
-    assert update_status.call_args.kwargs["status"] == NotificationStatus.sent
-    assert update_status.call_args.kwargs["sent_at"] is not None
+    assert nlog_repo.status_calls[0]["status"] == NotificationStatus.sent
+    assert nlog_repo.status_calls[0]["sent_at"] is not None
 
 
 def test_send_failure_notification_records_failed_when_email_fails() -> None:
     db = MagicMock()
     video = _make_video()
     user = _make_user(id=video.user_id)
-    log = SimpleNamespace(id=7)
-    with (
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-        patch("app.services.job_service.user_repo.get_by_id", return_value=user),
-        patch(
-            "app.services.job_service.notification_log_repo.create", return_value=log
-        ),
-        patch("app.services.job_service.send_clip_failure_email", return_value=False),
-        patch(
-            "app.services.job_service.notification_log_repo.update_status"
-        ) as update_status,
-    ):
-        job_service._send_failure_notification(db, uuid.uuid4(), video.id, "err")
+    nlog_repo = _NotificationLogRepositoryStub(SimpleNamespace(id=7))
+    with patch("app.services.job_service.send_clip_failure_email", return_value=False):
+        job_service._send_failure_notification(
+            db,
+            uuid.uuid4(),
+            video.id,
+            "err",
+            video_repo=_VideoRepositoryStub(video),
+            user_repo=_UserRepositoryStub(user),
+            notification_log_repo=nlog_repo,
+        )
 
-    assert update_status.call_args.kwargs["status"] == NotificationStatus.failed
-    assert update_status.call_args.kwargs["sent_at"] is None
+    assert nlog_repo.status_calls[0]["status"] == NotificationStatus.failed
+    assert nlog_repo.status_calls[0]["sent_at"] is None
 
 
 # --- retry_job --------------------------------------------------------------
@@ -258,25 +377,29 @@ def test_send_failure_notification_records_failed_when_email_fails() -> None:
 
 def test_retry_job_404_when_job_missing() -> None:
     db, bt, cu = MagicMock(), MagicMock(), _make_user()
-    with patch("app.services.job_service.job_repo.get_by_id", return_value=None):
-        with pytest.raises(HTTPException) as exc:
-            job_service.retry_job(
-                db=db, job_id=uuid.uuid4(), current_user=cu, background_tasks=bt
-            )
+    with pytest.raises(HTTPException) as exc:
+        job_service.retry_job(
+            db=db,
+            job_id=uuid.uuid4(),
+            current_user=cu,
+            background_tasks=bt,
+            job_repo=_JobRepositoryStub(None),
+        )
     assert exc.value.status_code == 404
 
 
 def test_retry_job_404_when_video_missing() -> None:
     db, bt, cu = MagicMock(), MagicMock(), _make_user()
     job = _make_job()
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=None),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            job_service.retry_job(
-                db=db, job_id=job.id, current_user=cu, background_tasks=bt
-            )
+    with pytest.raises(HTTPException) as exc:
+        job_service.retry_job(
+            db=db,
+            job_id=job.id,
+            current_user=cu,
+            background_tasks=bt,
+            job_repo=_JobRepositoryStub(job),
+            video_repo=_VideoRepositoryStub(None),
+        )
     assert exc.value.status_code == 404
 
 
@@ -285,14 +408,15 @@ def test_retry_job_403_when_not_owner() -> None:
     job = _make_job(status=JobStatus.failed)
     video = _make_video()
     cu = _make_user()  # video.user_id とは別人
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            job_service.retry_job(
-                db=db, job_id=job.id, current_user=cu, background_tasks=bt
-            )
+    with pytest.raises(HTTPException) as exc:
+        job_service.retry_job(
+            db=db,
+            job_id=job.id,
+            current_user=cu,
+            background_tasks=bt,
+            job_repo=_JobRepositoryStub(job),
+            video_repo=_VideoRepositoryStub(video),
+        )
     assert exc.value.status_code == 403
 
 
@@ -301,14 +425,15 @@ def test_retry_job_409_when_not_failed() -> None:
     job = _make_job(status=JobStatus.processing)
     video = _make_video()
     cu = _make_user(id=video.user_id)
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            job_service.retry_job(
-                db=db, job_id=job.id, current_user=cu, background_tasks=bt
-            )
+    with pytest.raises(HTTPException) as exc:
+        job_service.retry_job(
+            db=db,
+            job_id=job.id,
+            current_user=cu,
+            background_tasks=bt,
+            job_repo=_JobRepositoryStub(job),
+            video_repo=_VideoRepositoryStub(video),
+        )
     assert exc.value.status_code == 409
 
 
@@ -317,18 +442,19 @@ def test_retry_job_resets_and_rekicks_on_success() -> None:
     job = _make_job(status=JobStatus.failed)
     video = _make_video()
     cu = _make_user(id=video.user_id)
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-        patch("app.services.job_service.job_repo.reset_for_manual_retry") as reset,
-        patch("app.services.job_service.video_repo.update_status") as vupd,
-    ):
-        job_service.retry_job(
-            db=db, job_id=job.id, current_user=cu, background_tasks=bt
-        )
+    job_repo = _JobRepositoryStub(job)
+    video_repo = _VideoRepositoryStub(video)
+    job_service.retry_job(
+        db=db,
+        job_id=job.id,
+        current_user=cu,
+        background_tasks=bt,
+        job_repo=job_repo,
+        video_repo=video_repo,
+    )
 
-    reset.assert_called_once_with(db, job.id)
-    vupd.assert_called_once_with(db, video.id, VideoStatus.queued)
+    assert job_repo.reset_calls == [job.id]
+    assert video_repo.update_status_calls == [(db, video.id, VideoStatus.queued)]
     bt.add_task.assert_called_once()
 
 
@@ -387,24 +513,28 @@ def test_process_fail_job_delegates_to_handle_ml_failure() -> None:
 
 def test_complete_job_returns_when_job_missing() -> None:
     db = MagicMock()
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=None),
-        patch("app.services.job_service.video_repo.get_by_id") as vget,
-    ):
-        job_service.complete_job(db, uuid.uuid4(), [])
-    vget.assert_not_called()
+    job_service.complete_job(
+        db,
+        uuid.uuid4(),
+        [],
+        job_repo=_JobRepositoryStub(None),
+        # ジョブが無い時点で打ち切るので、動画の照会には進まない（進めば落ちる）
+        video_repo=FakeVideoRepository(),
+    )
 
 
 def test_complete_job_returns_when_video_missing() -> None:
     db = MagicMock()
     job = _make_job()
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=None),
-        patch("app.services.job_service.job_repo.update_status") as upd,
-    ):
-        job_service.complete_job(db, job.id, [])
-    upd.assert_not_called()
+    job_repo = _JobRepositoryStub(job)
+    job_service.complete_job(
+        db,
+        job.id,
+        [],
+        job_repo=job_repo,
+        video_repo=_VideoRepositoryStub(None),
+    )
+    assert job_repo.update_status_calls == []
 
 
 def test_complete_job_with_empty_clips_sets_ready() -> None:
@@ -416,29 +546,26 @@ def test_complete_job_with_empty_clips_sets_ready() -> None:
     job = _make_job()
     video = _make_video()
     user = _make_user(id=video.user_id)
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-        patch("app.services.job_service.clip_repo.create") as clip_create,
-        patch("app.services.job_service.job_repo.update_status") as jupd,
-        patch(
-            "app.services.job_service.video_repo.update_status", return_value=video
-        ) as vupd,
-        patch("app.services.job_service.user_repo.get_by_id", return_value=user),
-        patch(
-            "app.services.job_service.notification_log_repo.create",
-            return_value=SimpleNamespace(id=1),
-        ),
-        patch(
-            "app.services.job_service.send_analysis_complete_email", return_value=True
-        ) as send_mail,
-        patch("app.services.job_service.notification_log_repo.update_status"),
-    ):
-        job_service.complete_job(db, job.id, [])
+    job_repo = _JobRepositoryStub(job)
+    video_repo = _VideoRepositoryStub(video)
+    clip_repo = _ClipRepositoryStub()
+    with patch(
+        "app.services.job_service.send_analysis_complete_email", return_value=True
+    ) as send_mail:
+        job_service.complete_job(
+            db,
+            job.id,
+            [],
+            job_repo=job_repo,
+            video_repo=video_repo,
+            clip_repo=clip_repo,
+            user_repo=_UserRepositoryStub(user),
+            notification_log_repo=_NotificationLogRepositoryStub(),
+        )
 
-    clip_create.assert_not_called()
-    assert jupd.call_args.kwargs["status"] == JobStatus.completed
-    vupd.assert_called_once_with(db, job.video_id, VideoStatus.ready)
+    assert clip_repo.created == []
+    assert job_repo.update_status_calls[0]["status"] == JobStatus.completed
+    assert video_repo.update_status_calls == [(db, job.video_id, VideoStatus.ready)]
     assert send_mail.call_args.kwargs["clip_count"] == 0
 
 
@@ -455,30 +582,27 @@ def test_complete_job_with_clips_saves_and_sets_ready() -> None:
         {"start_time": 0.0, "end_time": 5.0},
         {"start_time": 6.0, "end_time": 9.0},
     ]
-    with (
-        patch("app.services.job_service.job_repo.get_by_id", return_value=job),
-        patch("app.services.job_service.video_repo.get_by_id", return_value=video),
-        patch("app.services.job_service.clip_repo.create") as clip_create,
-        patch("app.services.job_service.job_repo.update_status") as jupd,
-        patch(
-            "app.services.job_service.video_repo.update_status", return_value=video
-        ) as vupd,
-        patch("app.services.job_service.user_repo.get_by_id", return_value=user),
-        patch(
-            "app.services.job_service.notification_log_repo.create",
-            return_value=SimpleNamespace(id=1),
-        ),
-        patch(
-            "app.services.job_service.send_analysis_complete_email", return_value=True
-        ) as send_mail,
-        patch("app.services.job_service.notification_log_repo.update_status"),
-    ):
-        job_service.complete_job(db, job.id, clips)
+    job_repo = _JobRepositoryStub(job)
+    video_repo = _VideoRepositoryStub(video)
+    clip_repo = _ClipRepositoryStub()
+    with patch(
+        "app.services.job_service.send_analysis_complete_email", return_value=True
+    ) as send_mail:
+        job_service.complete_job(
+            db,
+            job.id,
+            clips,
+            job_repo=job_repo,
+            video_repo=video_repo,
+            clip_repo=clip_repo,
+            user_repo=_UserRepositoryStub(user),
+            notification_log_repo=_NotificationLogRepositoryStub(),
+        )
 
-    assert clip_create.call_count == 2
-    assert clip_create.call_args_list[0].kwargs["sort_order"] == 0
-    assert clip_create.call_args_list[1].kwargs["sort_order"] == 1
-    assert clip_create.call_args_list[0].kwargs["job_id"] == job.id
-    assert jupd.call_args.kwargs["status"] == JobStatus.completed
-    vupd.assert_called_once_with(db, job.video_id, VideoStatus.ready)
+    assert len(clip_repo.created) == 2
+    assert clip_repo.created[0]["sort_order"] == 0
+    assert clip_repo.created[1]["sort_order"] == 1
+    assert clip_repo.created[0]["job_id"] == job.id
+    assert job_repo.update_status_calls[0]["status"] == JobStatus.completed
+    assert video_repo.update_status_calls == [(db, job.video_id, VideoStatus.ready)]
     assert send_mail.call_args.kwargs["clip_count"] == 2

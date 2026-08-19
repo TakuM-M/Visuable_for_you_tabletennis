@@ -12,11 +12,18 @@ from app.models.job import JobStatus
 from app.models.notification_log import NotificationStatus
 from app.models.user import User
 from app.models.video import VideoStatus
-from app.repositories import clip as clip_repo
-from app.repositories import job as job_repo
-from app.repositories import notification_log as notification_log_repo
-from app.repositories import user as user_repo
-from app.repositories import video as video_repo
+from app.repositories.clip import clip_repository
+from app.repositories.job import job_repository
+from app.repositories.notification_log import notification_log_repository
+from app.repositories.protocols import (
+    ClipRepository,
+    JobRepository,
+    NotificationLogRepository,
+    UserRepository,
+    VideoRepository,
+)
+from app.repositories.user import user_repository
+from app.repositories.video import video_repository
 from app.services import runpod_service
 from app.services.email_service import (
     send_analysis_complete_email,
@@ -42,7 +49,14 @@ def _compute_next_retry_at(retry_count: int) -> datetime:
 
 
 def _send_failure_notification(
-    db: Session, job_id: uuid.UUID, video_id: uuid.UUID, error_message: str
+    db: Session,
+    job_id: uuid.UUID,
+    video_id: uuid.UUID,
+    error_message: str,
+    *,
+    video_repo: VideoRepository = video_repository,
+    user_repo: UserRepository = user_repository,
+    notification_log_repo: NotificationLogRepository = notification_log_repository,
 ) -> None:
     """最終失敗時にユーザーへメール通知し、結果を notification_logs に記録する"""
     video = video_repo.get_by_id(db, video_id)
@@ -72,7 +86,16 @@ def _send_failure_notification(
     )
 
 
-def handle_ml_failure(db: Session, job_id: uuid.UUID, error_message: str) -> None:
+def handle_ml_failure(
+    db: Session,
+    job_id: uuid.UUID,
+    error_message: str,
+    *,
+    job_repo: JobRepository = job_repository,
+    video_repo: VideoRepository = video_repository,
+    user_repo: UserRepository = user_repository,
+    notification_log_repo: NotificationLogRepository = notification_log_repository,
+) -> None:
     """ML 処理関連の失敗を共通ハンドリングする。
 
     リトライ枠が残っていれば next_retry_at を設定して failed に遷移。
@@ -107,7 +130,16 @@ def handle_ml_failure(db: Session, job_id: uuid.UUID, error_message: str) -> Non
     # 最終失敗
     job_repo.mark_failed(db, job_id, error_message, None)
     video_repo.update_status(db, job.video_id, VideoStatus.failed)
-    _send_failure_notification(db, job_id, job.video_id, error_message)
+    # user_repo / notification_log_repo は自分では使わず、通知処理へ受け渡すために受け取る
+    _send_failure_notification(
+        db,
+        job_id,
+        job.video_id,
+        error_message,
+        video_repo=video_repo,
+        user_repo=user_repo,
+        notification_log_repo=notification_log_repo,
+    )
     logger.warning(
         "ジョブ最終失敗 job_id=%s retry_count=%s error=%s",
         job_id,
@@ -121,6 +153,9 @@ def retry_job(
     job_id: uuid.UUID,
     current_user: User,
     background_tasks: BackgroundTasks,
+    *,
+    job_repo: JobRepository = job_repository,
+    video_repo: VideoRepository = video_repository,
 ) -> None:
     """ユーザー操作による手動再実行。retry_count を 0 にリセットして再キックする"""
     # 循環インポート回避のため遅延 import
@@ -180,6 +215,12 @@ def complete_job(
     db: Session,
     job_id: uuid.UUID,
     clips: list[dict],  # {"start_time": float, "end_time": float} のリスト
+    *,
+    job_repo: JobRepository = job_repository,
+    video_repo: VideoRepository = video_repository,
+    clip_repo: ClipRepository = clip_repository,
+    user_repo: UserRepository = user_repository,
+    notification_log_repo: NotificationLogRepository = notification_log_repository,
 ) -> None:
     """ML 解析完了コールバックの本処理。
 

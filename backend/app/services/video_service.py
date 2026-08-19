@@ -18,10 +18,16 @@ from app.db.session import SessionLocal
 from app.models.clip import Clip
 from app.models.job import JobStatus
 from app.models.video import Video, VideoStatus
-from app.repositories import job as job_repo
-from app.repositories import video as video_repo
-from app.repositories import clip as clip_repo
-from app.repositories import notification_log as notification_log_repo
+from app.repositories.clip import clip_repository
+from app.repositories.job import job_repository
+from app.repositories.notification_log import notification_log_repository
+from app.repositories.protocols import (
+    ClipRepository,
+    JobRepository,
+    NotificationLogRepository,
+    VideoRepository,
+)
+from app.repositories.video import video_repository
 from app.schemas.clip import ClipInput
 from app.services import storage_service
 from app.services.video_clip_service import clip_video
@@ -37,7 +43,12 @@ class UploadRejectedError(Exception):
     """サイズ・長さの上限を超えたアップロードを拒否する際に raise する"""
 
 
-def _ensure_under_quota(db: Session, user_id: uuid.UUID) -> None:
+def _ensure_under_quota(
+    db: Session,
+    user_id: uuid.UUID,
+    *,
+    video_repo: VideoRepository = video_repository,
+) -> None:
     """user_video_quota 1ユーザーあたりの動画本数上限を超えていれば QuotaExceededError を raise する"""
     if video_repo.count_by_user_id(db, user_id) >= settings.user_video_quota:
         raise QuotaExceededError(
@@ -95,8 +106,12 @@ def _chunks_total_size(upload_dir: Path) -> int:
     return sum(p.stat().st_size for p in upload_dir.iterdir() if p.name.isdigit())
 
 
-def _extract_duration(local_path: Path) -> float | None:
-    """ffprobe でローカル動画ファイルの再生時間（秒）を取得する。
+def _extract_duration(source: Path | str) -> float | None:
+    """ffprobe で動画の再生時間（秒）を取得する。
+
+    source はローカルファイルのパスでも R2 の署名付き URL でもよい（ffprobe は
+    どちらも読める）。アップロード前の長さ判定ではローカルの一時ファイルを、
+    書き出し済み動画では R2 の URL を渡している。
     失敗した場合は None を返す（アップロード処理は継続）。
     """
     try:
@@ -109,7 +124,7 @@ def _extract_duration(local_path: Path) -> float | None:
                 "format=duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
-                str(local_path),
+                str(source),
             ],
             capture_output=True,
             text=True,
@@ -214,7 +229,14 @@ def _runpod_execution_timeout_ms(source_duration: float | None) -> int:
     return int(min(estimated, settings.runpod_execution_timeout_max_seconds) * 1000)
 
 
-def call_ml_service(r2_key: str, job_id: str, video_id: str) -> None:
+def call_ml_service(
+    r2_key: str,
+    job_id: str,
+    video_id: str,
+    *,
+    job_repo: JobRepository = job_repository,
+    video_repo: VideoRepository = video_repository,
+) -> None:
     """MLサービスに処理を依頼する（RunPod or ローカル Mock）。
 
     BackgroundTasks / APScheduler の両方から呼ばれる前提で、内部で独自に DB セッションを開く。
@@ -309,6 +331,9 @@ def _register_video_and_start_ml(
     background_tasks: BackgroundTasks,
     source_duration: float | None = None,
     thumbnail_path: str | None = None,
+    *,
+    video_repo: VideoRepository = video_repository,
+    job_repo: JobRepository = job_repository,
 ) -> Video:
     """動画をDBに登録し、MLサービスを呼び出す共通処理"""
     video = video_repo.create(
@@ -331,6 +356,9 @@ def upload_video(
     title: str,
     file: UploadFile,
     background_tasks: BackgroundTasks,
+    *,
+    video_repo: VideoRepository = video_repository,
+    job_repo: JobRepository = job_repository,
 ) -> Video:
     """動画アップロード（単一リクエスト）
 
@@ -338,7 +366,7 @@ def upload_video(
     チャンクアップロード（init_chunk_upload / save_chunk / complete_chunk_upload）
     を使用している。小容量の直アップロード・動作確認・将来用途のために保持している。
     """
-    _ensure_under_quota(db, user_id)
+    _ensure_under_quota(db, user_id, video_repo=video_repo)
     file_id = uuid.uuid4()
     local_path = LOCAL_TMP_DIR / f"{file_id}_{file.filename}"
     r2_key = f"videos/{file_id}.mp4"
@@ -357,7 +385,15 @@ def upload_video(
         local_path.unlink(missing_ok=True)
 
     return _register_video_and_start_ml(
-        db, user_id, title, r2_key, background_tasks, source_duration, thumbnail_path
+        db,
+        user_id,
+        title,
+        r2_key,
+        background_tasks,
+        source_duration,
+        thumbnail_path,
+        video_repo=video_repo,
+        job_repo=job_repo,
     )
 
 
@@ -368,13 +404,15 @@ def init_chunk_upload(
     filename: str,
     total_chunks: int,
     total_bytes: int,
+    *,
+    video_repo: VideoRepository = video_repository,
 ) -> str:
     """チャンクアップロードを初期化し、upload_idを返す。
 
     サイズ上限はここで先に判定する。チャンクを受け取り始めてから気付くのでは、
     上限超過が確定している動画のために回線とディスクを何 GB も使うことになる。
     """
-    _ensure_under_quota(db, user_id)
+    _ensure_under_quota(db, user_id, video_repo=video_repo)
     if total_chunks < 1:
         raise UploadRejectedError("チャンク数が不正です")
     _ensure_under_size_limit(total_bytes)
@@ -434,10 +472,13 @@ def complete_chunk_upload(
     user_id: uuid.UUID,
     upload_id: str,
     background_tasks: BackgroundTasks,
+    *,
+    video_repo: VideoRepository = video_repository,
+    job_repo: JobRepository = job_repository,
 ) -> Video:
     """r2_keyを決定し映像の結合・アップロード・MLサービスはバックグラウンドで実行。"""
     # クォーター確認（完了時点での動画本数をチェックする）
-    _ensure_under_quota(db, user_id)
+    _ensure_under_quota(db, user_id, video_repo=video_repo)
 
     upload_dir = LOCAL_TMP_DIR / upload_id
     if not upload_dir.exists():
@@ -472,9 +513,19 @@ def complete_chunk_upload(
 
 
 def process_chunk_upload(
-    upload_id: str, r2_key: str, video_id: str, job_id: str
+    upload_id: str,
+    r2_key: str,
+    video_id: str,
+    job_id: str,
+    *,
+    video_repo: VideoRepository = video_repository,
+    job_repo: JobRepository = job_repository,
 ) -> None:
-    """結合した動画をR2にアップロードし、MLサービスを呼び出す。BackgroundTasksで実行される。"""
+    """結合した動画をR2にアップロードし、MLサービスを呼び出す。BackgroundTasksで実行される。
+
+    call_ml_service は自前で DB セッションを開く独立した入口なので、
+    リポジトリは渡さず既定のものを使わせる。
+    """
     merged_path = LOCAL_TMP_DIR / f"{upload_id}_merged.mp4"
     upload_dir = LOCAL_TMP_DIR / upload_id
     try:
@@ -531,7 +582,15 @@ def process_chunk_upload(
         shutil.rmtree(upload_dir, ignore_errors=True)
 
 
-def delete_video(db: Session, video_id: uuid.UUID) -> bool:
+def delete_video(
+    db: Session,
+    video_id: uuid.UUID,
+    *,
+    video_repo: VideoRepository = video_repository,
+    job_repo: JobRepository = job_repository,
+    clip_repo: ClipRepository = clip_repository,
+    notification_log_repo: NotificationLogRepository = notification_log_repository,
+) -> bool:
     video = video_repo.get_by_id(db, video_id)
     if video is None:
         return False
@@ -560,6 +619,9 @@ def replace_clips(
     db: Session,
     video: Video,
     clips_input: list[ClipInput],
+    *,
+    job_repo: JobRepository = job_repository,
+    clip_repo: ClipRepository = clip_repository,
 ) -> list[Clip]:
     """切り抜きを一括置換する（新規・編集・削除・並べ替えをまとめて反映）。
 
@@ -587,7 +649,13 @@ def replace_clips(
     return clip_repo.replace_for_video(db, video.id, job.id, clips_data)
 
 
-def rebuild_output(db: Session, video_id: uuid.UUID, clips: list[dict]) -> str:
+def rebuild_output(
+    db: Session,
+    video_id: uuid.UUID,
+    clips: list[dict],
+    *,
+    video_repo: VideoRepository = video_repository,
+) -> str:
     """現在の clip 区間から連結動画を生成して R2 にアップロードし、
     output_path / duration / status(completed) を更新する。R2 キーを返す。
 
@@ -655,7 +723,12 @@ def rebuild_output(db: Session, video_id: uuid.UUID, clips: list[dict]) -> str:
     return output_r2_key
 
 
-def process_export(video_id: uuid.UUID) -> None:
+def process_export(
+    video_id: uuid.UUID,
+    *,
+    clip_repo: ClipRepository = clip_repository,
+    video_repo: VideoRepository = video_repository,
+) -> None:
     """書き出しの背景タスクエントリポイント。
 
     ルーターは即座に 202 を返し、本関数が自前 DB セッションを開いて重い
@@ -679,7 +752,7 @@ def process_export(video_id: uuid.UUID) -> None:
                     {"start_time": c.start_time, "end_time": c.end_time}
                     for c in clip_repo.get_by_video_id(db, video_id)
                 ]
-                rebuild_output(db, video_id, clips)
+                rebuild_output(db, video_id, clips, video_repo=video_repo)
                 logger.info("書き出し完了 video_id=%s clips=%s件", video_id, len(clips))
             except Exception as e:
                 logger.exception("書き出し失敗 video_id=%s: %s", video_id, e)
@@ -688,7 +761,9 @@ def process_export(video_id: uuid.UUID) -> None:
         _export_semaphore.release()
 
 
-def recover_interrupted_exports() -> None:
+def recover_interrupted_exports(
+    *, video_repo: VideoRepository = video_repository
+) -> None:
     """再起動で中断された書き出しを ready に戻す（起動時リカバリ）。
 
     書き出しは BackgroundTasks（プロセス内）で実行されるため、processing の
@@ -706,7 +781,11 @@ def recover_interrupted_exports() -> None:
             video_repo.update_status(db, video.id, VideoStatus.ready)
 
 
-def recover_interrupted_to_failed() -> None:
+def recover_interrupted_to_failed(
+    *,
+    job_repo: JobRepository = job_repository,
+    video_repo: VideoRepository = video_repository,
+) -> None:
     """再起動で中断され、status=queued のまま取り残されたジョブを failed に戻す。
 
     状況として、アップロード完了後のプロセスが落ちた場合に、status=queued のまま取り残されることがある。
@@ -732,6 +811,9 @@ def export_video(
     db: Session,
     video: Video,
     background_tasks: BackgroundTasks,
+    *,
+    clip_repo: ClipRepository = clip_repository,
+    video_repo: VideoRepository = video_repository,
 ) -> Video:
     """ユーザー操作による動画書き出し。現在の clip 区間から出力動画を生成する。
 
@@ -743,6 +825,6 @@ def export_video(
     if video.status == VideoStatus.processing:
         raise HTTPException(status_code=409, detail="処理中のため書き出せません")
 
-    video = video_repo.update_status(db, video.id, VideoStatus.processing)
+    video_repo.update_status(db, video.id, VideoStatus.processing)
     background_tasks.add_task(process_export, video.id)
     return video

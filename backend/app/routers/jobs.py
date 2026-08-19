@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_owned_video, require_internal_api_key
 from app.core.logging import get_logger
 from app.db.session import get_db
+from app.models.job import Job
 from app.models.user import User
 from app.models.video import Video
-from app.repositories import job as job_repo
+from app.repositories.job import job_repository as job_repo
 from app.schemas.job import JobCompleteRequest, JobFailRequest, JobResponse
 from app.services import job_service
 
@@ -17,13 +18,18 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["jobs"])
 
 
+def _to_response(job: Job) -> JobResponse:
+    """Job モデルを API レスポンスへ変換する"""
+    return JobResponse.model_validate(job)
+
+
 @router.get("/videos/{video_id}/jobs", response_model=list[JobResponse])
 def list_jobs_by_video(
     video: Video = Depends(get_owned_video),
     db: Session = Depends(get_db),
 ) -> list[JobResponse]:
     """動画に紐づくジョブ一覧取得"""
-    return job_repo.get_by_video_id(db, video.id)
+    return [_to_response(job) for job in job_repo.get_by_video_id(db, video.id)]
 
 
 @router.post("/jobs/{job_id}/retry", response_model=JobResponse)
@@ -43,7 +49,7 @@ def retry_job(
     job = job_repo.get_by_id(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="ジョブが見つかりません")
-    return job
+    return _to_response(job)
 
 
 @router.post(

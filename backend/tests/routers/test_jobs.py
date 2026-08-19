@@ -14,7 +14,7 @@
 
   - ルーター本体の中で呼んでいる service / repo は `unittest.mock.patch` で差し替える。
     patch 先は「定義元」ではなく「使われている場所」を指定するのが鉄則。
-    jobs ルーターは `from app.repositories import job as job_repo` /
+    jobs ルーターは `from app.repositories.job import job_repository as job_repo` /
     `from app.services import job_service` で import しているので、
     patch 先は app.routers.jobs.job_repo.* / app.routers.jobs.job_service.* になる。
 """
@@ -26,11 +26,13 @@ from unittest.mock import patch
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_internal_api_key
+from app.core.deps import get_current_user, get_video_repository, require_internal_api_key
 from app.db.session import get_db
 from app.models.job import JobStatus
 from app.routers import jobs
+from tests.fakes import FakeVideoRepository
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +101,21 @@ def _make_video(**kw) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
-def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
+class _VideoRepositoryStub(FakeVideoRepository):
+    """get_owned_video が使う get_by_id だけ答える。他は呼ばれたら落ちる。"""
+
+    def __init__(self, video: SimpleNamespace | None = None) -> None:
+        self.video = video
+
+    def get_by_id(self, db: Session, video_id: uuid.UUID):
+        return self.video
+
+
+def _authed_client(
+    user: SimpleNamespace | None = None,
+    *,
+    owned_video: SimpleNamespace | None = None,
+) -> TestClient:
     """get_current_user を差し替えて「ログイン済み」にした TestClient を返す。
 
     こうしておくと、各テストでトークンを用意しなくても認証を通過できる。
@@ -107,6 +123,11 @@ def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
     """
     app = _make_app()
     app.dependency_overrides[get_current_user] = lambda: user or _make_user()
+    # get_owned_video が参照するリポジトリも差し替える。owned_video を渡さなければ
+    # 「動画が見つからない」状態（404）になる。
+    app.dependency_overrides[get_video_repository] = lambda: _VideoRepositoryStub(
+        owned_video
+    )
     return TestClient(app)
 
 
@@ -114,7 +135,7 @@ def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
 # GET /videos/{video_id}/jobs （動画に紐づくジョブ一覧）
 #   ルーター: video = Depends(get_owned_video) → job_repo.get_by_video_id(db, video.id)
 #   所有者チェックは get_owned_video（app.core.deps）が担うので、
-#   テストは app.core.deps.video_repo.get_by_id を patch し動画の所有者を制御する。
+#   テストは _authed_client(owned_video=...) で動画の所有者を制御する。
 # ===========================================================================
 def test_list_jobs_by_video_returns_jobs() -> None:
     """所有者なら、repo が返したジョブのリストがそのまま JSON 配列になる。"""
@@ -122,11 +143,8 @@ def test_list_jobs_by_video_returns_jobs() -> None:
     video = _make_video(user_id=user.id)
     items = [_make_job(video_id=video.id), _make_job(video_id=video.id)]
 
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch("app.routers.jobs.job_repo.get_by_video_id", return_value=items),
-    ):
-        client = _authed_client(user)
+    with patch("app.routers.jobs.job_repo.get_by_video_id", return_value=items):
+        client = _authed_client(user, owned_video=video)
         resp = client.get(f"/videos/{video.id}/jobs")
 
     assert resp.status_code == 200
@@ -139,11 +157,8 @@ def test_list_jobs_by_video_empty_returns_empty_list() -> None:
     """ジョブが1件も無い動画でも、エラーではなく空配列 [] を返す。"""
     user = _make_user()
     video = _make_video(user_id=user.id)
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch("app.routers.jobs.job_repo.get_by_video_id", return_value=[]),
-    ):
-        client = _authed_client(user)
+    with patch("app.routers.jobs.job_repo.get_by_video_id", return_value=[]):
+        client = _authed_client(user, owned_video=video)
         resp = client.get(f"/videos/{video.id}/jobs")
 
     assert resp.status_code == 200
@@ -154,17 +169,15 @@ def test_list_jobs_by_video_other_user_returns_403() -> None:
     """他人の動画のジョブ一覧は 403。"""
     user = _make_user()
     video = _make_video(user_id=uuid.uuid4())  # 別人の動画
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
-        client = _authed_client(user)
-        resp = client.get(f"/videos/{video.id}/jobs")
+    client = _authed_client(user, owned_video=video)
+    resp = client.get(f"/videos/{video.id}/jobs")
     assert resp.status_code == 403
 
 
 def test_list_jobs_by_video_not_found_returns_404() -> None:
     """動画が存在しなければ 404。"""
-    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
-        client = _authed_client()
-        resp = client.get(f"/videos/{uuid.uuid4()}/jobs")
+    client = _authed_client()
+    resp = client.get(f"/videos/{uuid.uuid4()}/jobs")
     assert resp.status_code == 404
 
 
