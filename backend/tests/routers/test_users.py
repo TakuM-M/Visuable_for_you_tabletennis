@@ -130,8 +130,7 @@ def test_update_me_updates_user() -> None:
 
     with (
         patch("app.routers.users.hash_password", return_value="h"),
-        patch("app.routers.users.user_repo.update") as update,
-        patch("app.routers.users.user_repo.get_by_id", return_value=updated),
+        patch("app.routers.users.user_repo.update", return_value=updated) as update,
     ):
         resp = client.patch("/users/me", json={"display_name": "新しい名前"})
 

@@ -1,18 +1,23 @@
 import os
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
+
+if TYPE_CHECKING:
+    # boto3-stubs が提供する型。実行時には不要なので TYPE_CHECKING 下に置く
+    from mypy_boto3_s3.client import S3Client
 
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL", "")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "")
 
-_client = None
+_client: "S3Client | None" = None
 
 
-def _get_client():
+def _get_client() -> "S3Client":
     """S3互換クライアントを遅延初期化して返す"""
     global _client
     if _client is None:

@@ -11,6 +11,8 @@ from app.services import auth_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+def _to_response(user: User) -> UserResponse:
+    return UserResponse.model_validate(user)
 
 @router.post("", response_model=UserResponse, status_code=201)
 def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
@@ -38,13 +40,13 @@ def register(body: UserCreate, db: Session = Depends(get_db)) -> UserResponse:
             )
             user = existing_users
     auth_service.send_verification_email(user)
-    return user
+    return _to_response(user)
 
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """ログイン中のユーザー情報を取得"""
-    return current_user
+    return _to_response(current_user)
 
 
 @router.patch("/me", response_model=UserResponse)
@@ -59,12 +61,13 @@ def update(
     else:
         password_hash = current_user.password_hash
 
-    user_repo.update(
+    updated_user = user_repo.update(
         db=db,
         user_id=current_user.id,
         display_name=body.display_name or current_user.display_name,
         password_hash=password_hash,
     )
-
-    updated_user = user_repo.get_by_id(db, current_user.id)
-    return updated_user
+    
+    if updated_user is None:
+        raise HTTPException(status_code=404, detail="ユーザーが見つかりません")
+    return _to_response(updated_user)
