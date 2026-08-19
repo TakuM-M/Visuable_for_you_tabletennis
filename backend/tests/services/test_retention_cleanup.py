@@ -5,11 +5,26 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy.orm import Session
+
 from app.services import job_reaper
+from tests.fakes import FakeVideoRepository
 
 
 def _make_video(video_id: uuid.UUID) -> SimpleNamespace:
     return SimpleNamespace(id=video_id)
+
+
+class _ExpiredVideoRepository(FakeVideoRepository):
+    """期限切れ動画を答え、渡された threshold を記録する。"""
+
+    def __init__(self, videos: list) -> None:
+        self.videos = videos
+        self.thresholds: list[datetime] = []
+
+    def get_expired(self, db: Session, threshold: datetime) -> list:
+        self.thresholds.append(threshold)
+        return self.videos
 
 
 def test_cleanup_calls_delete_for_each_expired_video() -> None:
@@ -19,14 +34,13 @@ def test_cleanup_calls_delete_for_each_expired_video() -> None:
 
     with (
         patch("app.services.job_reaper.SessionLocal") as session_local,
-        patch("app.services.job_reaper.video_repo.get_expired", return_value=expired),
         patch(
             "app.services.job_reaper.video_service.delete_video", return_value=True
         ) as delete_mock,
         patch("app.services.job_reaper.settings.video_retention_days", 7.0),
     ):
         session_local.return_value.__enter__.return_value = MagicMock()
-        job_reaper.cleanup_expired_videos()
+        job_reaper.cleanup_expired_videos(video_repo=_ExpiredVideoRepository(expired))
 
     assert delete_mock.call_count == 3
     called_ids = {call.args[1] for call in delete_mock.call_args_list}
@@ -35,19 +49,17 @@ def test_cleanup_calls_delete_for_each_expired_video() -> None:
 
 def test_cleanup_uses_retention_threshold() -> None:
     """get_expired に渡される threshold が now - retention_days になっている"""
+    repo = _ExpiredVideoRepository([])
     with (
         patch("app.services.job_reaper.SessionLocal") as session_local,
-        patch(
-            "app.services.job_reaper.video_repo.get_expired", return_value=[]
-        ) as get_expired_mock,
         patch("app.services.job_reaper.settings.video_retention_days", 7.0),
     ):
         session_local.return_value.__enter__.return_value = MagicMock()
         before = datetime.now(timezone.utc)
-        job_reaper.cleanup_expired_videos()
+        job_reaper.cleanup_expired_videos(video_repo=repo)
         after = datetime.now(timezone.utc)
 
-    threshold = get_expired_mock.call_args.args[1]
+    threshold = repo.thresholds[0]
     assert before - timedelta(days=7) <= threshold <= after - timedelta(days=7)
 
 
@@ -63,7 +75,6 @@ def test_cleanup_continues_when_one_delete_fails() -> None:
 
     with (
         patch("app.services.job_reaper.SessionLocal") as session_local,
-        patch("app.services.job_reaper.video_repo.get_expired", return_value=expired),
         patch(
             "app.services.job_reaper.video_service.delete_video",
             side_effect=delete_side_effect,
@@ -71,7 +82,7 @@ def test_cleanup_continues_when_one_delete_fails() -> None:
         patch("app.services.job_reaper.settings.video_retention_days", 7.0),
     ):
         session_local.return_value.__enter__.return_value = MagicMock()
-        job_reaper.cleanup_expired_videos()
+        job_reaper.cleanup_expired_videos(video_repo=_ExpiredVideoRepository(expired))
 
     # 3件全部試みた
     assert delete_mock.call_count == 3
