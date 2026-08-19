@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
-from app.repositories import job as job_repo
-from app.repositories import video as video_repo
+from app.repositories.job import job_repository as job_repo
+from app.repositories.video import video_repository as video_repo
 from app.services import job_service, metrics_service, runpod_service, video_service
 from app.services.video_service import LOCAL_TMP_DIR, call_ml_service
 

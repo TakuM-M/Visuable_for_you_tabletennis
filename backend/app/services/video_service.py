@@ -18,8 +18,8 @@ from app.db.session import SessionLocal
 from app.models.clip import Clip
 from app.models.job import JobStatus
 from app.models.video import Video, VideoStatus
-from app.repositories import job as job_repo
-from app.repositories import video as video_repo
+from app.repositories.job import job_repository as job_repo
+from app.repositories.video import video_repository as video_repo
 from app.repositories import clip as clip_repo
 from app.repositories import notification_log as notification_log_repo
 from app.schemas.clip import ClipInput

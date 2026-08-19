@@ -8,9 +8,9 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models.job import JobStatus
 from app.models.video import VideoStatus
-from app.repositories import job as job_repo
+from app.repositories.job import job_repository as job_repo
 from app.repositories.user import user_repository as user_repo
-from app.repositories import video as video_repo
+from app.repositories.video import video_repository as video_repo
 
 
 # ----------------------------------------------------------------------

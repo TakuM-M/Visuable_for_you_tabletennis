@@ -14,7 +14,7 @@
 
   - ルーター本体の中で呼んでいる service / repo は `unittest.mock.patch` で差し替える。
     patch 先は「定義元」ではなく「使われている場所」を指定するのが鉄則。
-    jobs ルーターは `from app.repositories import job as job_repo` /
+    jobs ルーターは `from app.repositories.job import job_repository as job_repo` /
     `from app.services import job_service` で import しているので、
     patch 先は app.routers.jobs.job_repo.* / app.routers.jobs.job_service.* になる。
 """

@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from app.repositories.protocols import UserRepository
 
 
 class UserRepositoryImpl:
@@ -43,4 +44,4 @@ class UserRepositoryImpl:
         return None
 
 
-user_repository = UserRepositoryImpl()
+user_repository: UserRepository = UserRepositoryImpl()

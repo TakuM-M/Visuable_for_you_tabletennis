@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.models.notification_log import NotificationStatus
-from app.repositories import job as job_repo
+from app.repositories.job import job_repository as job_repo
 from app.repositories import notification_log as nlog_repo
 
 

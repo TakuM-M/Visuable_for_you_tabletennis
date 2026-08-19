@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from app.repositories.user import user_repository as user_repo
 from app.services import metrics_service
-from app.repositories import video as video_repo
+from app.repositories.video import video_repository as video_repo
 
 
 def _client_with_pages(pages):
