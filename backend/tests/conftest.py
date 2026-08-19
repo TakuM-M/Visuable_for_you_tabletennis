@@ -32,7 +32,7 @@ from app.models.video import Video
 from app.repositories import clip as clip_repo
 from app.repositories import job as job_repo
 from app.repositories import notification_log as notification_log_repo
-from app.repositories import user as user_repo
+from app.repositories.user import user_repository as user_repo
 from app.repositories import video as video_repo
 
 TEST_DB_NAME = "tabletennis_test"

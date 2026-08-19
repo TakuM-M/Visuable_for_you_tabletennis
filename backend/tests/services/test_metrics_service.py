@@ -8,7 +8,7 @@ collect_storage_metrics は DB集計（生の集計SQL）と R2集計（外部�
 
 from unittest.mock import Mock, patch
 
-from app.repositories import user as user_repo
+from app.repositories.user import user_repository as user_repo
 from app.services import metrics_service
 from app.repositories import video as video_repo
 
