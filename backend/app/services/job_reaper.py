@@ -39,7 +39,9 @@ def reconcile_runpod_jobs() -> None:
     with SessionLocal() as db:
         # セッションを跨いで使うので必要な値だけコピーする
         targets = [
-            (job.id, job.runpod_job_id) for job in job_repo.get_running_runpod_jobs(db)
+            (job.id, job.runpod_job_id)
+            for job in job_repo.get_running_runpod_jobs(db)
+            if job.runpod_job_id is not None
         ]
 
     for job_id, runpod_job_id in targets:

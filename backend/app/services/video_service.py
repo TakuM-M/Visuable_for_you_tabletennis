@@ -95,8 +95,12 @@ def _chunks_total_size(upload_dir: Path) -> int:
     return sum(p.stat().st_size for p in upload_dir.iterdir() if p.name.isdigit())
 
 
-def _extract_duration(local_path: Path) -> float | None:
-    """ffprobe でローカル動画ファイルの再生時間（秒）を取得する。
+def _extract_duration(source: Path | str) -> float | None:
+    """ffprobe で動画の再生時間（秒）を取得する。
+
+    source はローカルファイルのパスでも R2 の署名付き URL でもよい（ffprobe は
+    どちらも読める）。アップロード前の長さ判定ではローカルの一時ファイルを、
+    書き出し済み動画では R2 の URL を渡している。
     失敗した場合は None を返す（アップロード処理は継続）。
     """
     try:
@@ -109,7 +113,7 @@ def _extract_duration(local_path: Path) -> float | None:
                 "format=duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
-                str(local_path),
+                str(source),
             ],
             capture_output=True,
             text=True,
@@ -743,6 +747,6 @@ def export_video(
     if video.status == VideoStatus.processing:
         raise HTTPException(status_code=409, detail="処理中のため書き出せません")
 
-    video = video_repo.update_status(db, video.id, VideoStatus.processing)
+    video_repo.update_status(db, video.id, VideoStatus.processing)
     background_tasks.add_task(process_export, video.id)
     return video

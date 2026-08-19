@@ -24,8 +24,8 @@ def get_current_user(
 ) -> User:
     """JWTトークンを検証してログイン中のユーザーを返す"""
     try:
-        user_id = decode_token(token)
-    except JWTError:
+        user_id = uuid.UUID(decode_token(token))
+    except (JWTError, ValueError):
         raise HTTPException(
             status_code=401,
             detail="トークンが無効または期限切れです",
