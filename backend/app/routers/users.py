@@ -5,7 +5,7 @@ from app.core.deps import get_current_user
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.user import User
-from app.repositories import user as user_repo
+from app.repositories.user import user_repository as user_repo
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services import auth_service
 

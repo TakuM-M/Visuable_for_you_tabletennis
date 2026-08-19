@@ -6,7 +6,8 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.security import create_verification_token, decode_verification_token
-from app.repositories import user as user_repo
+from app.repositories.protocols import UserRepository
+from app.repositories.user import user_repository
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
@@ -29,7 +30,12 @@ def send_verification_email(user) -> None:
         print(f"メール送信失敗: {e}")
 
 
-def verify_email_token(token: str, db: Session) -> None:
+def verify_email_token(
+    token: str,
+    db: Session,
+    *,
+    user_repo: UserRepository = user_repository,
+) -> None:
     try:
         user_id = decode_verification_token(token)
     except JWTError:

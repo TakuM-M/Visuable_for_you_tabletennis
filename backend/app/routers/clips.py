@@ -5,7 +5,7 @@ from app.core.deps import get_owned_video
 from app.db.session import get_db
 from app.models.clip import Clip
 from app.models.video import Video
-from app.repositories import clip as clip_repo
+from app.repositories.clip import clip_repository as clip_repo
 from app.schemas.clip import ClipResponse, ClipsReplaceRequest
 from app.services import video_service
 

@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.models.job import Job
 from app.models.user import User
 from app.models.video import Video
-from app.repositories import job as job_repo
+from app.repositories.job import job_repository as job_repo
 from app.schemas.job import JobCompleteRequest, JobFailRequest, JobResponse
 from app.services import job_service
 

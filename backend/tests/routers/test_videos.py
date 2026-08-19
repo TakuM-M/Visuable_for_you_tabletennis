@@ -15,12 +15,14 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_video_repository
 from app.db.session import get_db
 from app.models.video import VideoStatus
 from app.routers import videos
 from app.services import video_service
+from tests.fakes import FakeVideoRepository
 
 
 def _make_app() -> FastAPI:
@@ -64,10 +66,29 @@ def _make_video(**kw) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
-def _authed_client(user: SimpleNamespace | None = None) -> TestClient:
+class _VideoRepositoryStub(FakeVideoRepository):
+    """get_owned_video が使う get_by_id だけ答える。他は呼ばれたら落ちる。"""
+
+    def __init__(self, video: SimpleNamespace | None = None) -> None:
+        self.video = video
+
+    def get_by_id(self, db: Session, video_id: uuid.UUID):
+        return self.video
+
+
+def _authed_client(
+    user: SimpleNamespace | None = None,
+    *,
+    owned_video: SimpleNamespace | None = None,
+) -> TestClient:
     """get_current_user を差し替えて「ログイン済み」にした TestClient を返す。"""
     app = _make_app()
     app.dependency_overrides[get_current_user] = lambda: user or _make_user()
+    # get_owned_video が参照するリポジトリも差し替える。owned_video を渡さなければ
+    # 「動画が見つからない」状態（404）になる。
+    app.dependency_overrides[get_video_repository] = lambda: _VideoRepositoryStub(
+        owned_video
+    )
     return TestClient(app)
 
 
@@ -278,33 +299,30 @@ def test_list_videos_requires_auth() -> None:
 # ---------------------------------------------------------------------------
 # GET /videos/{id} （詳細）
 #   所有者チェックは get_owned_video（app.core.deps）が担う。
-#   テストは deps が使う app.core.deps.video_repo.get_by_id を patch し、
-#   ニセ動画の user_id を「本人 / 他人」に振り分けて 200 / 403 / 404 を確認する。
+#   テストは _authed_client(owned_video=...) でニセ動画を握らせ、その user_id を
+#   「本人 / 他人」に振り分けて 200 / 403 / 404 を確認する。
 # ---------------------------------------------------------------------------
 def test_get_video_returns_video() -> None:
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id, title="練習試合")
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
-        resp = client.get(f"/videos/{video.id}")
+    client = _authed_client(user, owned_video=video)
+    resp = client.get(f"/videos/{video.id}")
     assert resp.status_code == 200
     assert resp.json()["title"] == "練習試合"
 
 
 def test_get_video_not_found_returns_404() -> None:
     client = _authed_client()
-    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
-        resp = client.get(f"/videos/{uuid.uuid4()}")
+    resp = client.get(f"/videos/{uuid.uuid4()}")
     assert resp.status_code == 404
 
 
 def test_get_video_other_user_returns_403() -> None:
     """他人の動画は UUID を知っていても 403（IDOR 対策）。"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4())  # 別人の動画
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
-        resp = client.get(f"/videos/{video.id}")
+    client = _authed_client(user, owned_video=video)
+    resp = client.get(f"/videos/{video.id}")
     assert resp.status_code == 403
 
 
@@ -321,13 +339,10 @@ def test_get_video_requires_auth() -> None:
 def test_response_expires_at_is_created_at_plus_retention_days() -> None:
     """保持期限は created_at + video_retention_days（更新日ではなく作成日起点）"""
     user = _make_user()
-    client = _authed_client(user)
     created = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
     video = _make_video(user_id=user.id, created_at=created)
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch.object(videos.settings, "video_retention_days", 7.0),
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch.object(videos.settings, "video_retention_days", 7.0):
         resp = client.get(f"/videos/{video.id}")
 
     assert resp.status_code == 200
@@ -338,15 +353,12 @@ def test_response_expires_at_is_created_at_plus_retention_days() -> None:
 def test_response_includes_thumbnail_url_when_generated() -> None:
     """thumbnail_path があれば署名済み URL を同梱する（<img> から直接読める）"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id, thumbnail_path="thumbnails/abc.jpg")
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch(
-            "app.routers.videos.storage_service.generate_presigned_url",
-            return_value="https://r2.example/thumb-signed",
-        ) as gen_mock,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch(
+        "app.routers.videos.storage_service.generate_presigned_url",
+        return_value="https://r2.example/thumb-signed",
+    ) as gen_mock:
         resp = client.get(f"/videos/{video.id}")
 
     assert resp.status_code == 200
@@ -357,12 +369,9 @@ def test_response_includes_thumbnail_url_when_generated() -> None:
 def test_response_thumbnail_url_is_null_when_not_generated() -> None:
     """未生成（生成失敗・機能追加以前の動画）なら null で、署名も発行しない"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id, thumbnail_path=None)
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch("app.routers.videos.storage_service.generate_presigned_url") as gen_mock,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch("app.routers.videos.storage_service.generate_presigned_url") as gen_mock:
         resp = client.get(f"/videos/{video.id}")
 
     assert resp.status_code == 200
@@ -395,15 +404,12 @@ def test_list_videos_includes_expires_at_and_thumbnail_url() -> None:
 # ---------------------------------------------------------------------------
 def test_get_output_returns_presigned_url() -> None:
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id, output_path="outputs/done.mp4")
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch(
-            "app.routers.videos.storage_service.generate_presigned_url",
-            side_effect=["https://r2.example/signed", "https://r2.example/signed-dl"],
-        ) as mock_presign,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch(
+        "app.routers.videos.storage_service.generate_presigned_url",
+        side_effect=["https://r2.example/signed", "https://r2.example/signed-dl"],
+    ) as mock_presign:
         resp = client.get(f"/videos/{video.id}/output")
     assert resp.status_code == 200
     body = resp.json()
@@ -425,27 +431,24 @@ def test_get_output_requires_auth() -> None:
 
 def test_get_output_other_user_returns_403() -> None:
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4(), output_path="outputs/done.mp4")
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
-        resp = client.get(f"/videos/{video.id}/output")
+    client = _authed_client(user, owned_video=video)
+    resp = client.get(f"/videos/{video.id}/output")
     assert resp.status_code == 403
 
 
 def test_get_output_not_found_returns_404() -> None:
     client = _authed_client()
-    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
-        resp = client.get(f"/videos/{uuid.uuid4()}/output")
+    resp = client.get(f"/videos/{uuid.uuid4()}/output")
     assert resp.status_code == 404
 
 
 def test_get_output_not_generated_yet_returns_404() -> None:
     """動画はあるが output_path がまだ無い場合も 404"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id, output_path=None)
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
-        resp = client.get(f"/videos/{video.id}/output")
+    client = _authed_client(user, owned_video=video)
+    resp = client.get(f"/videos/{video.id}/output")
     assert resp.status_code == 404
 
 
@@ -455,15 +458,12 @@ def test_get_output_not_generated_yet_returns_404() -> None:
 # ---------------------------------------------------------------------------
 def test_get_source_returns_presigned_url() -> None:
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id, storage_path="videos/src.mp4")
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch(
-            "app.routers.videos.storage_service.generate_presigned_url",
-            return_value="https://r2.example/source-signed",
-        ) as gen_mock,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch(
+        "app.routers.videos.storage_service.generate_presigned_url",
+        return_value="https://r2.example/source-signed",
+    ) as gen_mock:
         resp = client.get(f"/videos/{video.id}/source")
     assert resp.status_code == 200
     assert resp.json()["url"] == "https://r2.example/source-signed"
@@ -478,17 +478,15 @@ def test_get_source_requires_auth() -> None:
 
 def test_get_source_other_user_returns_403() -> None:
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4())  # 別人の動画
-    with patch("app.core.deps.video_repo.get_by_id", return_value=video):
-        resp = client.get(f"/videos/{video.id}/source")
+    client = _authed_client(user, owned_video=video)
+    resp = client.get(f"/videos/{video.id}/source")
     assert resp.status_code == 403
 
 
 def test_get_source_not_found_returns_404() -> None:
     client = _authed_client()
-    with patch("app.core.deps.video_repo.get_by_id", return_value=None):
-        resp = client.get(f"/videos/{uuid.uuid4()}/source")
+    resp = client.get(f"/videos/{uuid.uuid4()}/source")
     assert resp.status_code == 404
 
 
@@ -497,12 +495,9 @@ def test_get_source_not_found_returns_404() -> None:
 # ---------------------------------------------------------------------------
 def test_delete_video_returns_204() -> None:
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id)
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch("app.routers.videos.video_service.delete_video") as delete,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch("app.routers.videos.video_service.delete_video") as delete:
         resp = client.delete(f"/videos/{video.id}")
     assert resp.status_code == 204
     delete.assert_called_once()
@@ -511,10 +506,7 @@ def test_delete_video_returns_204() -> None:
 def test_delete_video_not_found_returns_404() -> None:
     """存在しない動画の削除は 404。service の削除は呼ばれない。"""
     client = _authed_client()
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=None),
-        patch("app.routers.videos.video_service.delete_video") as delete,
-    ):
+    with patch("app.routers.videos.video_service.delete_video") as delete:
         resp = client.delete(f"/videos/{uuid.uuid4()}")
     assert resp.status_code == 404
     delete.assert_not_called()
@@ -523,12 +515,9 @@ def test_delete_video_not_found_returns_404() -> None:
 def test_delete_video_other_user_returns_403() -> None:
     """他人の動画は削除できず 403。service の削除は呼ばれない。"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4())  # 別人の動画
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch("app.routers.videos.video_service.delete_video") as delete,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch("app.routers.videos.video_service.delete_video") as delete:
         resp = client.delete(f"/videos/{video.id}")
     assert resp.status_code == 403
     delete.assert_not_called()
@@ -541,17 +530,14 @@ def test_delete_video_other_user_returns_403() -> None:
 def test_export_video_returns_202() -> None:
     """所有者なら 202 と processing 状態の動画を返し、service を1回呼ぶ。"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=user.id)
+    client = _authed_client(user, owned_video=video)
     processing = _make_video(
         id=video.id, user_id=user.id, status=VideoStatus.processing
     )
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch(
-            "app.routers.videos.video_service.export_video", return_value=processing
-        ) as export,
-    ):
+    with patch(
+        "app.routers.videos.video_service.export_video", return_value=processing
+    ) as export:
         resp = client.post(f"/videos/{video.id}/export")
     assert resp.status_code == 202
     assert resp.json()["status"] == "processing"
@@ -561,12 +547,9 @@ def test_export_video_returns_202() -> None:
 def test_export_video_other_user_returns_403() -> None:
     """他人の動画は書き出せず 403。service は呼ばれない。"""
     user = _make_user()
-    client = _authed_client(user)
     video = _make_video(user_id=uuid.uuid4())
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=video),
-        patch("app.routers.videos.video_service.export_video") as export,
-    ):
+    client = _authed_client(user, owned_video=video)
+    with patch("app.routers.videos.video_service.export_video") as export:
         resp = client.post(f"/videos/{video.id}/export")
     assert resp.status_code == 403
     export.assert_not_called()
@@ -574,10 +557,7 @@ def test_export_video_other_user_returns_403() -> None:
 
 def test_export_video_not_found_returns_404() -> None:
     client = _authed_client()
-    with (
-        patch("app.core.deps.video_repo.get_by_id", return_value=None),
-        patch("app.routers.videos.video_service.export_video") as export,
-    ):
+    with patch("app.routers.videos.video_service.export_video") as export:
         resp = client.post(f"/videos/{uuid.uuid4()}/export")
     assert resp.status_code == 404
     export.assert_not_called()

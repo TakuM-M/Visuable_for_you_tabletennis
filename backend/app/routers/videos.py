@@ -16,7 +16,7 @@ from app.core.deps import get_current_user, get_owned_video
 from app.db.session import get_db
 from app.models.user import User
 from app.models.video import Video
-from app.repositories import video as video_repo
+from app.repositories.video import video_repository as video_repo
 from app.schemas.video import (
     ChunkUploadInitRequest,
     ChunkUploadInitResponse,
