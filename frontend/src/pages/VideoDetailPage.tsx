@@ -39,6 +39,10 @@ import {
   IconRefresh,
   IconTrash,
 } from "../components/ui/Icons";
+import {
+  normalizeClips,
+  type ClipRange,
+} from "../lib/clips";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -51,8 +55,6 @@ function fmtDuration(s: number | null | undefined) {
 function sumPlay(clips: ClipResponse[]) {
   return clips.reduce((a, c) => a + (c.end_time - c.start_time), 0);
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 type PlayerMode = "output" | "source" | "analyzing" | "exporting" | "failed" | "idle";
 
@@ -146,20 +148,12 @@ export default function VideoDetailPage() {
     onError: () => alert("再実行に失敗しました"),
   });
   // 切り抜きの一括置換。出力動画は再生成しない（書き出しは別操作）。
-  // 丸め → 元動画長でのクランプ → start_time 昇順ソートをここに集約する。
-  // end_time は source_duration を超えるとサーバが 422 にするため、丸め後に上限で抑える。
   const replaceClipsMutation = useMutation({
-    mutationFn: (items: { start_time: number; end_time: number }[]) => {
-      const cap = video?.source_duration ?? null;
-      const clamped = items
-        .map((c) => {
-          const end = round2(c.end_time);
-          return {
-            start_time: round2(c.start_time),
-            end_time: cap != null && end > cap ? cap : end,
-          };
-        })
-        .sort((a, b) => a.start_time - b.start_time);
+    mutationFn: (items: ClipRange[]) => {
+      const clamped = normalizeClips(
+        items,
+        video?.source_duration ?? null,
+      );
       return replaceClipsByVideoVideosVideoIdClipsPut(
         id!,
         { clips: clamped },
