@@ -43,6 +43,10 @@ import {
   normalizeClips,
   type ClipRange,
 } from "../lib/clips";
+import {
+  resolveVideoDetailState,
+  type PlayerMode,
+} from "../lib/videoDetail";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -55,8 +59,6 @@ function fmtDuration(s: number | null | undefined) {
 function sumPlay(clips: ClipResponse[]) {
   return clips.reduce((a, c) => a + (c.end_time - c.start_time), 0);
 }
-
-type PlayerMode = "output" | "source" | "analyzing" | "exporting" | "failed" | "idle";
 
 /** 切り抜きモーダルの状態。add = 新規追加、edit = 既存切り抜きの範囲編集 */
 type ClipModalState = { mode: "add" } | { mode: "edit"; clip: ClipResponse } | null;
@@ -211,29 +213,24 @@ export default function VideoDetailPage() {
     );
   }
 
-  const isFailed = video.status === "failed";
-  const isCompleted = video.status === "completed";
-  const isReady = video.status === "ready";
-  const isAnalyzing = video.status === "queued" || (video.status === "processing" && jobRunning);
-  const isExporting = video.status === "processing" && !jobRunning;
-  const isEditable = isReady || isCompleted; // 切り抜き編集・書き出しが可能な状態
+  const {
+    isFailed,
+    isCompleted,
+    isReady,
+    isAnalyzing,
+    isExporting,
+    isEditable,
+    showClips,
+    playerMode,
+    previewActive,
+  } = resolveVideoDetailState({
+    status: video.status,
+    jobRunning,
+    outputUrl,
+    sourceUrl,
+    clipCount: clips.length,
+  });
   const editLocked = replaceClipsMutation.isPending || exportMutation.isPending;
-  const showClips = clips.length > 0 && (isEditable || isExporting);
-
-  const playerMode: PlayerMode =
-    isCompleted && outputUrl
-      ? "output"
-      : isExporting
-        ? "exporting"
-        : isAnalyzing
-          ? "analyzing"
-          : isFailed
-            ? "failed"
-            : isReady && sourceUrl
-              ? "source"
-              : "idle";
-  // 擬似プレビュー（source モード）が出ているときだけシーン選択でジャンプ可能。
-  const previewActive = playerMode === "source" && clips.length > 0;
   const retention = formatRetention(video.expires_at);
 
   return (
