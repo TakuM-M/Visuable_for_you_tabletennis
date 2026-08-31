@@ -39,6 +39,14 @@ import {
   IconRefresh,
   IconTrash,
 } from "../components/ui/Icons";
+import {
+  normalizeClips,
+  type ClipRange,
+} from "../lib/clips";
+import {
+  resolveVideoDetailState,
+  type PlayerMode,
+} from "../lib/videoDetail";
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
@@ -51,10 +59,6 @@ function fmtDuration(s: number | null | undefined) {
 function sumPlay(clips: ClipResponse[]) {
   return clips.reduce((a, c) => a + (c.end_time - c.start_time), 0);
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
-type PlayerMode = "output" | "source" | "analyzing" | "exporting" | "failed" | "idle";
 
 /** 切り抜きモーダルの状態。add = 新規追加、edit = 既存切り抜きの範囲編集 */
 type ClipModalState = { mode: "add" } | { mode: "edit"; clip: ClipResponse } | null;
@@ -146,20 +150,12 @@ export default function VideoDetailPage() {
     onError: () => alert("再実行に失敗しました"),
   });
   // 切り抜きの一括置換。出力動画は再生成しない（書き出しは別操作）。
-  // 丸め → 元動画長でのクランプ → start_time 昇順ソートをここに集約する。
-  // end_time は source_duration を超えるとサーバが 422 にするため、丸め後に上限で抑える。
   const replaceClipsMutation = useMutation({
-    mutationFn: (items: { start_time: number; end_time: number }[]) => {
-      const cap = video?.source_duration ?? null;
-      const clamped = items
-        .map((c) => {
-          const end = round2(c.end_time);
-          return {
-            start_time: round2(c.start_time),
-            end_time: cap != null && end > cap ? cap : end,
-          };
-        })
-        .sort((a, b) => a.start_time - b.start_time);
+    mutationFn: (items: ClipRange[]) => {
+      const clamped = normalizeClips(
+        items,
+        video?.source_duration ?? null,
+      );
       return replaceClipsByVideoVideosVideoIdClipsPut(
         id!,
         { clips: clamped },
@@ -217,29 +213,24 @@ export default function VideoDetailPage() {
     );
   }
 
-  const isFailed = video.status === "failed";
-  const isCompleted = video.status === "completed";
-  const isReady = video.status === "ready";
-  const isAnalyzing = video.status === "queued" || (video.status === "processing" && jobRunning);
-  const isExporting = video.status === "processing" && !jobRunning;
-  const isEditable = isReady || isCompleted; // 切り抜き編集・書き出しが可能な状態
+  const {
+    isFailed,
+    isCompleted,
+    isReady,
+    isAnalyzing,
+    isExporting,
+    isEditable,
+    showClips,
+    playerMode,
+    previewActive,
+  } = resolveVideoDetailState({
+    status: video.status,
+    jobRunning,
+    outputUrl,
+    sourceUrl,
+    clipCount: clips.length,
+  });
   const editLocked = replaceClipsMutation.isPending || exportMutation.isPending;
-  const showClips = clips.length > 0 && (isEditable || isExporting);
-
-  const playerMode: PlayerMode =
-    isCompleted && outputUrl
-      ? "output"
-      : isExporting
-        ? "exporting"
-        : isAnalyzing
-          ? "analyzing"
-          : isFailed
-            ? "failed"
-            : isReady && sourceUrl
-              ? "source"
-              : "idle";
-  // 擬似プレビュー（source モード）が出ているときだけシーン選択でジャンプ可能。
-  const previewActive = playerMode === "source" && clips.length > 0;
   const retention = formatRetention(video.expires_at);
 
   return (
