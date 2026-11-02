@@ -4,9 +4,13 @@
 
 **卓球試合映像から「プレー中の区間」だけを自動検出、ラリー中だけの動画を生成する Web アプリケーション**
 
-[![Website](https://img.shields.io/badge/Website-visualize--tt.com-1f6feb?style=for-the-badge)](https://visualize-tt.com/)
+![Status](https://img.shields.io/badge/Status-%E3%82%B5%E3%83%BC%E3%83%93%E3%82%B9%E5%81%9C%E6%AD%A2%E4%B8%AD-lightgrey?style=for-the-badge)
 
 </div>
+
+> [!NOTE]
+> **このサービスは 2026 年 11 月に提供を終了しました。** 現在は Web サイトを利用できません。
+> ソースコードとデモ動画は、開発の記録として公開を続けます。
 
 ### snap.
 ---
